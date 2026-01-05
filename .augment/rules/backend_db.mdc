@@ -1,0 +1,31 @@
+---
+type: agent_requested
+description: Backend/Database coding guidelines for MyAIGuide
+---
+
+## BACKEND/DATABASE
+
+### Guidelines for Supabase Integration
+
+#### SUPABASE_CLIENT
+
+- Use Supabase as the single backend service for authentication and database interactions
+- Import Supabase client from `src/lib/supabase/client.ts`, not directly from `@supabase/supabase-js`
+- Use the custom Database type from `src/lib/supabase/types.ts` for type-safe queries
+- Never expose Supabase service role key on the frontend - use Edge Functions for privileged operations
+
+#### DATA_VALIDATION
+
+- Use Zod schemas to validate all data exchanged with Supabase (queries, mutations, responses)
+- Define Zod schemas in `src/types/` directory alongside TypeScript types
+- Validate user input before sending to Supabase to prevent invalid data and improve error messages
+- Validate Supabase responses to ensure data integrity and catch schema mismatches early
+
+### Guidelines for PostgreSQL
+
+#### POSTGRES_BEST_PRACTICES
+
+- Use JSONB columns for semi-structured data instead of creating many tables
+- Implement materialized views for complex, frequently accessed read-only data
+- Use connection pooling (handled automatically by Supabase)
+- Prefer database constraints and RLS policies over application-level validation alone

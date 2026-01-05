@@ -1,0 +1,66 @@
+---
+type: always_apply
+description: Comprehensive coding guidelines for MyAIGuide - Vue 3 SPA with TypeScript, Supabase backend, and AI-powered trip planning
+---
+
+# AI Rules for MyAIGuide
+
+MyAIGuide is a web SPA for quickly creating trip plans based on simple notes and travel preferences.
+
+## Tech Stack
+
+### Frontend
+- **Vue 3.5** - SPA framework with Composition API and `<script setup>` syntax
+- **Vite 7** - fast bundler and dev server
+- **TypeScript 5** - static typing
+- **Vue Router** - client-side routing
+- **Pinia** - state management
+- **Tailwind CSS 3** - utility-first styling (compatible with shadcn-vue)
+- **shadcn-vue** - accessible, pre-built UI components
+
+### Backend and Database
+- **Supabase** - comprehensive backend solution:
+  - PostgreSQL - relational database
+  - Row Level Security (RLS) - per-user data isolation
+  - Supabase Auth - registration, login, session management
+  - Edge Functions - server-side logic, secure AI API calls
+
+### Development Tools
+- **ESLint 9** - code linting with Vue and TypeScript support
+- **Prettier 3** - code formatting with Tailwind plugin
+- **Husky + lint-staged** - pre-commit hooks for code quality
+- **vue-tsc** - TypeScript type checking for Vue files
+
+## Project Structure
+
+When introducing changes to the project, always follow the directory structure below:
+
+- `./src` - source code
+- `./src/components` - Vue components (`.vue` files)
+- `./src/components/ui` - shadcn-vue UI components
+- `./src/views` - page-level Vue components for routing
+- `./src/router` - Vue Router configuration
+- `./src/stores` - Pinia stores for state management
+- `./src/composables` - Vue composables for reusable logic
+- `./src/lib` - utility functions, helpers, and services
+- `./src/lib/supabase` - Supabase client and database types
+- `./src/types` - shared TypeScript types (Entities, DTOs)
+- `./src/assets` - static internal assets (images, icons)
+- `./public` - public static assets
+- `./supabase/functions` - Supabase Edge Functions
+
+When modifying the directory structure, always update this section.
+
+## Coding Practices
+
+### Guidelines for Clean Code
+- Use feedback from ESLint and Prettier to improve code quality
+- Run `npm run lint` before committing changes
+- Prioritize error handling and edge cases
+- Handle errors and edge cases at the beginning of functions
+- Use early returns for error conditions to avoid deeply nested if statements
+- Place the happy path last in the function for improved readability
+- Avoid unnecessary else statements; use if-return pattern instead
+- Use guard clauses to handle preconditions and invalid states early
+- Implement proper error logging and user-friendly error messages
+- Consider using custom error types or error factories for consistent error handling
