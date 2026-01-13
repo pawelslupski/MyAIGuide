@@ -36,7 +36,7 @@ create index idx_plan_generations_trip on plan_generations (trip_id, created_at 
 -- add table and column comments for documentation
 comment on table plan_generations is 'AI plan generation attempts for rate limiting and diagnostics (append-only)';
 comment on column plan_generations.status is 'Generation outcome: success, api_error, validation_error';
-comment on column plan_generations.model_name is 'AI model used for generation (e.g., gpt-4, claude-3)';
+comment on column plan_generations.model_name is 'AI model used for generation (e.g., gpt-4, claude-3); NULL for validation_error when AI was not invoked';
 comment on column plan_generations.error_message is 'Error details for failed generations (null for success)';
 
 -- enable row level security

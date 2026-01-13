@@ -33,6 +33,3 @@ create trigger on_user_created
   for each row
   execute function create_profile_for_new_user();
 
--- add comment to document the trigger's purpose
-comment on trigger on_user_created on auth.users is 'Automatically creates a profile for newly registered users';
-

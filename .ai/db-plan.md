@@ -62,21 +62,20 @@ tables reference `users(id)` via foreign keys.
 
 **Purpose:** Store trips, notes, per-trip preferences, and confirmed plans.
 
-| Column               | Type          | Constraints                                                                                                        | Description                                      |
-| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| `id`                 | bigserial     | PRIMARY KEY                                                                                                        | Trip identifier                                  |
-| `user_id`            | uuid          | NOT NULL, REFERENCES users(id) ON DELETE CASCADE                                                                   | Owner of the trip                                |
-| `title`              | varchar(255)  | NOT NULL                                                                                                           | Trip name/title                                  |
-| `note_body`          | text          | CHECK (note_body IS NULL OR (char_length(note_body) >= 1000 AND char_length(note_body) <= 10000))                  | Trip note (min 1k, max 10k chars, nullable)      |
-| `what`               | varchar(50)[] | DEFAULT '{}', CHECK (what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Per-trip "What?" preferences (overrides profile) |
-| `speed`              | varchar(20)   | CHECK (speed IN ('slow_chill', 'balance', 'intensive'))                                                            | Per-trip "How fast?" preference                  |
-| `type`               | varchar(20)   | CHECK (type IN ('base', 'roadtrip'))                                                                               | Per-trip type                                    |
-| `budget`             | varchar(20)   | CHECK (budget IN ('budget', 'moderate', 'luxury'))                                                                 | Per-trip budget                                  |
-| `plan_json`          | jsonb         |                                                                                                                    | Confirmed/saved plan (NULL if no plan saved)     |
-| `plan_language`      | varchar(10)   |                                                                                                                    | Language of the saved plan (e.g., 'pl', 'en')    |
-| `plan_last_saved_at` | timestamptz   |                                                                                                                    | Timestamp when plan was last saved               |
-| `created_at`         | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Trip creation timestamp                          |
-| `updated_at`         | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Last modification timestamp                      |
+| Column          | Type          | Constraints                                                                                                        | Description                                      |
+| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `id`            | bigserial     | PRIMARY KEY                                                                                                        | Trip identifier                                  |
+| `user_id`       | uuid          | NOT NULL, REFERENCES users(id) ON DELETE CASCADE                                                                   | Owner of the trip                                |
+| `title`         | varchar(255)  | NOT NULL                                                                                                           | Trip name/title                                  |
+| `note_body`     | text          | CHECK (note_body IS NULL OR (char_length(note_body) >= 1000 AND char_length(note_body) <= 10000))                  | Trip note (min 1k, max 10k chars, nullable)      |
+| `what`          | varchar(50)[] | DEFAULT '{}', CHECK (what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Per-trip "What?" preferences (overrides profile) |
+| `speed`         | varchar(20)   | CHECK (speed IN ('slow_chill', 'balance', 'intensive'))                                                            | Per-trip "How fast?" preference                  |
+| `type`          | varchar(20)   | CHECK (type IN ('base', 'roadtrip'))                                                                               | Per-trip type                                    |
+| `budget`        | varchar(20)   | CHECK (budget IN ('budget', 'moderate', 'luxury'))                                                                 | Per-trip budget                                  |
+| `plan_json`     | jsonb         |                                                                                                                    | Confirmed/saved plan (NULL if no plan saved)     |
+| `plan_language` | varchar(10)   |                                                                                                                    | Language of the saved plan (e.g., 'pl', 'en')    |
+| `created_at`    | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Trip creation timestamp                          |
+| `updated_at`    | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Last modification timestamp                      |
 
 **Notes:**
 
@@ -118,7 +117,7 @@ tables reference `users(id)` via foreign keys.
 | `user_id`       | uuid         | NOT NULL, REFERENCES users(id) ON DELETE CASCADE                         | User who triggered generation             |
 | `trip_id`       | bigint       | NOT NULL, REFERENCES trips(id) ON DELETE CASCADE                         | Trip for which plan was generated         |
 | `status`        | varchar(20)  | NOT NULL, CHECK (status IN ('success', 'api_error', 'validation_error')) | Generation outcome                        |
-| `model_name`    | varchar(100) |                                                                          | AI model used (e.g., 'gpt-4', 'claude-3') |
+| `model_name`    | varchar(100) |                                                                          | AI model used (NULL for validation_error) |
 | `error_message` | text         |                                                                          | Error details (NULL for successful runs)  |
 | `created_at`    | timestamptz  | NOT NULL DEFAULT now()                                                   | Generation attempt timestamp              |
 
@@ -127,9 +126,9 @@ tables reference `users(id)` via foreign keys.
 - Only AI-invoking attempts (success or API errors) are recorded; pure client-side validation failures are NOT recorded
 - Used to enforce 10 generations per user in a rolling 24-hour window
 - `status` values:
-  - `success`: Plan generated successfully
-  - `api_error`: AI API call failed (timeout, rate limit, etc.)
-  - `validation_error`: Server-side validation failed (note too short/long, etc.)
+  - `success`: Plan generated successfully → `model_name` is set, `error_message` is NULL
+  - `api_error`: AI API call failed (timeout, rate limit, etc.) → `model_name` is set, `error_message` contains error details
+  - `validation_error`: Server-side validation failed (note too short/long, etc.) → `model_name` is NULL (AI not invoked), `error_message` contains validation error
 - Append-only table designed for potential future partitioning by `created_at`
 
 ---

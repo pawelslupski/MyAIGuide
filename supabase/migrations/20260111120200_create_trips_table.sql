@@ -21,7 +21,6 @@ create table trips (
   budget varchar(20),
   plan_json jsonb,
   plan_language varchar(10),
-  plan_last_saved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   
@@ -66,7 +65,6 @@ comment on column trips.type is 'Per-trip type (overrides profile default): base
 comment on column trips.budget is 'Per-trip budget (overrides profile default): budget, moderate, luxury';
 comment on column trips.plan_json is 'Confirmed plan stored as jsonb (null if no plan saved)';
 comment on column trips.plan_language is 'Language code of the saved plan (e.g., pl, en)';
-comment on column trips.plan_last_saved_at is 'Timestamp when plan was last saved';
 
 -- enable row level security
 -- rls ensures users can only access their own trips
