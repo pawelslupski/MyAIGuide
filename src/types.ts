@@ -187,6 +187,119 @@ export interface PlanGenerationHistoryDTO {
 }
 
 // ============================================================================
+// INTERNAL SERVICE TYPES
+// ============================================================================
+
+/**
+ * NAMING CONVENTIONS:
+ * - DTOs (API responses): Use snake_case for JSON fields (Supabase convention)
+ * - TypeScript types: Use camelCase for properties
+ * - Supabase client handles automatic conversion between conventions
+ */
+
+/**
+ * Trip preferences DTO
+ * Extracted from trip or profile defaults
+ * Used internally to pass preferences between service layers
+ */
+export interface TripPreferencesDto {
+  what: WhatPreference[]
+  speed: SpeedPreference | null
+  type: TypePreference | null
+  budget: BudgetPreference | null
+}
+
+/**
+ * Command model for plan generation service
+ * Used internally to pass data between layers
+ */
+export interface GeneratePlanCommand {
+  userId: string
+  tripId: number
+  noteBody: string
+  userProfile: {
+    hasKids: boolean
+    hasPets: boolean
+    hasMobilityIssues: boolean
+    hasDietaryPreferences: boolean
+  }
+  tripPreferences: TripPreferencesDto
+}
+
+/**
+ * Quota check result
+ * Returned by quota validation service
+ */
+export interface QuotaCheckResult {
+  allowed: boolean
+  used: number
+  limit: number
+  resetAt: string // ISO 8601 timestamp
+}
+
+/**
+ * Plan generation status
+ * Used in plan_generations table
+ */
+export type PlanGenerationStatus = 'success' | 'api_error' | 'validation_error'
+
+/**
+ * Parameters for recording generation attempt
+ */
+export interface RecordGenerationParams {
+  userId: string
+  tripId: number
+  status: PlanGenerationStatus
+  modelName?: string
+  errorMessage?: string
+}
+
+// ============================================================================
+// MOCK AI SERVICE TYPES (Phase 1 - Development)
+// ============================================================================
+
+/**
+ * Mock AI service input parameters
+ * Used during development to simulate AI plan generation
+ */
+export interface MockPlanParams {
+  language: string
+  tripPreferences: TripPreferencesDto
+}
+
+/**
+ * Mock AI service response
+ * Simulates real AI service response structure
+ */
+export interface MockPlanResponse {
+  plan: PlanJson
+  model_used: string
+}
+
+// ============================================================================
+// AI SERVICE TYPES (Phase 2 - Production)
+// ============================================================================
+
+/**
+ * AI service input parameters
+ * Used to call OpenRouter.ai via Supabase Edge Function
+ */
+export interface AIServiceParams {
+  prompt: string
+  language: string
+  model?: string // Optional, defaults to "anthropic/claude-3.5-sonnet"
+}
+
+/**
+ * AI service response
+ * Returned from OpenRouter.ai via Supabase Edge Function
+ */
+export interface AIServiceResponse {
+  plan: PlanJson
+  model_used: string
+}
+
+// ============================================================================
 // ERROR RESPONSE TYPES
 // ============================================================================
 
