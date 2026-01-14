@@ -43,15 +43,27 @@ When introducing changes to the project, always follow the directory structure b
 - `./src/stores` - Pinia stores for state management
 - `./src/composables` - Vue composables for reusable logic
 - `./src/lib` - utility functions, helpers, and services
-- `./src/lib/supabase` - Supabase client and database types
-- `./src/types` - shared TypeScript types (Entities, DTOs)
+- `./src/lib/services` - service layer (e.g., `generation.service.ts`, `auth.service.ts`)
+- `./src/lib/validation` - Zod validation schemas (e.g., `plan.schemas.ts`)
+- `./src/lib/errors` - error handling utilities (e.g., `api.error.ts`)
+- `./src/db` - Supabase client and database types
+- `./src/types.ts` - shared TypeScript types (Entities, DTOs)
 - `./src/assets` - static internal assets (images, icons)
 - `./public` - public static assets
 - `./supabase/functions` - Supabase Edge Functions
+- `./supabase/functions/_shared` - shared utilities for Edge Functions (e.g., `cors.ts`)
 
 When modifying the directory structure, always update this section.
 
 ## Coding Practices
+
+### File Naming Conventions
+- Use kebab-case for all file names
+- Service files: `{domain}.service.ts` (e.g., `generation.service.ts`, `auth.service.ts`)
+- Utility files: `{name}.util.ts` or `{name}.helper.ts`
+- Type files: `{domain}.types.ts`
+- Component files: `PascalCase.vue` (e.g., `UserProfile.vue`)
+- Test files: `{name}.test.ts` or `{name}.spec.ts`
 
 ### Guidelines for Clean Code
 - Use feedback from ESLint and Prettier to improve code quality

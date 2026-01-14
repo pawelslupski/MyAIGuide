@@ -10,8 +10,9 @@ description: Backend/Database coding guidelines for MyAIGuide
 #### SUPABASE_CLIENT
 
 - Use Supabase as the single backend service for authentication and database interactions
-- Import Supabase client from `src/lib/supabase/client.ts`, not directly from `@supabase/supabase-js`
-- Use the custom Database type from `src/lib/supabase/types.ts` for type-safe queries
+- Follow Supabase guidelines for security and performance
+- Use Supabase client type from `src/db/supabase.client.ts`, not directly from `@supabase/supabase-js`
+- Use the custom Database type from `src/db/supabase.types.ts` for type-safe queries
 - Never expose Supabase service role key on the frontend - use Edge Functions for privileged operations
 
 #### DATA_VALIDATION
