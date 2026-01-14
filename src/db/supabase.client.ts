@@ -3,6 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '../db/database.types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabaseClient = createClient<Database>(supabaseUrl, supabaseKey)
+export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey)
+
+/**
+ * Default user ID for development/testing
+ * Used when authentication is disabled
+ */
+export const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000'
