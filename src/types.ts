@@ -6,7 +6,7 @@ import type { Tables, TablesUpdate } from './db/database.types'
 
 export type WhatPreference = 'nature' | 'culture_museums' | 'beach_relax' | 'city_break' | 'foodie'
 export type SpeedPreference = 'slow_chill' | 'balance' | 'intensive'
-export type TypePreference = 'base' | 'roadtrip'
+export type TypePreference = 'base' | 'base_with_trips' | 'roadtrip'
 export type BudgetPreference = 'budget' | 'moderate' | 'luxury'
 
 // ============================================================================
