@@ -220,12 +220,121 @@ Używaj wariantów responsywnych Tailwind:
 
 ### Dark mode
 
-Projekt wspiera dark mode poprzez zmienne CSS. Dodaj klasę `dark` do elementu `<html>`:
+Projekt posiada pełne wsparcie dla dark mode z automatycznym przełączaniem i persystencją w localStorage.
+
+#### Użycie composable useTheme
+
+```vue
+<script setup lang="ts">
+import { useTheme } from '@/composables/useTheme'
+
+const { themeMode, resolvedTheme, setTheme, toggleTheme } = useTheme()
+
+// Przełącz między light/dark
+function handleToggle() {
+  toggleTheme()
+}
+
+// Ustaw konkretny motyw
+function setLightMode() {
+  setTheme('light')
+}
+
+function setDarkMode() {
+  setTheme('dark')
+}
+
+// Użyj preferencji systemowych
+function useSystemTheme() {
+  setTheme('system')
+}
+</script>
+
+<template>
+  <div>
+    <p>Aktualny motyw: {{ resolvedTheme }}</p>
+    <p>Tryb użytkownika: {{ themeMode }}</p>
+    <Button @click="toggleTheme">Przełącz motyw</Button>
+  </div>
+</template>
+```
+
+#### Komponent ThemeToggle
+
+Gotowy komponent do przełączania motywu:
+
+```vue
+<script setup lang="ts">
+import ThemeToggle from '@/components/ThemeToggle.vue'
+</script>
+
+<template>
+  <header class="flex items-center justify-between p-4">
+    <h1>MyAIGuide</h1>
+    <ThemeToggle />
+  </header>
+</template>
+```
+
+#### Używanie zmiennych CSS
+
+Wszystkie komponenty shadcn-vue automatycznie dostosowują się do dark mode poprzez zmienne CSS:
 
 ```vue
 <template>
-  <div class="bg-background text-foreground">Automatycznie dostosowuje się do dark mode</div>
+  <!-- Automatycznie zmienia kolor w dark mode -->
+  <div class="bg-background text-foreground">
+    <Card class="bg-card text-card-foreground">
+      <h2 class="text-primary">Tytuł</h2>
+      <p class="text-muted-foreground">Opis</p>
+    </Card>
+  </div>
 </template>
+```
+
+#### Wariant dark: dla niestandardowych stylów
+
+Jeśli potrzebujesz specyficznych stylów dla dark mode, użyj wariantu `dark:`:
+
+```vue
+<template>
+  <div class="border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+    <h1 class="text-gray-900 dark:text-gray-100">Tytuł</h1>
+    <p class="text-gray-600 dark:text-gray-400">Tekst</p>
+  </div>
+</template>
+```
+
+#### Najlepsze praktyki dla dark mode
+
+1. **Używaj zmiennych CSS** zamiast hardcodowanych kolorów:
+   - ✅ `bg-background` zamiast `bg-white`
+   - ✅ `text-foreground` zamiast `text-black`
+   - ✅ `border-border` zamiast `border-gray-200`
+
+2. **Testuj oba motywy** podczas developmentu
+
+3. **Sprawdź kontrast** - upewnij się, że tekst jest czytelny w obu motywach (WCAG AA: 4.5:1)
+
+4. **Używaj wariantu `dark:` oszczędnie** - większość przypadków obsługują zmienne CSS
+
+5. **Inicjalizuj motyw w App.vue** - patrz sekcja "Inicjalizacja" poniżej
+
+#### Inicjalizacja dark mode
+
+W `App.vue` zainicjalizuj motyw przy montowaniu aplikacji:
+
+```vue
+<script setup lang="ts">
+import { onMounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+
+const { initTheme } = useTheme()
+
+onMounted(() => {
+  initTheme() // Wczytuje motyw z localStorage lub używa preferencji systemowych
+})
+</script>
 ```
 
 ## Najlepsze praktyki
@@ -236,3 +345,5 @@ Projekt wspiera dark mode poprzez zmienne CSS. Dodaj klasę `dark` do elementu `
 4. **Typuj props** używając TypeScript dla lepszej kontroli typów
 5. **Sprawdź dokumentację** na https://www.shadcn-vue.com przed dodaniem nowego komponentu
 6. **Testuj dostępność** - komponenty są dostępne out-of-the-box, ale upewnij się, że Twoje użycie również jest dostępne
+7. **Używaj zmiennych CSS dla kolorów** - zapewnia automatyczne wsparcie dla dark mode
+8. **Testuj w obu motywach** - light i dark mode powinny być równie czytelne i estetyczne

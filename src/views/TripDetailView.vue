@@ -7,6 +7,8 @@ import { useProfileStore } from '@/stores/profile.store'
 import { useQuotaStore } from '@/stores/quota.store'
 import { useToast } from '@/components/ui/toast/use-toast'
 import TripEditor from '@/components/TripEditor.vue'
+import PlanPanel from '@/components/PlanPanel.vue'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 import type { TripPreferencesDto } from '@/types'
 
 /**
@@ -168,10 +170,17 @@ async function handlePreferencesUpdate(preferences: TripPreferencesDto) {
 
     <!-- Main Content -->
     <div v-else-if="tripStore.currentTrip" class="space-y-6">
-      <!-- Trip Header Placeholder -->
+      <!-- Trip Header with Theme Toggle -->
       <div class="rounded-lg border bg-card p-4">
-        <h1 class="text-2xl font-bold">{{ tripStore.currentTrip.title }}</h1>
-        <p class="mt-1 text-sm text-muted-foreground">Status: {{ tripStore.currentTrip.status }}</p>
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1">
+            <h1 class="text-2xl font-bold">{{ tripStore.currentTrip.title }}</h1>
+            <p class="mt-1 text-sm text-muted-foreground">
+              Status: {{ tripStore.currentTrip.status }}
+            </p>
+          </div>
+          <ThemeToggle />
+        </div>
       </div>
 
       <!-- Responsive Grid Layout -->
@@ -189,15 +198,7 @@ async function handlePreferencesUpdate(preferences: TripPreferencesDto) {
 
         <!-- Right Panel: Plan Panel (order-2, sticky on desktop) -->
         <div class="order-2 space-y-4 lg:sticky lg:top-4 lg:self-start">
-          <div class="rounded-lg border bg-card p-4">
-            <h2 class="mb-4 text-lg font-semibold">Plan</h2>
-            <p class="text-sm text-muted-foreground">
-              Plan panel components will be implemented here
-            </p>
-            <p class="mt-2 text-xs text-muted-foreground">
-              Quota: {{ quotaStore.quota?.used ?? 0 }} / {{ quotaStore.quota?.limit ?? 10 }}
-            </p>
-          </div>
+          <PlanPanel :trip="tripStore.currentTrip" />
         </div>
       </div>
     </div>

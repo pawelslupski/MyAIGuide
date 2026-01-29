@@ -20,7 +20,8 @@ This document defines the user interface architecture for MyAIGuide MVP, a Vue 3
 ### UI Components & Styling
 
 - **shadcn-vue** for accessible, pre-built components
-- **Tailwind CSS 3** for utility-first styling
+- **Tailwind CSS 3** for utility-first styling with dark mode support
+- **Dark Mode** - Full theme switching with localStorage persistence
 - Custom components built on shadcn-vue primitives
 
 ### API Integration
@@ -64,6 +65,7 @@ This document defines the user interface architecture for MyAIGuide MVP, a Vue 3
 - **AuthLayout.vue** - Minimal layout for login/register pages
 - **Sidebar.vue** - Navigation sidebar using shadcn-vue Navigation Menu component
 - **TripLayout.vue** - Specialized layout for trip detail view with panels
+- **ThemeToggle.vue** - Dark/light mode toggle button component
 
 ## 4. Key UI Patterns and Components
 
@@ -205,7 +207,119 @@ const handleLogout = async () => {
 - `sm:w-64 md:w-72 lg:w-64` - Responsive sidebar width
 - `hidden lg:block` - Show/hide based on breakpoint
 
-### 4.2 Profile Completeness Banner
+### 4.2 Dark Mode Theme Switching
+
+**Location:** ThemeToggle.vue component, typically placed in header/sidebar
+
+**Features:**
+
+- Toggle between light and dark themes
+- Persists user preference in localStorage (key: `myaiguide-theme`)
+- Supports system preference detection
+- Smooth transitions between themes
+- Accessible with proper ARIA labels
+- Icons change based on current theme (Sun for dark mode, Moon for light mode)
+
+**Implementation:**
+
+```vue
+<!-- ThemeToggle.vue -->
+<script setup lang="ts">
+import { Moon, Sun } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { useTheme } from '@/composables/useTheme'
+
+const { resolvedTheme, toggleTheme } = useTheme()
+</script>
+
+<template>
+  <Button
+    variant="ghost"
+    size="icon"
+    @click="toggleTheme"
+    :aria-label="resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+    title="Toggle theme"
+  >
+    <Sun v-if="resolvedTheme === 'dark'" class="h-5 w-5 transition-all" />
+    <Moon v-else class="h-5 w-5 transition-all" />
+  </Button>
+</template>
+```
+
+**Composable API (useTheme):**
+
+```typescript
+// src/composables/useTheme.ts
+import { useTheme } from '@/composables/useTheme'
+
+const {
+  themeMode, // 'light' | 'dark' | 'system'
+  resolvedTheme, // 'light' | 'dark' (actual applied theme)
+  setTheme, // (mode: ThemeMode) => void
+  toggleTheme, // () => void (toggles between light/dark)
+  initTheme // () => void (initialize on app mount)
+} = useTheme()
+```
+
+**Usage in App.vue:**
+
+```vue
+<script setup lang="ts">
+import { onMounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+
+const { initTheme } = useTheme()
+
+onMounted(() => {
+  initTheme() // Initialize theme from localStorage or system preference
+})
+</script>
+```
+
+**Theme Configuration:**
+
+All theme colors are defined in `src/style.css` using CSS variables:
+
+```css
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 14.902%;
+    --primary: 37.6923 92.126% 50.1961%;
+    /* ... more light theme variables */
+  }
+
+  .dark {
+    --background: 0 0% 9.0196%;
+    --foreground: 0 0% 89.8039%;
+    --primary: 167.8846 86.6667% 47.0588%;
+    /* ... more dark theme variables */
+  }
+}
+```
+
+**Tailwind Dark Mode Variants:**
+
+Use the `dark:` variant for dark mode specific styles:
+
+```vue
+<div class="bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+  <h1 class="text-primary dark:text-primary">Title</h1>
+  <Button class="bg-secondary hover:bg-secondary/80 dark:bg-secondary dark:hover:bg-secondary/80">
+    Click me
+  </Button>
+</div>
+```
+
+**Best Practices:**
+
+- Always use CSS variables for colors (e.g., `bg-background`, `text-foreground`)
+- Avoid hardcoded color values (e.g., `bg-white`, `text-black`)
+- Test all components in both light and dark modes
+- Ensure sufficient contrast in both themes (WCAG AA: 4.5:1 for text)
+- Use `dark:` variants sparingly - CSS variables handle most cases automatically
+
+### 4.3 Profile Completeness Banner
 
 **Location:** DashboardView.vue (top of page)
 
@@ -230,7 +344,7 @@ const handleLogout = async () => {
 </Alert>
 ```
 
-### 4.2 Trip List Dashboard
+### 4.4 Trip List Dashboard
 
 **Location:** DashboardView.vue
 
@@ -282,7 +396,7 @@ const handleLogout = async () => {
 - `text-lg md:text-xl` - Responsive font sizes
 - `line-clamp-2 md:line-clamp-3` - More lines visible on larger screens
 
-### 4.3 Trip Detail View - Layout
+### 4.5 Trip Detail View - Layout
 
 **Location:** TripDetailView.vue
 
@@ -382,7 +496,7 @@ const handleLogout = async () => {
 </div>
 ```
 
-### 4.6 Generation Quota Counter
+### 4.7 Generation Quota Counter
 
 **Location:** PlanViewer.vue component (above "Generate Plan" button)
 

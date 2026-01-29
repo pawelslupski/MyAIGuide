@@ -62,14 +62,14 @@ const noteValidationMessage = computed(() => {
 const noteValidationClass = computed(() => {
   if (noteLength.value < MIN_NOTE_LENGTH) return 'text-destructive'
   if (noteLength.value > MAX_NOTE_LENGTH) return 'text-destructive'
-  return 'text-green-600'
+  return 'text-primary'
 })
 
 // Preference options
 const whatOptions: { value: WhatPreference; label: string }[] = [
   { value: 'nature', label: 'Nature & Outdoors' },
-  { value: 'culture_museums', label: 'Culture & Museums' },
   { value: 'beach_relax', label: 'Beach & Relaxation' },
+  { value: 'culture_museums', label: 'Culture & Museums' },
   { value: 'city_break', label: 'City Break' },
   { value: 'foodie', label: 'Foodie Experience' }
 ]
@@ -86,12 +86,12 @@ const speedOptions: { value: SpeedPreference; label: string; description: string
 
 const typeOptions: { value: TypePreference; label: string; description: string }[] = [
   { value: 'base', label: 'Base', description: 'Stay in one location' },
-  { value: 'roadtrip', label: 'Road Trip', description: 'Travel between multiple locations' },
   {
     value: 'base_with_trips',
-    label: 'Base with Optional Trips',
+    label: 'Base with optional trips',
     description: 'Stay in one location with day trips'
-  }
+  },
+  { value: 'roadtrip', label: 'Road trip', description: 'Travel between multiple locations' }
 ]
 
 const budgetOptions: { value: BudgetPreference; label: string; description: string }[] = [
@@ -185,32 +185,6 @@ watch(
         </Badge>
       </div>
     </div>
-
-    <!-- Trip Note -->
-    <Card>
-      <CardHeader>
-        <CardTitle>Trip Notes</CardTitle>
-        <CardDescription
-          >Describe your trip plans, preferences, and any special requirements</CardDescription
-        >
-      </CardHeader>
-      <CardContent class="space-y-2">
-        <Textarea
-          v-model="localNote"
-          placeholder="Write your trip notes here... (minimum 1000 characters)"
-          class="min-h-[200px] resize-y"
-          :maxlength="MAX_NOTE_LENGTH"
-        />
-        <div class="flex items-center justify-between text-sm">
-          <span :class="noteValidationClass">
-            {{ noteValidationMessage }}
-          </span>
-          <span class="text-muted-foreground">
-            {{ noteLength.toLocaleString() }} / {{ MAX_NOTE_LENGTH.toLocaleString() }}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
 
     <!-- Trip Preferences -->
     <Card>
@@ -315,6 +289,32 @@ watch(
               </Label>
             </div>
           </RadioGroup>
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- Trip Note -->
+    <Card>
+      <CardHeader>
+        <CardTitle>Trip Notes</CardTitle>
+        <CardDescription
+          >Describe your trip plans, preferences, and any special requirements</CardDescription
+        >
+      </CardHeader>
+      <CardContent class="space-y-2">
+        <Textarea
+          v-model="localNote"
+          placeholder="Write your trip notes here... (minimum 1000 characters)"
+          class="min-h-[200px] resize-y"
+          :maxlength="MAX_NOTE_LENGTH"
+        />
+        <div class="flex items-center justify-between text-sm">
+          <span :class="noteValidationClass">
+            {{ noteValidationMessage }}
+          </span>
+          <span class="text-muted-foreground">
+            {{ noteLength.toLocaleString() }} / {{ MAX_NOTE_LENGTH.toLocaleString() }}
+          </span>
         </div>
       </CardContent>
     </Card>
