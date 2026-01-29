@@ -60,3 +60,28 @@ export function validatePlanJson(data: unknown) {
 export function validateAIResponse(data: unknown) {
   return MockPlanResponseSchema.parse(data)
 }
+
+// ============================================================================
+// SAVE PLAN COMMAND VALIDATION
+// ============================================================================
+
+/**
+ * Save plan command schema
+ * Validates plan_json and plan_language for PUT /api/trips/:id/plan
+ */
+export const SavePlanCommandSchema = z.object({
+  plan_json: PlanJsonSchema,
+  plan_language: z
+    .string()
+    .min(1, 'Language code is required')
+    .max(10, 'Language code must be at most 10 characters')
+    .regex(/^[a-z]{2,10}$/i, 'Must be a valid language code (e.g., "en", "pl")')
+})
+
+/**
+ * Validate save plan command
+ * Throws ZodError if validation fails
+ */
+export function validateSavePlanCommand(data: unknown) {
+  return SavePlanCommandSchema.parse(data)
+}
