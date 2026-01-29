@@ -37,6 +37,11 @@ export default [
     languageOptions: {
       parserOptions: {
         parser: '@typescript-eslint/parser'
+      },
+      globals: {
+        console: 'readonly',
+        window: 'readonly',
+        document: 'readonly'
       }
     }
   },
