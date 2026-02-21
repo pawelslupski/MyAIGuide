@@ -3,6 +3,7 @@ import vue from 'eslint-plugin-vue'
 import tseslint from 'typescript-eslint'
 import prettier from 'eslint-plugin-prettier'
 import eslintConfigPrettier from 'eslint-config-prettier/flat'
+import globals from 'globals'
 
 export default [
   {
@@ -27,7 +28,10 @@ export default [
       // TS + Supabase + AI DTOs
       '@typescript-eslint/no-explicit-any': 'off',
       // Pozwala ignorować nieużywane argumenty
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }
+      ],
       // Vite / Vue 3
       'vue/no-v-html': 'off'
     }
@@ -39,9 +43,7 @@ export default [
         parser: '@typescript-eslint/parser'
       },
       globals: {
-        console: 'readonly',
-        window: 'readonly',
-        document: 'readonly'
+        ...globals.browser
       }
     }
   },
