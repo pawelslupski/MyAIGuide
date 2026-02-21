@@ -60,36 +60,74 @@ export function deriveTripStatus(noteBody: string | null, planJson: unknown): Tr
  * @throws ApiError - 404 if trip not found, 403 if unauthorized
  */
 export async function getTripById(tripId: number, userId: string): Promise<TripDTO> {
-  // MOCK MODE: Return hardcoded trip data for development
-  // TODO: Replace with real Supabase client when environment is configured
-  console.log(`[getTripById] MOCK MODE - returning hardcoded trip data for tripId=${tripId}`)
+  const { data: trip, error } = await supabaseClient
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .single()
 
-  // Simulate async operation
-  await new Promise((resolve) => setTimeout(resolve, 300))
-
-  const mockTrip = {
-    id: tripId,
-    user_id: userId,
-    title: 'Summer in Croatia',
-    note_body:
-      "Planning a 10-day trip to Croatia in July. Want to visit Dubrovnik, Split, and Hvar. Interested in historical sites, beaches, and local cuisine. Traveling with family (2 adults, 2 kids aged 8 and 10). Budget is moderate. Looking for a mix of relaxation and cultural experiences. Would love to explore the old town walls in Dubrovnik, visit Diocletian's Palace in Split, and enjoy the beaches in Hvar. Also interested in trying local seafood and wine. Planning to rent a car for flexibility. Looking for family-friendly accommodations near the beach. Want to balance sightseeing with downtime for the kids. Interested in boat trips to nearby islands. Need recommendations for restaurants that accommodate children. Also curious about any local festivals or events happening in July. Want to avoid overly touristy spots if possible. Prefer authentic experiences. Budget allows for some splurges but generally moderate spending. Trip duration is 10 days total.",
-    what: ['culture_museums', 'beach_relax', 'foodie'],
-    speed: 'balance',
-    type: 'roadtrip',
-    budget: 'moderate',
-    plan_json: null,
-    plan_language: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+  if (error || !trip) {
+    throw createNotFoundError()
   }
 
-  // Derive trip status based on note and plan presence
-  const status = deriveTripStatus(mockTrip.note_body, mockTrip.plan_json)
+  if (trip.user_id !== userId) {
+    throw createForbiddenError()
+  }
 
-  // Return typed DTO
+  const status = deriveTripStatus(trip.note_body, trip.plan_json)
+
   return {
-    ...mockTrip,
-    plan_json: mockTrip.plan_json as PlanJson | null,
+    ...trip,
+    plan_json: trip.plan_json as PlanJson | null,
+    status
+  }
+}
+
+/**
+ * Update trip fields
+ *
+ * Updates specified fields for a trip owned by the user.
+ * Uses .eq('user_id', userId) for RLS + ownership enforcement.
+ *
+ * @param tripId - Trip identifier (positive integer)
+ * @param userId - Authenticated user ID (UUID)
+ * @param updates - Partial trip fields to update
+ * @returns Promise<TripDTO> - Updated trip with derived status
+ * @throws ApiError - 404 if not found or not owned by user
+ */
+export interface TripUpdateFields {
+  title?: string
+  note_body?: string | null
+  what?: string[] | null
+  speed?: string | null
+  type?: string | null
+  budget?: string | null
+  num_days?: number | null
+  num_people?: number | null
+}
+
+export async function updateTrip(
+  tripId: number,
+  userId: string,
+  updates: TripUpdateFields
+): Promise<TripDTO> {
+  const { data: updatedTrip, error } = await supabaseClient
+    .from('trips')
+    .update(updates)
+    .eq('id', tripId)
+    .eq('user_id', userId)
+    .select()
+    .single()
+
+  if (error || !updatedTrip) {
+    throw createInternalError(`Failed to update trip: ${error?.message || 'Unknown error'}`)
+  }
+
+  const status = deriveTripStatus(updatedTrip.note_body, updatedTrip.plan_json)
+
+  return {
+    ...updatedTrip,
+    plan_json: updatedTrip.plan_json as PlanJson | null,
     status
   }
 }

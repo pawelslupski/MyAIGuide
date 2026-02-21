@@ -3,11 +3,10 @@ import type {
   QuotaCheckResult,
   RecordGenerationParams,
   AIServiceResponse,
-  MockPlanParams,
+  AIPlanParams,
   PlanJson
 } from '@/types'
 import { validateAIResponse } from '@/lib/validation/plan.schemas'
-import { generateMockPlan } from './mock-ai.service'
 
 /**
  * Plan Generation Service
@@ -78,7 +77,7 @@ export function detectLanguage(text: string): string {
 /**
  * Build AI prompt from trip data
  * Combines note body, user profile flags, and trip preferences
- * Prepared for Phase 2 - currently not used by mock service
+ * Includes instructions for logical ordering and exhaustive descriptions
  */
 export function buildAIPrompt(noteBody: string, userProfile: any, tripPreferences: any): string {
   const profileFlags = []
@@ -91,18 +90,33 @@ export function buildAIPrompt(noteBody: string, userProfile: any, tripPreference
 Generate a travel plan based on the following information:
 
 Trip Notes:
-${noteBody}
+${noteBody.trim() || 'No notes provided — use the preferences below as the primary source of guidance.'}
 
 Traveler Profile:
 ${profileFlags.length > 0 ? profileFlags.join(', ') : 'No special requirements'}
 
 Preferences:
+- Duration: ${tripPreferences.num_days ? `${tripPreferences.num_days} days` : 'not specified'}
+- Group size: ${tripPreferences.num_people ? `${tripPreferences.num_people} people` : 'not specified'}
 - Activities: ${tripPreferences.what.join(', ') || 'not specified'}
 - Speed: ${tripPreferences.speed || 'not specified'}
 - Type: ${tripPreferences.type || 'not specified'}
 - Budget: ${tripPreferences.budget || 'not specified'}
 
-Please generate a detailed day-by-day travel plan in JSON format.
+CRITICAL REQUIREMENTS:
+1. Generate EXACTLY ${tripPreferences.num_days} day entries if duration is specified — no more, no fewer
+2. Order all activities within each day by geographic proximity to create efficient routes
+3. Minimize travel time and distance between consecutive activities
+4. Avoid zigzagging between distant locations - group nearby places together
+5. Provide exhaustive, detailed descriptions for each activity (2-3 sentences minimum)
+6. Include specific details about what to see, do, and why it's worth visiting
+
+IMPORTANT: Return ONLY the exact JSON structure with these fields:
+- Root: { "days": [...] }
+- Day: { "day": number, "activities": [...] }
+- Activity: { "timeOfDay": string, "locationName": string, "description": string, "categoryTag": string }
+
+DO NOT include any other fields like: trip_id, destination, duration_days, name, duration_hours, cost_category, category (array), etc.
 `.trim()
 
   return prompt
@@ -137,18 +151,26 @@ export async function recordGenerationAttempt(params: RecordGenerationParams): P
 }
 
 /**
- * Call AI service (mock or real based on environment)
- * Phase 1: Uses mock AI service
- * Phase 2: Will call Supabase Edge Function
+ * Call AI service via Supabase Edge Function (OpenRouter API)
  */
-export async function callAIService(params: MockPlanParams): Promise<AIServiceResponse> {
-  // Phase 1: Use mock AI service
-  const useMock = import.meta.env.VITE_USE_MOCK_AI !== 'false' // Default to true
+export async function callAIService(params: AIPlanParams): Promise<AIServiceResponse> {
+  console.log('[callAIService] Calling OpenRouter API via Edge Function')
 
-  if (useMock) {
-    return await generateMockPlan(params)
+  const prompt = buildAIPrompt(params.noteBody, params.userProfile, params.tripPreferences)
+
+  const { data, error } = await supabaseClient.functions.invoke('generate-travel-plan', {
+    body: { prompt, language: params.language }
+  })
+
+  if (error) {
+    console.error('[callAIService] Edge Function error:', error)
+    throw new Error(`AI service error: ${error.message}`)
   }
 
-  // Phase 2: Call Supabase Edge Function (to be implemented)
-  throw new Error('Real AI service not yet implemented')
+  if (!data?.plan) {
+    throw new Error('Invalid response from AI service: missing plan data')
+  }
+
+  console.log('[callAIService] Successfully generated plan')
+  return { plan: data.plan, model_used: data.model_used }
 }

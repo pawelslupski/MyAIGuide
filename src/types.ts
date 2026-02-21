@@ -101,6 +101,8 @@ export interface CreateTripCommand {
   speed?: SpeedPreference | null
   type?: TypePreference | null
   budget?: BudgetPreference | null
+  num_days?: number | null
+  num_people?: number | null
 }
 
 /**
@@ -114,6 +116,8 @@ export interface UpdateTripCommand {
   speed?: SpeedPreference | null
   type?: TypePreference | null
   budget?: BudgetPreference | null
+  num_days?: number | null
+  num_people?: number | null
 }
 
 /**
@@ -207,6 +211,8 @@ export interface TripPreferencesDto {
   speed: SpeedPreference | null
   type: TypePreference | null
   budget: BudgetPreference | null
+  num_days: number | null
+  num_people: number | null
 }
 
 /**
@@ -255,39 +261,23 @@ export interface RecordGenerationParams {
 }
 
 // ============================================================================
-// MOCK AI SERVICE TYPES (Phase 1 - Development)
-// ============================================================================
-
-/**
- * Mock AI service input parameters
- * Used during development to simulate AI plan generation
- */
-export interface MockPlanParams {
-  language: string
-  tripPreferences: TripPreferencesDto
-}
-
-/**
- * Mock AI service response
- * Simulates real AI service response structure
- */
-export interface MockPlanResponse {
-  plan: PlanJson
-  model_used: string
-}
-
-// ============================================================================
-// AI SERVICE TYPES (Phase 2 - Production)
+// AI SERVICE TYPES
 // ============================================================================
 
 /**
  * AI service input parameters
  * Used to call OpenRouter.ai via Supabase Edge Function
  */
-export interface AIServiceParams {
-  prompt: string
+export interface AIPlanParams {
   language: string
-  model?: string // Optional, defaults to "anthropic/claude-3.5-sonnet"
+  noteBody: string
+  userProfile: {
+    hasKids: boolean
+    hasPets: boolean
+    hasMobilityIssues: boolean
+    hasDietaryPreferences: boolean
+  }
+  tripPreferences: TripPreferencesDto
 }
 
 /**

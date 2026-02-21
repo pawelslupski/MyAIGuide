@@ -43,26 +43,23 @@ const localWhat = ref<WhatPreference[]>((props.trip.what ?? []) as WhatPreferenc
 const localSpeed = ref<SpeedPreference | null>(props.trip.speed as SpeedPreference | null)
 const localType = ref<TypePreference | null>(props.trip.type as TypePreference | null)
 const localBudget = ref<BudgetPreference | null>(props.trip.budget as BudgetPreference | null)
+const localNumDays = ref<number | null>(props.trip.num_days ?? null)
+const localNumPeople = ref<number | null>(props.trip.num_people ?? null)
 
 // Character count validation
-const MIN_NOTE_LENGTH = 1000
 const MAX_NOTE_LENGTH = 10000
 
 const noteLength = computed(() => localNote.value.length)
 const noteValidationMessage = computed(() => {
-  if (noteLength.value < MIN_NOTE_LENGTH) {
-    return `Minimum ${MIN_NOTE_LENGTH} characters required (${MIN_NOTE_LENGTH - noteLength.value} more needed)`
-  }
   if (noteLength.value > MAX_NOTE_LENGTH) {
     return `Maximum ${MAX_NOTE_LENGTH} characters exceeded (${noteLength.value - MAX_NOTE_LENGTH} over limit)`
   }
-  return 'Valid'
+  return null
 })
 
 const noteValidationClass = computed(() => {
-  if (noteLength.value < MIN_NOTE_LENGTH) return 'text-destructive'
   if (noteLength.value > MAX_NOTE_LENGTH) return 'text-destructive'
-  return 'text-primary'
+  return 'text-muted-foreground'
 })
 
 // Preference options
@@ -123,7 +120,9 @@ function handlePreferencesChange() {
     what: localWhat.value,
     speed: localSpeed.value,
     type: localType.value,
-    budget: localBudget.value
+    budget: localBudget.value,
+    num_days: localNumDays.value,
+    num_people: localNumPeople.value
   })
 }
 
@@ -144,6 +143,19 @@ function isInherited(field: 'speed' | 'type' | 'budget'): boolean {
   return props.trip[field] === props.defaultPreferences[field]
 }
 
+// Handlers for number inputs (convert NaN from empty field → null)
+function handleNumDaysChange(e: any) {
+  const val = e.target.valueAsNumber
+  localNumDays.value = Number.isNaN(val) ? null : val
+  handlePreferencesChange()
+}
+
+function handleNumPeopleChange(e: any) {
+  const val = e.target.valueAsNumber
+  localNumPeople.value = Number.isNaN(val) ? null : val
+  handlePreferencesChange()
+}
+
 // Sync props changes to local state
 watch(
   () => props.trip,
@@ -154,6 +166,8 @@ watch(
     localSpeed.value = newTrip.speed as SpeedPreference | null
     localType.value = newTrip.type as TypePreference | null
     localBudget.value = newTrip.budget as BudgetPreference | null
+    localNumDays.value = newTrip.num_days ?? null
+    localNumPeople.value = newTrip.num_people ?? null
   },
   { deep: true }
 )
@@ -195,6 +209,36 @@ watch(
         >
       </CardHeader>
       <CardContent class="space-y-6">
+        <!-- Trip Duration -->
+        <div class="space-y-2">
+          <Label for="num-days">Trip Duration (days)</Label>
+          <Input
+            id="num-days"
+            :value="localNumDays ?? undefined"
+            type="number"
+            min="1"
+            max="30"
+            placeholder="e.g. 7"
+            class="w-32"
+            @change="handleNumDaysChange"
+          />
+        </div>
+
+        <!-- Number of People -->
+        <div class="space-y-2">
+          <Label for="num-people">Number of People</Label>
+          <Input
+            id="num-people"
+            :value="localNumPeople ?? undefined"
+            type="number"
+            min="1"
+            max="20"
+            placeholder="e.g. 2"
+            class="w-32"
+            @change="handleNumPeopleChange"
+          />
+        </div>
+
         <!-- What Preferences (Multi-select) -->
         <div class="space-y-3">
           <Label>What interests you?</Label>
@@ -304,14 +348,15 @@ watch(
       <CardContent class="space-y-2">
         <Textarea
           v-model="localNote"
-          placeholder="Write your trip notes here... (minimum 1000 characters)"
+          placeholder="Write your trip notes here... (optional)"
           class="min-h-[200px] resize-y"
           :maxlength="MAX_NOTE_LENGTH"
         />
         <div class="flex items-center justify-between text-sm">
-          <span :class="noteValidationClass">
+          <span v-if="noteValidationMessage" :class="noteValidationClass">
             {{ noteValidationMessage }}
           </span>
+          <span v-else />
           <span class="text-muted-foreground">
             {{ noteLength.toLocaleString() }} / {{ MAX_NOTE_LENGTH.toLocaleString() }}
           </span>

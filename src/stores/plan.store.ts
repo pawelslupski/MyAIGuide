@@ -23,8 +23,7 @@ export const usePlanStore = defineStore('plan', () => {
 
   /**
    * Generate plan for trip
-   * Uses mock AI service for development (Phase 1)
-   * Will use Edge Function in Phase 2
+   * Calls OpenRouter API via Supabase Edge Function
    */
   async function generatePlan(_tripId: number): Promise<void> {
     isGenerating.value = true
@@ -40,25 +39,40 @@ export const usePlanStore = defineStore('plan', () => {
 
       const trip = tripStore.currentTrip
 
-      // Validate note body
-      if (!trip.note_body || trip.note_body.length < 1000) {
-        throw new Error('Trip notes must be at least 1000 characters')
+      // Validate note body (optional but must not exceed max length if provided)
+      if (trip.note_body && trip.note_body.length > 10000) {
+        throw new Error('Trip notes must not exceed 10000 characters')
       }
 
-      // Detect language from note
-      const language = detectLanguage(trip.note_body)
+      // Detect language from note (default to 'en' if no note)
+      const language = detectLanguage(trip.note_body ?? '')
 
       // Build trip preferences with proper typing
       const tripPreferences = {
         what: (trip.what ?? []) as import('@/types').WhatPreference[],
         speed: trip.speed as import('@/types').SpeedPreference | null,
         type: trip.type as import('@/types').TypePreference | null,
-        budget: trip.budget as import('@/types').BudgetPreference | null
+        budget: trip.budget as import('@/types').BudgetPreference | null,
+        num_days: trip.num_days ?? null,
+        num_people: trip.num_people ?? null
       }
 
-      // Call mock AI service (Phase 1)
+      // Fetch user profile for personalization flags
+      const profileStore = useProfileStore()
+      if (!profileStore.profile) {
+        await profileStore.fetchProfile()
+      }
+      const userProfile = {
+        hasKids: profileStore.profile?.has_kids ?? false,
+        hasPets: profileStore.profile?.has_pets ?? false,
+        hasMobilityIssues: profileStore.profile?.has_mobility_issues ?? false,
+        hasDietaryPreferences: profileStore.profile?.has_dietary_preferences ?? false
+      }
+
       const response = await callAIService({
         language,
+        noteBody: trip.note_body ?? '',
+        userProfile,
         tripPreferences
       })
 
