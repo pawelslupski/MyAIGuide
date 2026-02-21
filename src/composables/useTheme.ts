@@ -1,4 +1,4 @@
-import { ref, watch, onMounted } from 'vue'
+import { ref } from 'vue'
 
 /**
  * Theme mode type
@@ -139,6 +139,7 @@ export function useTheme() {
       mediaQuery.addEventListener('change', handleChange)
 
       // Cleanup on unmount (handled by Vue automatically)
+      // @ts-expect-error Vue watch cleanup return type mismatch
       return () => mediaQuery.removeEventListener('change', handleChange)
     }
   }
