@@ -67,6 +67,15 @@ async function confirmDelete() {
   }
 }
 
+async function createAndNavigate() {
+  try {
+    const id = await tripStore.createTrip()
+    router.push({ name: 'trip-detail', params: { id } })
+  } catch {
+    toast({ title: 'Error', description: 'Failed to create trip.', variant: 'destructive' })
+  }
+}
+
 async function handlePageChange(page: number) {
   await tripStore.fetchTrips(page)
 }
@@ -91,9 +100,9 @@ onMounted(async () => {
     <!-- Page header -->
     <div class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">My Trips</h1>
-      <Button @click="router.push({ name: 'trip-create' })">
+      <Button :disabled="tripStore.isCreatingTrip" @click="createAndNavigate">
         <Plus class="mr-2 h-4 w-4" />
-        New Trip
+        {{ tripStore.isCreatingTrip ? 'Creating…' : 'New Trip' }}
       </Button>
     </div>
 
@@ -124,9 +133,9 @@ onMounted(async () => {
       class="flex min-h-[300px] flex-col items-center justify-center gap-4 text-center"
     >
       <p class="text-muted-foreground">You don't have any trips yet.</p>
-      <Button @click="router.push({ name: 'trip-create' })">
+      <Button :disabled="tripStore.isCreatingTrip" @click="createAndNavigate">
         <Plus class="mr-2 h-4 w-4" />
-        Create your first trip
+        {{ tripStore.isCreatingTrip ? 'Creating…' : 'Create your first trip' }}
       </Button>
     </div>
 

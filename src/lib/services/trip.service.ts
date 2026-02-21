@@ -1,5 +1,5 @@
 import { supabaseClient } from '@/db/supabase.client'
-import type { TripDTO, TripStatus, PlanJson } from '@/types'
+import type { TripDTO, TripStatus, PlanJson, CreateTripCommand } from '@/types'
 import {
   createNotFoundError,
   createForbiddenError,
@@ -13,6 +13,30 @@ import { ZodError } from 'zod'
  * Trip Service
  * Handles trip data retrieval and status computation
  */
+
+/**
+ * Create a new trip
+ *
+ * @param command - Trip creation data
+ * @returns Promise<{ id: number }> - ID of the newly created trip
+ * @throws ApiError on database error
+ */
+export async function createTrip(
+  command: CreateTripCommand,
+  userId: string
+): Promise<{ id: number }> {
+  const { data, error } = await supabaseClient
+    .from('trips')
+    .insert({ title: command.title, user_id: userId })
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    throw createInternalError(`Failed to create trip: ${error?.message || 'Unknown error'}`)
+  }
+
+  return data
+}
 
 /**
  * Derive trip status based on note_body and plan_json presence

@@ -9,7 +9,11 @@ import type {
   TripStatus
 } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
-import { getTripById, updateTrip } from '@/lib/services/trip.service'
+import {
+  getTripById,
+  updateTrip,
+  createTrip as createTripService
+} from '@/lib/services/trip.service'
 
 // Module-level helper — derives trip status from raw DB fields
 function deriveTripStatus(noteBody: string | null, planJson: object | null): TripStatus {
@@ -49,6 +53,7 @@ export const useTripStore = defineStore('trip', () => {
     limit: 20
   })
   const isLoadingTrips = ref(false)
+  const isCreatingTrip = ref(false)
   const tripsError = ref<ErrorResponse | null>(null)
 
   // Getters
@@ -279,6 +284,24 @@ export const useTripStore = defineStore('trip', () => {
   }
 
   /**
+   * Create a new trip and return its ID
+   */
+  async function createTrip(title = 'New Trip'): Promise<number> {
+    isCreatingTrip.value = true
+    try {
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      const { id } = await createTripService({ title }, user.id)
+      return id
+    } finally {
+      isCreatingTrip.value = false
+    }
+  }
+
+  /**
    * Clear current trip
    */
   function clearTrip(): void {
@@ -296,6 +319,7 @@ export const useTripStore = defineStore('trip', () => {
     trips,
     tripsPagination,
     isLoadingTrips,
+    isCreatingTrip,
     tripsError,
     // Getters
     tripStatus,
@@ -306,6 +330,7 @@ export const useTripStore = defineStore('trip', () => {
     updateTripTitle,
     updateTripNote,
     updateTripPreferences,
+    createTrip,
     clearTrip,
     fetchTrips,
     deleteTripById
