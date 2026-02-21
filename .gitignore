@@ -31,3 +31,13 @@ dist-ssr
 # environment variables
 .env
 .env.production
+.env.keys
+.env.local
+.env.*.local
+
+#claude
+/.claude/settings.json
+
+# Supabase
+.branches
+.temp
