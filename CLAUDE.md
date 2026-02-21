@@ -78,7 +78,7 @@ Polish).
 
 ## Environment Variables
 
-Frontend `.env`: `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+Frontend `.env`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 Edge Functions `supabase/.env.local`: `OPENROUTER_API_KEY`
 
 ## Routes
