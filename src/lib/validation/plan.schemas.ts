@@ -33,14 +33,8 @@ export const PlanJsonSchema = z.object({
   days: z.array(DaySchema).min(1, 'Plan must have at least one day')
 })
 
-// Edge Function response schema (for Phase 2)
+// Edge Function response schema
 export const EdgeFunctionResponseSchema = z.object({
-  plan: PlanJsonSchema,
-  model_used: z.string().min(1, 'model_used is required')
-})
-
-// Mock AI response schema (for Phase 1)
-export const MockPlanResponseSchema = z.object({
   plan: PlanJsonSchema,
   model_used: z.string().min(1, 'model_used is required')
 })
@@ -58,7 +52,7 @@ export function validatePlanJson(data: unknown) {
  * Throws ZodError if validation fails
  */
 export function validateAIResponse(data: unknown) {
-  return MockPlanResponseSchema.parse(data)
+  return EdgeFunctionResponseSchema.parse(data)
 }
 
 // ============================================================================
