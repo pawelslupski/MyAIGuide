@@ -158,7 +158,7 @@ export async function callAIService(params: AIPlanParams): Promise<AIServiceResp
 
   const prompt = buildAIPrompt(params.noteBody, params.userProfile, params.tripPreferences)
 
-  const { data, error } = await supabaseClient.functions.invoke('generate-travel-plan', {
+  const { data, error } = await supabaseClient.functions.invoke('generate-plan', {
     body: { prompt, language: params.language }
   })
 
