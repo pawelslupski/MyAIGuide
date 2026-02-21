@@ -76,11 +76,14 @@ export function createNoteValidationError(
 }
 
 export function createNoteRequiredError(): ApiError {
-  return new ApiError(400, 'VALIDATION_ERROR', 'Note body is required for plan generation', {
-    note_body_length: 0,
-    min_length: 1000,
-    max_length: 10000
-  })
+  return new ApiError(
+    400,
+    'VALIDATION_ERROR',
+    'Note body exceeds maximum length for plan generation',
+    {
+      max_length: 10000
+    }
+  )
 }
 
 export function createQuotaExceededError(used: number, limit: number, resetAt: string): ApiError {

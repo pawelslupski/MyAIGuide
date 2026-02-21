@@ -117,6 +117,8 @@ export type Database = {
           created_at: string
           id: number
           note_body: string | null
+          num_days: number | null
+          num_people: number | null
           plan_json: Json | null
           plan_language: string | null
           speed: string | null
@@ -131,6 +133,8 @@ export type Database = {
           created_at?: string
           id?: number
           note_body?: string | null
+          num_days?: number | null
+          num_people?: number | null
           plan_json?: Json | null
           plan_language?: string | null
           speed?: string | null
@@ -145,6 +149,8 @@ export type Database = {
           created_at?: string
           id?: number
           note_body?: string | null
+          num_days?: number | null
+          num_people?: number | null
           plan_json?: Json | null
           plan_language?: string | null
           speed?: string | null

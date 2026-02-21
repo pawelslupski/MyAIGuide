@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { TripDTO, TripPreferencesDto, ErrorResponse } from '@/types'
-import { getTripById } from '@/lib/services/trip.service'
+import { supabaseClient } from '@/db/supabase.client'
+import { getTripById, updateTrip } from '@/lib/services/trip.service'
 
 /**
  * Trip Store
@@ -24,19 +25,18 @@ export const useTripStore = defineStore('trip', () => {
   /**
    * Fetch trip by ID
    * Validates ownership and derives status
-   * MOCK MODE: Uses hardcoded user ID instead of authentication
    */
   async function fetchTrip(tripId: number): Promise<void> {
     isLoading.value = true
     error.value = null
 
     try {
-      // MOCK MODE: Use hardcoded user ID instead of authentication
-      // TODO: Replace with real authentication when Supabase is configured
-      const mockUserId = '00000000-0000-0000-0000-000000000001'
-      console.log('[fetchTrip] MOCK MODE - using mock user ID:', mockUserId)
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
 
-      currentTrip.value = await getTripById(tripId, mockUserId)
+      currentTrip.value = await getTripById(tripId, user.id)
     } catch (err: any) {
       error.value = {
         error: {
@@ -53,21 +53,22 @@ export const useTripStore = defineStore('trip', () => {
   /**
    * Update trip title
    * Uses optimistic update with rollback on error
-   * MOCK MODE: Simulates success without actual API call
    */
-  async function updateTripTitle(_tripId: number, title: string): Promise<void> {
+  async function updateTripTitle(tripId: number, title: string): Promise<void> {
     if (!currentTrip.value) return
 
     const previousTitle = currentTrip.value.title
     currentTrip.value.title = title // Optimistic update
 
     try {
-      // MOCK MODE: Simulate async operation
-      await new Promise((resolve) => setTimeout(resolve, 100))
-      console.log(`[updateTripTitle] MOCK MODE - title updated to: ${title}`)
-      // TODO: Replace with real Supabase client when environment is configured
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      const updated = await updateTrip(tripId, user.id, { title })
+      currentTrip.value = updated
     } catch (err: any) {
-      // Rollback on error
       if (currentTrip.value) {
         currentTrip.value.title = previousTitle
       }
@@ -78,21 +79,22 @@ export const useTripStore = defineStore('trip', () => {
   /**
    * Update trip note body
    * Uses optimistic update with rollback on error
-   * MOCK MODE: Simulates success without actual API call
    */
-  async function updateTripNote(_tripId: number, noteBody: string): Promise<void> {
+  async function updateTripNote(tripId: number, noteBody: string): Promise<void> {
     if (!currentTrip.value) return
 
     const previousNote = currentTrip.value.note_body
     currentTrip.value.note_body = noteBody // Optimistic update
 
     try {
-      // MOCK MODE: Simulate async operation
-      await new Promise((resolve) => setTimeout(resolve, 100))
-      console.log(`[updateTripNote] MOCK MODE - note updated (${noteBody.length} chars)`)
-      // TODO: Replace with real Supabase client when environment is configured
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      const updated = await updateTrip(tripId, user.id, { note_body: noteBody })
+      currentTrip.value = updated
     } catch (err: any) {
-      // Rollback on error
       if (currentTrip.value) {
         currentTrip.value.note_body = previousNote
       }
@@ -103,10 +105,9 @@ export const useTripStore = defineStore('trip', () => {
   /**
    * Update trip preferences
    * Uses optimistic update with rollback on error
-   * MOCK MODE: Simulates success without actual API call
    */
   async function updateTripPreferences(
-    _tripId: number,
+    tripId: number,
     preferences: TripPreferencesDto
   ): Promise<void> {
     if (!currentTrip.value) return
@@ -115,7 +116,9 @@ export const useTripStore = defineStore('trip', () => {
       what: currentTrip.value.what,
       speed: currentTrip.value.speed,
       type: currentTrip.value.type,
-      budget: currentTrip.value.budget
+      budget: currentTrip.value.budget,
+      num_days: currentTrip.value.num_days,
+      num_people: currentTrip.value.num_people
     }
 
     // Optimistic update
@@ -123,19 +126,32 @@ export const useTripStore = defineStore('trip', () => {
     currentTrip.value.speed = preferences.speed
     currentTrip.value.type = preferences.type
     currentTrip.value.budget = preferences.budget
+    currentTrip.value.num_days = preferences.num_days
+    currentTrip.value.num_people = preferences.num_people
 
     try {
-      // MOCK MODE: Simulate async operation
-      await new Promise((resolve) => setTimeout(resolve, 100))
-      console.log(`[updateTripPreferences] MOCK MODE - preferences updated:`, preferences)
-      // TODO: Replace with real Supabase client when environment is configured
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      const updated = await updateTrip(tripId, user.id, {
+        what: preferences.what,
+        speed: preferences.speed,
+        type: preferences.type,
+        budget: preferences.budget,
+        num_days: preferences.num_days,
+        num_people: preferences.num_people
+      })
+      currentTrip.value = updated
     } catch (err: any) {
-      // Rollback on error
       if (currentTrip.value) {
         currentTrip.value.what = previousPreferences.what
         currentTrip.value.speed = previousPreferences.speed
         currentTrip.value.type = previousPreferences.type
         currentTrip.value.budget = previousPreferences.budget
+        currentTrip.value.num_days = previousPreferences.num_days
+        currentTrip.value.num_people = previousPreferences.num_people
       }
       throw err
     }

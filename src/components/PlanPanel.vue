@@ -39,16 +39,9 @@ const quotaExceeded = computed(() => quotaStore.isQuotaExceeded)
 const remainingGenerations = computed(() => quotaStore.remainingGenerations)
 const quota = computed(() => quotaStore.quota)
 
-// Note validation
-const MIN_NOTE_LENGTH = 1000
-const noteValid = computed(() => {
-  const noteLength = props.trip.note_body?.length ?? 0
-  return noteLength >= MIN_NOTE_LENGTH
-})
-
 // Can generate check
 const canGenerate = computed(() => {
-  return noteValid.value && !quotaExceeded.value && !isGenerating.value
+  return !quotaExceeded.value && !isGenerating.value
 })
 
 // Display plan (candidate or saved)
@@ -124,16 +117,6 @@ function formatResetDate(isoDate: string): string {
         <AlertDescription>
           You've used all {{ quota?.limit }} generations. Quota resets in
           {{ quota ? formatResetDate(quota.reset_at) : 'N/A' }}.
-        </AlertDescription>
-      </Alert>
-
-      <!-- Note Validation Warning -->
-      <Alert v-if="!noteValid && !hasSavedPlan">
-        <AlertCircle class="h-4 w-4" />
-        <AlertTitle>Trip Notes Required</AlertTitle>
-        <AlertDescription>
-          Please add at least {{ MIN_NOTE_LENGTH }} characters to your trip notes before generating
-          a plan.
         </AlertDescription>
       </Alert>
 
