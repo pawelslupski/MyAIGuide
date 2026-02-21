@@ -39,6 +39,18 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('@/views/ProfileView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/trips/new',
+    name: 'trip-create',
+    component: () => import('@/views/TripCreateView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/trips/:id',
     name: 'trip-detail',
     component: () => import('@/views/TripDetailView.vue'),

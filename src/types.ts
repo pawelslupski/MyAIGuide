@@ -16,6 +16,22 @@ export type BudgetPreference = 'budget' | 'moderate' | 'luxury'
 export type TripStatus = 'CREATED' | 'DRAFT' | 'CONFIRMED'
 
 // ============================================================================
+// DASHBOARD VIEW MODELS
+// ============================================================================
+
+/**
+ * View model for a trip card on the dashboard.
+ * Derived from raw Supabase query result after computing status and truncating the note.
+ */
+export interface DashboardTripViewModel {
+  id: number
+  title: string
+  status: TripStatus
+  notePreview: string
+  updatedAt: string
+}
+
+// ============================================================================
 // PLAN JSON STRUCTURE
 // ============================================================================
 

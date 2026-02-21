@@ -1,19 +1,55 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { TripDTO, TripPreferencesDto, ErrorResponse } from '@/types'
+import type {
+  TripDTO,
+  TripPreferencesDto,
+  ErrorResponse,
+  DashboardTripViewModel,
+  PaginationDTO,
+  TripStatus
+} from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
 import { getTripById, updateTrip } from '@/lib/services/trip.service'
+
+// Module-level helper — derives trip status from raw DB fields
+function deriveTripStatus(noteBody: string | null, planJson: object | null): TripStatus {
+  if (planJson !== null) return 'CONFIRMED'
+  if (noteBody !== null && noteBody.trim() !== '') return 'DRAFT'
+  return 'CREATED'
+}
+
+// Raw shape returned by the Supabase trips query before transformation
+interface TripListRaw {
+  id: number
+  user_id: string
+  title: string
+  note_body: string | null
+  plan_json: object | null
+  created_at: string
+  updated_at: string
+}
 
 /**
  * Trip Store
  * Manages current trip data, loading states, and trip operations
  */
 export const useTripStore = defineStore('trip', () => {
-  // State
+  // State — current trip (trip detail view)
   const currentTrip = ref<TripDTO | null>(null)
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<ErrorResponse | null>(null)
+
+  // State — trips list (dashboard view)
+  const trips = ref<DashboardTripViewModel[]>([])
+  const tripsPagination = ref<PaginationDTO>({
+    current_page: 1,
+    total_pages: 1,
+    total_count: 0,
+    limit: 20
+  })
+  const isLoadingTrips = ref(false)
+  const tripsError = ref<ErrorResponse | null>(null)
 
   // Getters
   const tripStatus = computed(() => currentTrip.value?.status ?? null)
@@ -158,6 +194,91 @@ export const useTripStore = defineStore('trip', () => {
   }
 
   /**
+   * Fetch paginated trips list for the dashboard
+   */
+  async function fetchTrips(page = 1, limit = 20): Promise<void> {
+    isLoadingTrips.value = true
+    tripsError.value = null
+
+    try {
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      const from = (page - 1) * limit
+      const to = from + limit - 1
+
+      const {
+        data,
+        error: fetchError,
+        count
+      } = await supabaseClient
+        .from('trips')
+        .select('id, user_id, title, note_body, plan_json, created_at, updated_at', {
+          count: 'exact'
+        })
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .range(from, to)
+
+      if (fetchError) throw fetchError
+
+      const rows = (data ?? []) as TripListRaw[]
+      trips.value = rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        status: deriveTripStatus(row.note_body, row.plan_json),
+        notePreview: row.note_body
+          ? row.note_body.slice(0, 100) + (row.note_body.length > 100 ? '…' : '')
+          : '',
+        updatedAt: row.updated_at
+      }))
+
+      const total = count ?? 0
+      tripsPagination.value = {
+        current_page: page,
+        total_pages: Math.max(1, Math.ceil(total / limit)),
+        total_count: total,
+        limit
+      }
+    } catch (err: any) {
+      tripsError.value = {
+        error: {
+          code: err.code || 'FETCH_ERROR',
+          message: err.message || 'Failed to fetch trips'
+        }
+      }
+    } finally {
+      isLoadingTrips.value = false
+    }
+  }
+
+  /**
+   * Delete a trip by ID, then remove it from the local list
+   */
+  async function deleteTripById(tripId: number): Promise<void> {
+    const {
+      data: { user }
+    } = await supabaseClient.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+
+    const { error: deleteError } = await supabaseClient
+      .from('trips')
+      .delete()
+      .eq('id', tripId)
+      .eq('user_id', user.id)
+
+    if (deleteError) throw deleteError
+
+    trips.value = trips.value.filter((t) => t.id !== tripId)
+    tripsPagination.value = {
+      ...tripsPagination.value,
+      total_count: Math.max(0, tripsPagination.value.total_count - 1)
+    }
+  }
+
+  /**
    * Clear current trip
    */
   function clearTrip(): void {
@@ -166,11 +287,16 @@ export const useTripStore = defineStore('trip', () => {
   }
 
   return {
-    // State
+    // State — current trip
     currentTrip,
     isLoading,
     isSaving,
     error,
+    // State — trips list
+    trips,
+    tripsPagination,
+    isLoadingTrips,
+    tripsError,
     // Getters
     tripStatus,
     hasNote,
@@ -180,6 +306,8 @@ export const useTripStore = defineStore('trip', () => {
     updateTripTitle,
     updateTripNote,
     updateTripPreferences,
-    clearTrip
+    clearTrip,
+    fetchTrips,
+    deleteTripById
   }
 })
