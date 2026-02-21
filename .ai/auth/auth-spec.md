@@ -264,6 +264,10 @@ This specification covers the complete authentication system for MyAIGuide, addr
 - New auth-related routes added
 - All protected routes wrapped in AppLayout
 - All guest routes wrapped in AuthLayout
+- `DashboardView` is created as a **stub** for auth routing; full trip-list implementation per US-010 is out of auth scope
+
+**PRD interpretation — "login button in top-right corner" (US-002):**
+The PRD says _"Użytkownik może logować się do systemu poprzez przycisk w prawym górnym rogu."_ Since the user chose `/` → Dashboard (authenticated) with unauthenticated users redirected to `/login`, there is no public page that would display a login button in a header. The `/login` page itself IS the entry point for unauthenticated users. The logout button in the top-right header dropdown satisfies the second half of this criterion (_"Użytkownik może się wylogować z systemu poprzez przycisk w prawym górnym rogu na ekranie głównym"_).
 
 ### 2.4 Key User Flows
 
@@ -276,7 +280,7 @@ This specification covers the complete authentication system for MyAIGuide, addr
 5. `onAuthStateChange` fires `SIGNED_IN` event
 6. Auth store updates reactive state
 7. Router guard allows access, redirects to `/` (dashboard)
-8. Profile auto-creation trigger creates empty profile in DB
+8. Profile auto-creation trigger (`20260111120400`) creates empty profile in DB — this trigger uses `SECURITY DEFINER` so it bypasses RLS and can INSERT into `profiles` even though `auth.uid()` is not yet set during a server-side trigger execution
 
 #### Login Flow
 
@@ -294,7 +298,7 @@ This specification covers the complete authentication system for MyAIGuide, addr
 2. `authStore.logout()` calls `supabaseClient.auth.signOut()`
 3. `onAuthStateChange` fires `SIGNED_OUT` event
 4. Auth store clears user/session state
-5. All other stores are reset (`$reset()` or manual clear)
+5. All other stores are reset via explicit clear functions (see `resetAllStores()` below)
 6. Router redirects to `/login`
 
 #### Password Recovery Flow
@@ -420,11 +424,32 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * Reset all Pinia stores on logout.
    * Prevents stale data from previous session.
+   *
+   * NOTE: Composition API stores do NOT support Pinia's $reset().
+   * Each store must expose an explicit clear/reset action, or we
+   * must manually set refs back to their initial values here.
    */
   function resetAllStores(): void {
-    // Import stores lazily to avoid circular deps
-    // Each store's $reset or manual clear method
-    // Implementation: iterate known stores or use a registry pattern
+    // Lazy imports to avoid circular dependencies
+    import('@/stores/trip.store').then(({ useTripStore }) => {
+      const tripStore = useTripStore()
+      tripStore.clearTrip() // existing action
+    })
+    import('@/stores/plan.store').then(({ usePlanStore }) => {
+      const planStore = usePlanStore()
+      planStore.discardCandidate() // existing action
+    })
+    import('@/stores/profile.store').then(({ useProfileStore }) => {
+      const profileStore = useProfileStore()
+      profileStore.profile = null // direct ref reset
+    })
+    // quota store — reset to null so it re-fetches on next login
+    import('@/stores/quota.store').then(({ useQuotaStore }) => {
+      const quotaStore = useQuotaStore()
+      if ('quota' in quotaStore) {
+        quotaStore.quota = null
+      }
+    })
   }
 
   return {
@@ -457,7 +482,7 @@ export const useAuthStore = defineStore('auth', () => {
 
 3. **`isPasswordRecovery` flag:** Set when `PASSWORD_RECOVERY` event fires. Used by ResetPasswordView to know the user arrived via a recovery link.
 
-4. **Store reset on logout:** When `SIGNED_OUT` fires, all stores (trip, plan, profile, quota) must be reset to prevent data leakage between accounts.
+4. **Store reset on logout:** When `SIGNED_OUT` fires, all stores (trip, plan, profile, quota) must be reset to prevent data leakage between accounts. Because all project stores use Composition API syntax (`defineStore('name', () => {...})`), Pinia's built-in `$reset()` is **not available**. Each store is reset via its existing clear action (e.g. `clearTrip()`, `discardCandidate()`) or by directly setting refs to `null`.
 
 ### 3.2 Router Guard
 
@@ -771,6 +796,8 @@ export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>
 
 The `DEFAULT_USER_ID` constant in `src/db/supabase.client.ts` must be removed. All code that references it should instead get the user ID from `supabaseClient.auth.getUser()` (which the existing stores already do).
 
+Additionally, `SUPABASE_USER_ID` must be removed from `.env.example` — it is a pre-auth development artifact that is never referenced in source code. With real authentication, the user ID is always obtained from the Supabase session at runtime.
+
 ---
 
 ## 4. Authentication System
@@ -946,12 +973,13 @@ Other relevant settings (already correct):
 
 ### Modified Files
 
-| File                        | Changes                                                        |
-| --------------------------- | -------------------------------------------------------------- |
-| `src/router/index.ts`       | New routes, global auth guard, layout wrapping                 |
-| `src/db/supabase.client.ts` | Remove `DEFAULT_USER_ID`                                       |
-| `src/App.vue`               | Call `authStore.initialize()`, wrap router-view with layouts   |
-| `supabase/config.toml`      | Fix `site_url` to port 5173, update `additional_redirect_urls` |
+| File                        | Changes                                                           |
+| --------------------------- | ----------------------------------------------------------------- |
+| `src/router/index.ts`       | New routes, global auth guard, layout wrapping                    |
+| `src/db/supabase.client.ts` | Remove `DEFAULT_USER_ID`                                          |
+| `src/App.vue`               | Call `authStore.initialize()`, wrap router-view with layouts      |
+| `supabase/config.toml`      | Fix `site_url` to port 5173, update `additional_redirect_urls`    |
+| `.env.example`              | Remove `SUPABASE_USER_ID` (pre-auth artifact, never used in code) |
 
 ### Unchanged Files
 
@@ -972,24 +1000,24 @@ The existing stores (`trip.store.ts`, `plan.store.ts`, `profile.store.ts`, `quot
 
 ### US-002: Login, Logout, Route Protection
 
-| Criterion                                                         | Covered                                      |
-| ----------------------------------------------------------------- | -------------------------------------------- |
-| Login and registration on dedicated pages                         | Yes                                          |
-| Login requires email and password                                 | Yes — LoginView with Zod validation          |
-| Unauthenticated access to protected routes redirects to login     | Yes — router `beforeEach` guard              |
-| After login, user sees dashboard; after logout, loses access      | Yes — auth store + guard                     |
-| Login button in top-right corner                                  | Yes — header dropdown in AppLayout           |
-| Logout button in top-right corner on main screen                  | Yes — header dropdown                        |
-| No external auth providers (Google, GitHub)                       | Yes — only email/password                    |
-| Password recovery is possible                                     | Yes — `/forgot-password` + `/reset-password` |
-| All actions (generate, save, delete, edit) require authentication | Yes — router guard + RLS                     |
+| Criterion                                                         | Covered                                                                                                                                    |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Login and registration on dedicated pages                         | Yes                                                                                                                                        |
+| Login requires email and password                                 | Yes — LoginView with Zod validation                                                                                                        |
+| Unauthenticated access to protected routes redirects to login     | Yes — router `beforeEach` guard                                                                                                            |
+| After login, user sees dashboard; after logout, loses access      | Yes — auth store + guard                                                                                                                   |
+| Login button in top-right corner                                  | Reinterpreted — no public page exists; unauthenticated users land directly on `/login` full-page form (see section 2.3 PRD interpretation) |
+| Logout button in top-right corner on main screen                  | Yes — header dropdown                                                                                                                      |
+| No external auth providers (Google, GitHub)                       | Yes — only email/password                                                                                                                  |
+| Password recovery is possible                                     | Yes — `/forgot-password` + `/reset-password`                                                                                               |
+| All actions (generate, save, delete, edit) require authentication | Yes — router guard + RLS                                                                                                                   |
 
 ### US-003: Data Isolation
 
-| Criterion                                                | Covered                                        |
-| -------------------------------------------------------- | ---------------------------------------------- |
-| User sees only their own notes, profile, plans           | Yes — RLS policies with `auth.uid() = user_id` |
-| Accessing another user's resources results in auth error | Yes — RLS returns empty result / error         |
+| Criterion                                                | Covered                                                                                                                                                              |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User sees only their own notes, profile, plans           | Yes — RLS policies with `auth.uid() = user_id`                                                                                                                       |
+| Accessing another user's resources results in auth error | Yes — RLS filters out rows; existing stores use `.single()` which throws `PGRST116` (no rows) when the row belongs to another user, surfaced as an error to the user |
 
 ### US-004: Account Deletion
 

@@ -112,13 +112,13 @@ This project requires Supabase (local or remote) and OpenRouter.ai API access.
 
 ````bash
 # Supabase Configuration
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_ANON_KEY=eyJhbGciOiJFUzI1NiIsImtpZCI6ImI4MTI2OWYxLTIxZDgtNGYyZS1iNzE5LWMyMjQwYTg0MGQ5MCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjIwODM2NjQ1MTV9.u5l7NDWah4uQrD2p0rRei_svb1FMmrQcTu1PWP77_2JUgSWDMA9XoilSXv6zLL4iYUNISSanesZrHh2eVY54DA
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJFUzI1NiIsImtpZCI6ImI4MTI2OWYxLTIxZDgtNGYyZS1iNzE5LWMyMjQwYTg0MGQ5MCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjIwODM2NjQ1MTV9.u5l7NDWah4uQrD2p0rRei_svb1FMmrQcTu1PWP77_2JUgSWDMA9XoilSXv6zLL4iYUNISSanesZrHh2eVY54DA
 
 # OpenRouter API Key (get yours at https://openrouter.ai/keys)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-**Note:** The `SUPABASE_ANON_KEY` shown above is the default local Supabase key. For production, use your actual Supabase project credentials.
+**Note:** The `VITE_SUPABASE_ANON_KEY` shown above is the default local Supabase key. For production, use your actual Supabase project credentials.
 
 #### 2. Create `supabase/.env.local` file
 

@@ -1,14 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
-
 import type { Database } from '../db/database.types'
 
-const supabaseUrl = import.meta.env.SUPABASE_URL
-const supabaseAnonKey = import.meta.env.SUPABASE_ANON_KEY
-
-export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey)
-
-/**
- * Default user ID for development/testing
- * Used when authentication is disabled
- */
-export const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000'
+export const supabaseClient = createClient<Database>(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true, // store session in localStorage; restored via getSession() on reload
+      autoRefreshToken: true, // silently refresh JWT before expiry (jwt_expiry = 3600 in config.toml)
+      detectSessionInUrl: true // parse #access_token from URL hash — required for PASSWORD_RECOVERY event on /reset-password
+    }
+  }
+)
