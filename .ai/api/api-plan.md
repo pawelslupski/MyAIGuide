@@ -307,7 +307,9 @@ exists).
   "what": ["culture_museums", "foodie"],
   "speed": "intensive",
   "type": "base",
-  "budget": "luxury"
+  "budget": "luxury",
+  "num_days": 7,
+  "num_people": 2
 }
 ```
 
@@ -319,6 +321,8 @@ exists).
 - `speed`: optional, defaults to profile's `default_speed`
 - `type`: optional, defaults to profile's `default_type`
 - `budget`: optional, defaults to profile's `default_budget`
+- `num_days`: optional (can be null), integer 1–30
+- `num_people`: optional (can be null), integer 1–20
 
 **Success Response (201 Created):**
 
@@ -378,7 +382,9 @@ exists).
   "what": ["nature", "beach_relax"],
   "speed": "slow_chill",
   "type": "roadtrip",
-  "budget": "budget"
+  "budget": "budget",
+  "num_days": 5,
+  "num_people": 3
 }
 ```
 
@@ -387,6 +393,8 @@ exists).
 - `title`: max 255 characters
 - `note_body`: null OR 1000-10000 characters
 - Preference fields follow same validation as profile
+- `num_days`: null OR integer 1–30
+- `num_people`: null OR integer 1–20
 
 **Success Response (200 OK):**
 

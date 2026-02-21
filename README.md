@@ -19,7 +19,9 @@ AI-powered web app for quickly turning travel notes and preferences into structu
 
 ## Project description
 
-MyAIGuide is a single-page web application (SPA) that helps you turn messy travel ideas into concrete, day-by-day itineraries. Each note represents exactly one trip and produces one structured plan in JSON format that you can review, edit and save.
+MyAIGuide is a single-page web application (SPA) that helps you turn messy travel ideas into concrete, day-by-day
+itineraries. Each note represents exactly one trip and produces one structured plan in JSON format that you can review,
+edit and save.
 
 The app solves the problem of collecting links, screenshots and random notes from many sources by letting you:
 
@@ -29,7 +31,9 @@ The app solves the problem of collecting links, screenshots and random notes fro
 - Generate AI-powered daily plans from a single note plus your preferences.
 - Review and adjust the generated plan before saving it.
 
-Generated plans include a structured breakdown by day and time of day (Morning / Afternoon / Evening) with fields such as location name, description and category tags. The language of the plan matches the language of the note (automatic language detection, no manual language switch in the MVP).
+Generated plans include a structured breakdown by day and time of day (Morning / Afternoon / Evening) with fields such
+as location name, description and category tags. The language of the plan matches the language of the note (automatic
+language detection, no manual language switch in the MVP).
 
 ## Tech stack
 
@@ -80,40 +84,150 @@ For more details, see:
 
 ### Prerequisites
 
-- Node.js `24.11.1` (recommended: use `nvm` and run `nvm use` in the project root).
-- npm (or another Node package manager of your choice).
+- **Node.js** `24.11.1` (recommended: use `nvm` and run `nvm use` in the project root)
+- **npm** (or another Node package manager of your choice)
+- **Supabase CLI** - Install via `npm install -g supabase` or
+  see [Supabase CLI docs](https://supabase.com/docs/guides/cli)
+- **Docker** - Required for running Supabase locally
 
 ### Installation
 
-1. Install dependencies: `npm install`.
-2. (Optional) Enable Git hooks by running `npm run prepare` once, which configures Husky.
+1. **Install dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+2. **(Optional) Enable Git hooks:**
+   ```bash
+   npm run prepare
+   ```
+   This configures Husky for pre-commit linting and formatting.
 
 ### Environment configuration
 
-This project is designed to work with Supabase and OpenRouter.ai. Before running the full stack, you will need:
+This project requires Supabase (local or remote) and OpenRouter.ai API access.
 
-- A Supabase project (URL and anon/public key).
-- An OpenRouter API key with reasonable spending limits.
+#### 1. Create `.env` file in project root
 
-Create an `.env` file in the project root and configure the environment variables expected by the app for Supabase and OpenRouter. Check the Supabase client and Edge Functions code (for example in `src/lib/supabase` and `supabase/functions`) for the exact variable names once those parts of the project are implemented.
+````bash
+# Supabase Configuration
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=eyJhbGciOiJFUzI1NiIsImtpZCI6ImI4MTI2OWYxLTIxZDgtNGYyZS1iNzE5LWMyMjQwYTg0MGQ5MCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjIwODM2NjQ1MTV9.u5l7NDWah4uQrD2p0rRei_svb1FMmrQcTu1PWP77_2JUgSWDMA9XoilSXv6zLL4iYUNISSanesZrHh2eVY54DA
 
-### Running the app in development
+# OpenRouter API Key (get yours at https://openrouter.ai/keys)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-Start the Vite dev server:
+**Note:** The `SUPABASE_ANON_KEY` shown above is the default local Supabase key. For production, use your actual Supabase project credentials.
 
-- `npm run dev`
+#### 2. Create `supabase/.env.local` file
 
-Vite will print the local development URL (typically `http://localhost:5173`).
+```bash
+# OpenRouter API Key for Edge Functions
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+````
+
+This file provides environment variables to Supabase Edge Functions running locally.
+
+### Running the app for the first time
+
+**Important:** You need to start services in the correct order:
+
+#### Step 1: Start Supabase
+
+```bash
+supabase start
+```
+
+This command:
+
+- Starts local Supabase services (PostgreSQL, Auth, Storage, etc.) using Docker
+- Prints service URLs and credentials
+- May take a few minutes on first run
+
+**Expected output:**
+
+```
+supabase local development setup is running.
+
+API URL: http://127.0.0.1:54321
+DB URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+Studio URL: http://127.0.0.1:54323
+```
+
+#### Step 2: Serve Edge Functions
+
+In a **new terminal**, start the Edge Functions server:
+
+```bash
+supabase functions serve generate-travel-plan --no-verify-jwt --env-file supabase/.env.local
+```
+
+**Flags explained:**
+
+- `--no-verify-jwt` - Disables JWT verification for local development (authentication is mocked)
+- `--env-file supabase/.env.local` - Loads environment variables (including OpenRouter API key)
+
+**Expected output:**
+
+```
+Serving functions on http://127.0.0.1:54321/functions/v1/
+```
+
+#### Step 3: Start the frontend dev server
+
+In a **new terminal**, start Vite:
+
+```bash
+npm run dev
+```
+
+**Expected output:**
+
+```
+VITE v7.x.x  ready in XXX ms
+
+➜  Local:   http://localhost:5173/
+```
+
+#### Step 4: Open the app
+
+Navigate to **http://localhost:5173/trips/1** in your browser.
+
+### Quick start summary
+
+For subsequent runs, use these commands in **separate terminals**:
+
+```bash
+# Terminal 1: Supabase services
+supabase start
+
+# Terminal 2: Edge Functions
+supabase functions serve generate-travel-plan --no-verify-jwt --env-file supabase/.env.local
+
+# Terminal 3: Frontend dev server
+npm run dev
+```
+
+### Stopping services
+
+- **Frontend:** Press `Ctrl+C` in the terminal running `npm run dev`
+- **Edge Functions:** Press `Ctrl+C` in the terminal running `supabase functions serve`
+- **Supabase:** Run `supabase stop` (or `supabase stop --no-backup` to also remove data)
 
 ### Building for production
 
 To create an optimized production build:
 
-- `npm run build`
+```bash
+npm run build
+```
 
 To preview the built app locally:
 
-- `npm run preview`
+```bash
+npm run preview
+```
 
 ## Available scripts
 
@@ -220,7 +334,8 @@ The project is in active early development:
 
 - The product requirements and technical stack are defined.
 - The frontend scaffold (Vue 3 + TypeScript + Vite) and tooling are set up.
-- Core features such as authentication, trip management, profile handling and AI plan generation are being implemented iteratively.
+- Core features such as authentication, trip management, profile handling and AI plan generation are being implemented
+  iteratively.
 
 Expect breaking changes and rapid iteration while the MVP is built.
 
@@ -228,4 +343,6 @@ Expect breaking changes and rapid iteration while the MVP is built.
 
 A specific open-source license has not been chosen yet.
 
-Until an explicit `LICENSE` file is added to this repository, all rights are reserved by the repository owner. If you plan to use MyAIGuide in your own projects or have questions about licensing, please open an issue or contact the maintainer.
+Until an explicit `LICENSE` file is added to this repository, all rights are reserved by the repository owner. If you
+plan to use MyAIGuide in your own projects or have questions about licensing, please open an issue or contact the
+maintainer.

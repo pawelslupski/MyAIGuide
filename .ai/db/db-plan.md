@@ -53,7 +53,7 @@ tables reference `users(id)` via foreign keys.
 - VARCHAR constraints use CHECK instead of PostgreSQL ENUMs for easier future changes
 - Internal values for `default_what`: `nature`, `culture_museums`, `beach_relax`, `city_break`, `foodie`
 - Internal values for `default_speed`: `slow_chill`, `balance`, `intensive`
-- Internal values for `default_type`: `base`, `roadtrip`
+- Internal values for `default_type`: `base`, `base_with_trips`, `roadtrip`
 - Internal values for `default_budget`: `budget`, `moderate`, `luxury`
 
 ---
@@ -62,29 +62,31 @@ tables reference `users(id)` via foreign keys.
 
 **Purpose:** Store trips, notes, per-trip preferences, and confirmed plans.
 
-| Column          | Type          | Constraints                                                                                                        | Description                                      |
-| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| `id`            | bigserial     | PRIMARY KEY                                                                                                        | Trip identifier                                  |
-| `user_id`       | uuid          | NOT NULL, REFERENCES users(id) ON DELETE CASCADE                                                                   | Owner of the trip                                |
-| `title`         | varchar(255)  | NOT NULL                                                                                                           | Trip name/title                                  |
-| `note_body`     | text          | CHECK (note_body IS NULL OR (char_length(note_body) >= 1000 AND char_length(note_body) <= 10000))                  | Trip note (min 1k, max 10k chars, nullable)      |
-| `what`          | varchar(50)[] | DEFAULT '{}', CHECK (what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Per-trip "What?" preferences (overrides profile) |
-| `speed`         | varchar(20)   | CHECK (speed IN ('slow_chill', 'balance', 'intensive'))                                                            | Per-trip "How fast?" preference                  |
-| `type`          | varchar(20)   | CHECK (type IN ('base', 'roadtrip'))                                                                               | Per-trip type                                    |
-| `budget`        | varchar(20)   | CHECK (budget IN ('budget', 'moderate', 'luxury'))                                                                 | Per-trip budget                                  |
-| `plan_json`     | jsonb         |                                                                                                                    | Confirmed/saved plan (NULL if no plan saved)     |
-| `plan_language` | varchar(10)   |                                                                                                                    | Language of the saved plan (e.g., 'pl', 'en')    |
-| `created_at`    | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Trip creation timestamp                          |
-| `updated_at`    | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Last modification timestamp                      |
+| Column          | Type          | Constraints                                                                                                        | Description                                         |
+| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `id`            | bigserial     | PRIMARY KEY                                                                                                        | Trip identifier                                     |
+| `user_id`       | uuid          | NOT NULL, REFERENCES users(id) ON DELETE CASCADE                                                                   | Owner of the trip                                   |
+| `title`         | varchar(255)  | NOT NULL                                                                                                           | Trip name/title                                     |
+| `num_days`      | smallint      | CHECK (num_days IS NULL OR (num_days BETWEEN 1 AND 30))                                                            | Planned trip duration in days (1–30); nullable      |
+| `num_people`    | smallint      | CHECK (num_people IS NULL OR (num_people BETWEEN 1 AND 20))                                                        | Number of travelers (1–20); nullable                |
+| `what`          | varchar(50)[] | DEFAULT '{}', CHECK (what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Per-trip "What?" preferences (overrides profile)    |
+| `speed`         | varchar(20)   | CHECK (speed IN ('slow_chill', 'balance', 'intensive'))                                                            | Per-trip "How fast?" preference                     |
+| `type`          | varchar(20)   | CHECK (type IN ('base', 'base_with_trips', 'roadtrip'))                                                            | Per-trip type                                       |
+| `budget`        | varchar(20)   | CHECK (budget IN ('budget', 'moderate', 'luxury'))                                                                 | Per-trip budget                                     |
+| `note_body`     | text          | CHECK (note_body IS NULL OR char_length(note_body) <= 10000)                                                       | Trip note: optional free-form text, max 10000 chars |
+| `plan_language` | varchar(10)   |                                                                                                                    | Language of the saved plan (e.g., 'pl', 'en')       |
+| `plan_json`     | jsonb         |                                                                                                                    | Confirmed/saved plan (NULL if no plan saved)        |
+| `created_at`    | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Trip creation timestamp                             |
+| `updated_at`    | timestamptz   | NOT NULL DEFAULT now()                                                                                             | Last modification timestamp                         |
 
 **Notes:**
 
-- `note_body` can be NULL (for new trips) or must be between 1,000 and 10,000 characters
+- `note_body` is fully optional (nullable, no minimum length); max 10,000 characters if provided
 - Trip status is derived implicitly:
   - **CREATED**: `note_body` is NULL or empty, `plan_json` is NULL
-  - **DRAFT**: `note_body` has content (≥1000 chars in UI), `plan_json` is NULL
+  - **DRAFT**: `note_body` has content, `plan_json` is NULL
   - **CONFIRMED**: `plan_json` is NOT NULL
-- Preference fields (`what`, `speed`, `type`, `budget`) override global defaults from `profiles`
+- Preference fields (`what`, `speed`, `type`, `budget`, `num_days`, `num_people`) override global defaults from `profiles`
 - `plan_json` structure (example):
 
 ```json

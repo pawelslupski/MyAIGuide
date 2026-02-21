@@ -29,13 +29,13 @@ import { createClient } from '@supabase/supabase-js'
 
 import type { Database } from '../db/database.types.ts'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
+const supabaseUrl = import.meta.env.SUPABASE_URL
+const supabaseKey = import.meta.env.UPABASE_KEY
 
 export const supabaseClient = createClient<Database>(supabaseUrl, supabaseKey)
 ```
 
-This file initializes the Supabase client using the environment variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_KEY`.
+This file initializes the Supabase client using the environment variables `SUPABASE_URL` and `SUPABASE_KEY`.
 
 ### 2. TypeScript Environment Definitions
 
@@ -45,8 +45,8 @@ Create the file `src/vite-env.d.ts` with the following content:
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_SUPABASE_URL: string
-  readonly VITE_SUPABASE_KEY: string
+  readonly SUPABASE_URL: string
+  readonly SUPABASE_KEY: string
 }
 
 interface ImportMeta {

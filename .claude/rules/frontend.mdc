@@ -1,0 +1,73 @@
+---
+type: always_apply
+description: Frontend coding guidelines for MyAIGuide
+---
+
+## FRONTEND
+
+### Guidelines for VUE
+
+#### VUE_CODING_STANDARDS
+
+- Use the Composition API instead of the Options API for better type inference and code reuse
+- Implement <script setup> for more concise component definitions
+- Use Suspense and async components for handling loading states during code-splitting
+- Leverage the defineProps and defineEmits macros for type-safe props and events
+- Use the new defineOptions for additional component options
+- Implement provide/inject for dependency injection instead of prop drilling in deeply nested components
+- Use the Teleport component for portal-like functionality to render UI elsewhere in the DOM
+- Leverage ref over reactive for primitive values to avoid unintended unwrapping
+- Use v-memo for performance optimization in render-heavy list rendering scenarios
+- Implement shallow refs for large objects that don't need deep reactivity
+
+#### VUE_ROUTER
+
+- Use route guards (beforeEach, beforeEnter) for authentication and authorization checks
+- Implement lazy loading with dynamic imports for route components to improve performance
+- Use named routes instead of hardcoded paths for better maintainability
+- Leverage route meta fields to store additional route information like permissions or layout data
+- Implement scroll behavior options to control scrolling between route navigations
+- Use navigation duplicates handling to prevent redundant navigation to the current route
+- Implement the composition API useRouter and useRoute hooks instead of this.$router
+- Use nested routes for complex UIs with parent-child relationships
+- Leverage route params validation with sensitive: true for parameters that shouldn't be logged
+- Implement dynamic route matching with path parameters and regex patterns for flexible routing
+
+#### PINIA
+
+- Create multiple stores based on logical domains instead of a single large store
+- Use the setup syntax (defineStore with setup function) for defining stores for better TypeScript inference
+- Implement getters for derived state to avoid redundant computations
+- Leverage the storeToRefs helper to extract reactive properties while maintaining reactivity
+- Use plugins for cross-cutting concerns like persistence, state resets, or dev tools
+- Implement actions for asynchronous operations and complex state mutations
+- Use composable stores by importing and using stores within other stores
+- Leverage the $reset() method to restore initial state when needed
+- Implement $subscribe for reactive store subscriptions
+- Use TypeScript with proper return type annotations for maximum type safety
+
+### Guidelines for Styling
+
+#### Tailwind
+
+- Use the @layer directive to organize styles into components, utilities, and base layers
+- Use arbitrary values with square brackets (e.g., w-[123px]) for precise one-off designs
+- Implement the Tailwind configuration file for customizing theme, plugins, and variants
+- Leverage the theme() function in CSS for accessing Tailwind theme values
+- Implement dark mode with the dark: variant
+- Use responsive variants (sm:, md:, lg:, etc.) for adaptive designs
+- Leverage state variants (hover:, focus-visible:, active:, etc.) for interactive elements
+
+### Guidelines for Accessibility
+
+#### ARIA Best Practices
+
+- Use ARIA landmarks to identify regions of the page (main, navigation, search, etc.)
+- Apply appropriate ARIA roles to custom interface elements that lack semantic HTML equivalents
+- Set aria-expanded and aria-controls for expandable content like accordions and dropdowns
+- Use aria-live regions with appropriate politeness settings for dynamic content updates
+- Implement aria-hidden to hide decorative or duplicative content from screen readers
+- Apply aria-label or aria-labelledby for elements without visible text labels
+- Use aria-describedby to associate descriptive text with form inputs or complex elements
+- Implement aria-current for indicating the current item in a set, navigation, or process
+- Avoid redundant ARIA that duplicates the semantics of native HTML elements
