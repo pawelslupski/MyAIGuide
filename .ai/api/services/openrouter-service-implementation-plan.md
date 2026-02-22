@@ -2,7 +2,9 @@
 
 ## 1. Service Description
 
-The OpenRouter service is a TypeScript module designed to interact with the OpenRouter.ai API for LLM-based chat completions. This service is implemented as a **Supabase Edge Function** (Deno runtime) to keep API keys secure on the server side.
+The OpenRouter service is a TypeScript module designed to interact with the OpenRouter.ai API for LLM-based chat
+completions. This service is implemented as a **Supabase Edge Function** (Deno runtime) to keep API keys secure on the
+server side.
 
 **Purpose:**
 
@@ -35,7 +37,8 @@ The following improvements have been applied to the initial design:
 
 `additionalProperties: false` is set at all levels of the schema (root object, day object, activity object).
 
-**Impact:** AI returns only the fields the frontend needs (`timeOfDay`, `locationName`, `description`, `categoryTag`) — no extra fields, consistent rendering.
+**Impact:** AI returns only the fields the frontend needs (`timeOfDay`, `locationName`, `description`, `categoryTag`) —
+no extra fields, consistent rendering.
 
 ### 2.2 Enhanced System Prompt
 
@@ -78,7 +81,8 @@ The **Preferences block** now includes two new fields:
 
 ### 2.6 Plan Store Integration (`src/stores/plan.store.ts`)
 
-`generatePlan` fetches the user profile from the profile store and passes all required data (`noteBody`, `userProfile`, `tripPreferences`) to `callAIService`.
+`generatePlan` fetches the user profile from the profile store and passes all required data (`noteBody`, `userProfile`,
+`tripPreferences`) to `callAIService`.
 
 ### 2.7 Environment Configuration (`.env.example`)
 
@@ -97,7 +101,7 @@ Edge Functions in Supabase don't use traditional constructors. Configuration is 
 
    ```typescript
    const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-   const DEFAULT_MODEL = 'anthropic/claude-3.5-sonnet'
+   const DEFAULT_MODEL = 'anthropic/claude-4.6-sonnet'
    const REQUEST_TIMEOUT_MS = 60000 // 60 seconds
    const DEFAULT_TEMPERATURE = 0.7
    const DEFAULT_MAX_TOKENS = 4000
@@ -124,13 +128,21 @@ Edge Functions in Supabase don't use traditional constructors. Configuration is 
 **Request Format:**
 
 ```typescript
-POST /functions/v1/generate-travel-plan
-Content-Type: application/json
+POST / functions / v1 / generate - travel - plan
+Content - Type
+:
+application / json
 
 {
-  "prompt": string,           // Required: user travel notes + preferences
-  "language": string,          // Required: detected language code ("en", "pl", …)
-  "model": string | undefined  // Optional: defaults to DEFAULT_MODEL
+    "prompt"
+:
+    string,           // Required: user travel notes + preferences
+        "language"
+:
+    string,          // Required: detected language code ("en", "pl", …)
+        "model"
+:
+    string | undefined  // Optional: defaults to DEFAULT_MODEL
 }
 ```
 
@@ -138,8 +150,12 @@ Content-Type: application/json
 
 ```typescript
 {
-  "plan": PlanJson,      // Structured plan matching JSON schema
-  "model_used": string   // Actual model that processed the request
+    "plan"
+:
+    PlanJson,      // Structured plan matching JSON schema
+        "model_used"
+:
+    string   // Actual model that processed the request
 }
 ```
 
@@ -147,11 +163,17 @@ Content-Type: application/json
 
 ```typescript
 {
-  "error": {
-    "code": string,      // e.g. "VALIDATION_ERROR", "AI_API_ERROR"
-    "message": string,   // User-friendly error message
-    "details"?: object   // Optional additional context
-  }
+    "error"
+:
+    {
+        "code"
+    :
+        string,      // e.g. "VALIDATION_ERROR", "AI_API_ERROR"
+            "message"
+    :
+        string,   // User-friendly error message
+            "details" ? : object   // Optional additional context
+    }
 }
 ```
 
@@ -560,12 +582,11 @@ echo "OPENROUTER_API_KEY=sk-or-v1-xxxxx" > supabase/.env.local
 
 ### Running Locally
 
-```bash
+````bash
 supabase start
 supabase functions serve generate-travel-plan --no-verify-jwt --env-file supabase/.env.local
 npm run dev
-```
-
+`
 ### Manual Test
 
 ```bash
@@ -577,7 +598,7 @@ curl -X POST http://localhost:54321/functions/v1/generate-travel-plan \
     "language": "en",
     "model": "anthropic/claude-3.5-sonnet"
   }'
-```
+````
 
 ### Test Checklist
 

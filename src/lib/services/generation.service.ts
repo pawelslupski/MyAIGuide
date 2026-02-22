@@ -86,6 +86,8 @@ export function buildAIPrompt(noteBody: string, userProfile: any, tripPreference
   if (userProfile.hasMobilityIssues) profileFlags.push('has mobility issues')
   if (userProfile.hasDietaryPreferences) profileFlags.push('has dietary preferences')
 
+  const whatCategories = tripPreferences.what?.length > 0 ? tripPreferences.what : null
+
   const prompt = `
 Generate a travel plan based on the following information:
 
@@ -98,11 +100,21 @@ ${profileFlags.length > 0 ? profileFlags.join(', ') : 'No special requirements'}
 Preferences:
 - Duration: ${tripPreferences.num_days ? `${tripPreferences.num_days} days` : 'not specified'}
 - Group size: ${tripPreferences.num_people ? `${tripPreferences.num_people} people` : 'not specified'}
-- Activities: ${tripPreferences.what.join(', ') || 'not specified'}
 - Speed: ${tripPreferences.speed || 'not specified'}
 - Type: ${tripPreferences.type || 'not specified'}
 - Budget: ${tripPreferences.budget || 'not specified'}
-
+${
+  whatCategories
+    ? `
+ACTIVITY CATEGORY CONSTRAINT — NON-NEGOTIABLE HARD REQUIREMENT:
+The user has explicitly chosen these activity types: [${whatCategories.join(', ')}]
+AT LEAST 90% of ALL activities in the plan MUST have a categoryTag set to one of these values.
+Build the ENTIRE itinerary around these categories — they are the core purpose of this trip.
+Only add activities from other categories when absolutely unavoidable (e.g., airport transfer).
+Before finalising, count total activities and confirm ≥90% match. If not, replace activities.
+`
+    : '- Activities: not specified'
+}
 CRITICAL REQUIREMENTS:
 1. Generate EXACTLY ${tripPreferences.num_days} day entries if duration is specified — no more, no fewer
 2. Order all activities within each day by geographic proximity to create efficient routes
@@ -110,7 +122,7 @@ CRITICAL REQUIREMENTS:
 4. Avoid zigzagging between distant locations - group nearby places together
 5. Provide exhaustive, detailed descriptions for each activity (2-3 sentences minimum)
 6. Include specific details about what to see, do, and why it's worth visiting
-
+${whatCategories ? `7. HARD CATEGORY RULE: Count all activities. At least 90% MUST use categoryTag from [${whatCategories.join(', ')}]. Verify before responding.` : ''}
 IMPORTANT: Return ONLY the exact JSON structure with these fields:
 - Root: { "days": [...] }
 - Day: { "day": number, "activities": [...] }
