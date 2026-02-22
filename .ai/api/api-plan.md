@@ -1,4 +1,4 @@
-# REST API Plan – MyAIGuide
+ok ca# REST API Plan – MyAIGuide
 
 ## 1. Resources
 
@@ -249,11 +249,14 @@ exists).
   "id": 456,
   "user_id": "uuid-string",
   "title": "Summer in Croatia",
-  "note_body": "Planning a 10-day trip to Croatia in July. Want to visit Dubrovnik, Split, and Hvar. Interested in historical sites, beaches, and local cuisine. Traveling with family (2 adults, 2 kids aged 8 and 10). Budget is moderate. Looking for a mix of relaxation and cultural experiences...",
+  "num_days": 10,
+  "num_people": 4,
   "what": ["culture_museums", "beach_relax", "foodie"],
   "speed": "balance",
   "type": "roadtrip",
   "budget": "moderate",
+  "note_body": "Planning a 10-day trip to Croatia in July. Want to visit Dubrovnik, Split, and Hvar. Interested in historical sites, beaches, and local cuisine. Traveling with family (2 adults, 2 kids aged 8 and 10). Budget is moderate. Looking for a mix of relaxation and cultural experiences...",
+  "plan_language": "en",
   "plan_json": {
     "days": [
       {
@@ -275,7 +278,6 @@ exists).
       }
     ]
   },
-  "plan_language": "en",
   "status": "CONFIRMED",
   "created_at": "2024-01-10T09:00:00Z",
   "updated_at": "2024-01-22T16:30:00Z"
@@ -331,13 +333,15 @@ exists).
   "id": 457,
   "user_id": "uuid-string",
   "title": "Weekend in Paris",
-  "note_body": null,
+  "num_days": 7,
+  "num_people": 2,
   "what": ["culture_museums", "foodie"],
   "speed": "intensive",
   "type": "base",
   "budget": "luxury",
-  "plan_json": null,
+  "note_body": null,
   "plan_language": null,
+  "plan_json": null,
   "status": "CREATED",
   "created_at": "2024-01-23T10:00:00Z",
   "updated_at": "2024-01-23T10:00:00Z"
@@ -403,13 +407,15 @@ exists).
   "id": 457,
   "user_id": "uuid-string",
   "title": "Updated Trip Title",
-  "note_body": "Updated note content...",
+  "num_days": 5,
+  "num_people": 3,
   "what": ["nature", "beach_relax"],
   "speed": "slow_chill",
   "type": "roadtrip",
   "budget": "budget",
-  "plan_json": null,
+  "note_body": "Updated note content...",
   "plan_language": null,
+  "plan_json": null,
   "status": "DRAFT",
   "created_at": "2024-01-23T10:00:00Z",
   "updated_at": "2024-01-23T11:30:00Z"
@@ -651,7 +657,8 @@ existing plan.
   "id": 456,
   "user_id": "uuid-string",
   "title": "Summer in Croatia",
-  "note_body": "Planning a 10-day trip...",
+  "num_days": 10,
+  "num_people": 2,
   "what": [
     "culture_museums",
     "beach_relax"
@@ -659,12 +666,13 @@ existing plan.
   "speed": "balance",
   "type": "roadtrip",
   "budget": "moderate",
+  "note_body": "Planning a 10-day trip...",
+  "plan_language": "pl",
   "plan_json": {
     "days": [
       ...
     ]
   },
-  "plan_language": "pl",
   "status": "CONFIRMED",
   "created_at": "2024-01-10T09:00:00Z",
   "updated_at": "2024-01-23T12:15:00Z"
@@ -959,7 +967,8 @@ All error responses follow a consistent structure:
 - `GET /api/users/me/generation-quota` - Complex quota calculation (rolling 24-hour window)
 - `DELETE /api/users/me` - Account deletion with proper cascade handling
 
-**Recommendation:** Use Supabase JS Client for standard CRUD operations, implement custom Edge Functions only for complex business logic (AI generation, quota checks, account deletion).
+**Recommendation:** Use Supabase JS Client for standard CRUD operations, implement custom Edge Functions only for
+complex business logic (AI generation, quota checks, account deletion).
 
 ### 6.3 Pagination Strategy
 
