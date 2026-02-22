@@ -166,46 +166,45 @@ function buildOpenRouterRequest(prompt: string, language: string): OpenRouterReq
   const systemMessage = {
     role: 'system' as const,
     content: `You are an expert travel planner. Generate detailed, personalized travel plans based on user preferences and notes.
+    When the user specifies an ACTIVITY CATEGORY CONSTRAINT, that constraint is a NON-NEGOTIABLE hard requirement: AT LEAST 90% of all activities in the plan MUST use one of the specified categoryTag values. Before finalising your response, count the total number of activities and verify that ≥90% use the required categories. If not, replace activities until the requirement is met.
 
-CRITICAL: You MUST return ONLY the exact JSON structure shown below. DO NOT add any extra fields.
+    CRITICAL: You MUST return ONLY the exact JSON structure shown below. DO NOT add any extra fields.
 
-REQUIRED JSON STRUCTURE (respond in ${language} language):
-{
-  "days": [
+    REQUIRED JSON STRUCTURE (respond in ${language} language):
     {
-      "day": 1,
-      "activities": [
+      "days": [
         {
-          "timeOfDay": "morning",
-          "locationName": "Name of the place",
-          "description": "Exhaustive 2-3 sentence description...",
-          "categoryTag": "nature"
+          "day": 1,
+          "activities": [
+            {
+              "timeOfDay": "morning",
+              "locationName": "Name of the place",
+              "description": "Exhaustive 2-3 sentence description...",
+              "categoryTag": "nature"
+            }
+          ]
         }
       ]
     }
-  ]
-}
 
-STRICT RULES:
-1. Root object MUST have ONLY "days" field - NO other fields (no trip_id, destination, duration_days, etc.)
-2. Each day object MUST have ONLY "day" and "activities" fields - NO other fields (no destination, etc.)
-3. Each activity MUST have ONLY these 4 fields: "timeOfDay", "locationName", "description", "categoryTag"
-4. DO NOT add: name, duration_hours, cost_category, category (array), or ANY other fields
-5. Activities MUST be ordered by geographic proximity to minimize travel time
-6. Each description MUST be 2-3 detailed sentences including what makes it special, what to see/do, and practical tips
-7. categoryTag MUST be one of: nature, culture_museums, beach_relax, city_break, foodie
-8. timeOfDay MUST be one of: morning, afternoon, evening
+    STRICT RULES:
+    1. Root object MUST have ONLY "days" field - NO other fields (no trip_id, destination, duration_days, etc.)
+    2. Each day object MUST have ONLY "day" and "activities" fields - NO other fields (no destination, etc.)
+    3. Each activity MUST have ONLY these 4 fields: "timeOfDay", "locationName", "description", "categoryTag"
+    4. DO NOT add: name, duration_hours, cost_category, category (array), or ANY other fields
+    5. Activities MUST be ordered by geographic proximity to minimize travel time
+    6. Each description MUST be 2-3 detailed sentences including what makes it special, what to see/do, and practical tips
+    7. categoryTag MUST be one of: nature, culture_museums, beach_relax, city_break, foodie
+    8. timeOfDay MUST be one of: morning, afternoon, evening
 
-FORBIDDEN: Do not add any fields beyond those specified above. The response will be rejected if extra fields are present.`
+    FORBIDDEN: Do not add any fields beyond those specified above. The response will be rejected if extra fields are present.`
   }
 
-  // User message - contains the actual prompt
   const userMessage = {
     role: 'user' as const,
     content: prompt
   }
 
-  // Response format with JSON schema
   const responseFormat = {
     type: 'json_schema' as const,
     json_schema: {
@@ -215,7 +214,6 @@ FORBIDDEN: Do not add any fields beyond those specified above. The response will
     }
   }
 
-  // Complete request
   return {
     model: DEFAULT_MODEL,
     messages: [systemMessage, userMessage],
