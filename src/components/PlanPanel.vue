@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { Loader2, Sparkles, Check, X, AlertCircle, Calendar } from 'lucide-vue-next'
+import { useToast } from '@/components/ui/toast/use-toast'
 import type { TripDTO, PlanJson } from '@/types'
 
 /**
@@ -26,6 +27,7 @@ const props = defineProps<Props>()
 
 const planStore = usePlanStore()
 const quotaStore = useQuotaStore()
+const { toast } = useToast()
 
 // Computed states
 const hasSavedPlan = computed(() => props.trip.plan_json !== null)
@@ -33,6 +35,7 @@ const hasCandidate = computed(() => planStore.hasCandidate)
 const isGenerating = computed(() => planStore.isGenerating)
 const isSaving = computed(() => planStore.isSaving)
 const generationError = computed(() => planStore.generationError)
+const saveError = computed(() => planStore.saveError)
 
 // Quota information
 const quotaExceeded = computed(() => quotaStore.isQuotaExceeded)
@@ -74,8 +77,9 @@ async function handleGenerate() {
 async function handleSave() {
   try {
     await planStore.savePlanToTrip(props.trip.id)
-  } catch (error) {
-    console.error('Failed to save plan:', error)
+    toast({ title: 'Plan saved', description: 'Your itinerary has been confirmed.' })
+  } catch {
+    // saveError reactive state is set by the store; no extra handling needed here
   }
 }
 
@@ -129,6 +133,15 @@ function formatResetDate(isoDate: string): string {
         </AlertDescription>
       </Alert>
 
+      <!-- Save Error -->
+      <Alert v-if="saveError" variant="destructive">
+        <AlertCircle class="h-4 w-4" />
+        <AlertTitle>Save Failed</AlertTitle>
+        <AlertDescription>
+          {{ saveError.error.message }}
+        </AlertDescription>
+      </Alert>
+
       <!-- Generate Button (Empty State) -->
       <div
         v-if="!hasSavedPlan && !hasCandidate"
@@ -145,8 +158,8 @@ function formatResetDate(isoDate: string): string {
         </Button>
       </div>
 
-      <!-- Candidate State (Unsaved Plan) -->
-      <div v-if="hasCandidate && !hasSavedPlan">
+      <!-- Candidate State (Unsaved or Replacement Plan) -->
+      <div v-if="hasCandidate">
         <Alert class="mb-4">
           <Sparkles class="h-4 w-4" />
           <AlertTitle>New Plan Generated</AlertTitle>

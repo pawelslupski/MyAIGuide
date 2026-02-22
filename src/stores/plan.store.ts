@@ -5,6 +5,7 @@ import { supabaseClient } from '@/db/supabase.client'
 import { useTripStore } from './trip.store'
 import { useProfileStore } from './profile.store'
 import { detectLanguage, callAIService } from '@/lib/services/generation.service'
+import { savePlanToTrip as savePlanService } from '@/lib/services/trip.service'
 
 /**
  * Plan Store
@@ -16,6 +17,7 @@ export const usePlanStore = defineStore('plan', () => {
   const isGenerating = ref(false)
   const isSaving = ref(false)
   const generationError = ref<ErrorResponse | null>(null)
+  const saveError = ref<ErrorResponse | null>(null)
 
   // Getters
   const hasCandidate = computed(() => planCandidate.value !== null)
@@ -28,6 +30,7 @@ export const usePlanStore = defineStore('plan', () => {
   async function generatePlan(_tripId: number): Promise<void> {
     isGenerating.value = true
     generationError.value = null
+    saveError.value = null
 
     try {
       // Get trip data
@@ -106,6 +109,7 @@ export const usePlanStore = defineStore('plan', () => {
     }
 
     isSaving.value = true
+    saveError.value = null
 
     try {
       const tripStore = useTripStore()
@@ -115,10 +119,7 @@ export const usePlanStore = defineStore('plan', () => {
       } = await supabaseClient.auth.getUser()
       if (!user) throw new Error('User not authenticated')
 
-      // Import savePlanToTrip service function
-      const { savePlanToTrip: savePlan } = await import('@/lib/services/trip.service')
-
-      const updatedTrip = await savePlan(
+      const updatedTrip = await savePlanService(
         tripId,
         user.id,
         planCandidate.value.plan,
@@ -131,6 +132,14 @@ export const usePlanStore = defineStore('plan', () => {
       // Clear candidate after successful save
       planCandidate.value = null
       generationError.value = null
+    } catch (err: any) {
+      saveError.value = {
+        error: {
+          code: err.code || 'SAVE_ERROR',
+          message: err.message || 'Failed to save plan'
+        }
+      }
+      throw err
     } finally {
       isSaving.value = false
     }
@@ -143,6 +152,7 @@ export const usePlanStore = defineStore('plan', () => {
   function discardCandidate(): void {
     planCandidate.value = null
     generationError.value = null
+    saveError.value = null
   }
 
   /**
@@ -161,6 +171,7 @@ export const usePlanStore = defineStore('plan', () => {
     isGenerating,
     isSaving,
     generationError,
+    saveError,
     // Getters
     hasCandidate,
     candidatePlan,

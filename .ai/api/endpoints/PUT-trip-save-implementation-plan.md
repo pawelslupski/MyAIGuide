@@ -121,15 +121,17 @@ Returns full `TripDTO` with updated plan:
   "id": 456,
   "user_id": "uuid-string",
   "title": "Summer in Croatia",
-  "note_body": "Planning a 10-day trip...",
+  "num_days": 10,
+  "num_people": 2,
   "what": ["culture_museums", "beach_relax"],
   "speed": "balance",
   "type": "roadtrip",
   "budget": "moderate",
+  "note_body": "Planning a 10-day trip...",
+  "plan_language": "pl",
   "plan_json": {
     "days": [...]
   },
-  "plan_language": "pl",
   "status": "CONFIRMED",
   "created_at": "2024-01-10T09:00:00Z",
   "updated_at": "2024-01-23T12:15:00Z"
