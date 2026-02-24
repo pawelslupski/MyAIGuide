@@ -69,10 +69,11 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
-          default_budget: string | null
-          default_speed: string | null
-          default_type: string | null
-          default_what: string[] | null
+          default_budget: string
+          default_speed: string
+          default_type: string
+          default_what: string[]
+          dietary_preferences_description: string | null
           has_dietary_preferences: boolean
           has_kids: boolean
           has_mobility_issues: boolean
@@ -83,10 +84,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          default_budget?: string | null
-          default_speed?: string | null
-          default_type?: string | null
-          default_what?: string[] | null
+          default_budget?: string
+          default_speed?: string
+          default_type?: string
+          default_what?: string[]
+          dietary_preferences_description?: string | null
           has_dietary_preferences?: boolean
           has_kids?: boolean
           has_mobility_issues?: boolean
@@ -97,10 +99,11 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          default_budget?: string | null
-          default_speed?: string | null
-          default_type?: string | null
-          default_what?: string[] | null
+          default_budget?: string
+          default_speed?: string
+          default_type?: string
+          default_what?: string[]
+          dietary_preferences_description?: string | null
           has_dietary_preferences?: boolean
           has_kids?: boolean
           has_mobility_issues?: boolean
@@ -115,6 +118,7 @@ export type Database = {
         Row: {
           budget: string | null
           created_at: string
+          destination: string
           id: number
           note_body: string | null
           num_days: number | null
@@ -126,11 +130,12 @@ export type Database = {
           type: string | null
           updated_at: string
           user_id: string
-          what: string[] | null
+          what: string[]
         }
         Insert: {
           budget?: string | null
           created_at?: string
+          destination: string
           id?: number
           note_body?: string | null
           num_days?: number | null
@@ -142,11 +147,12 @@ export type Database = {
           type?: string | null
           updated_at?: string
           user_id: string
-          what?: string[] | null
+          what?: string[]
         }
         Update: {
           budget?: string | null
           created_at?: string
+          destination?: string
           id?: number
           note_body?: string | null
           num_days?: number | null
@@ -158,7 +164,7 @@ export type Database = {
           type?: string | null
           updated_at?: string
           user_id?: string
-          what?: string[] | null
+          what?: string[]
         }
         Relationships: []
       }
