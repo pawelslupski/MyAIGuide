@@ -31,30 +31,34 @@ tables reference `users(id)` via foreign keys.
 
 **Purpose:** Store global user preferences and flags (1:1 with `users`).
 
-| Column                    | Type          | Constraints                                                                                                                | Description                                |
-| ------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `id`                      | bigserial     | PRIMARY KEY                                                                                                                | Profile identifier                         |
-| `user_id`                 | uuid          | UNIQUE NOT NULL, REFERENCES users(id) ON DELETE CASCADE                                                                    | User identifier (1:1 relationship)         |
-| `has_kids`                | boolean       | NOT NULL DEFAULT false                                                                                                     | Traveling with children                    |
-| `has_pets`                | boolean       | NOT NULL DEFAULT false                                                                                                     | Traveling with pets                        |
-| `has_mobility_issues`     | boolean       | NOT NULL DEFAULT false                                                                                                     | Has mobility limitations                   |
-| `has_dietary_preferences` | boolean       | NOT NULL DEFAULT false                                                                                                     | Has dietary preferences                    |
-| `default_what`            | varchar(50)[] | DEFAULT '{}', CHECK (default_what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Default "What?" preferences (multi-choice) |
-| `default_speed`           | varchar(20)   | CHECK (default_speed IN ('slow_chill', 'balance', 'intensive'))                                                            | Default "How fast?" preference             |
-| `default_type`            | varchar(20)   | CHECK (default_type IN ('base', 'roadtrip'))                                                                               | Default trip type                          |
-| `default_budget`          | varchar(20)   | CHECK (default_budget IN ('budget', 'moderate', 'luxury'))                                                                 | Default budget level                       |
-| `created_at`              | timestamptz   | NOT NULL DEFAULT now()                                                                                                     | Profile creation timestamp                 |
-| `updated_at`              | timestamptz   | NOT NULL DEFAULT now()                                                                                                     | Last update timestamp                      |
+| Column                            | Type          | Constraints                                                                                                                                     | Description                                                                          |
+| --------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `id`                              | bigserial     | PRIMARY KEY                                                                                                                                     | Profile identifier                                                                   |
+| `user_id`                         | uuid          | UNIQUE NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                                                                                    | User identifier (1:1 relationship)                                                   |
+| `has_kids`                        | boolean       | NOT NULL DEFAULT false                                                                                                                          | Traveling with children                                                              |
+| `has_pets`                        | boolean       | NOT NULL DEFAULT false                                                                                                                          | Traveling with pets                                                                  |
+| `has_mobility_issues`             | boolean       | NOT NULL DEFAULT false                                                                                                                          | Has mobility limitations                                                             |
+| `has_dietary_preferences`         | boolean       | NOT NULL DEFAULT false                                                                                                                          | Has dietary preferences                                                              |
+| `dietary_preferences_description` | text          | CHECK (NOT has_dietary_preferences OR (dietary_preferences_description IS NOT NULL AND char_length(trim(dietary_preferences_description)) > 0)) | Required non-empty description when `has_dietary_preferences = true`; NULL otherwise |
+| `default_what`                    | varchar(50)[] | DEFAULT '{}', CHECK (default_what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[])                      | Default "What?" preferences (multi-choice)                                           |
+| `default_speed`                   | varchar(20)   | DEFAULT 'balance', CHECK (default_speed IN ('slow_chill', 'balance', 'intensive'))                                                              | Default "How fast?" preference                                                       |
+| `default_type`                    | varchar(20)   | DEFAULT 'roadtrip', CHECK (default_type IN ('base', 'base_with_trips', 'roadtrip'))                                                             | Default trip type                                                                    |
+| `default_budget`                  | varchar(20)   | DEFAULT 'moderate', CHECK (default_budget IN ('budget', 'moderate', 'luxury'))                                                                  | Default budget level                                                                 |
+| `created_at`                      | timestamptz   | NOT NULL DEFAULT now()                                                                                                                          | Profile creation timestamp                                                           |
+| `updated_at`                      | timestamptz   | NOT NULL DEFAULT now()                                                                                                                          | Last update timestamp                                                                |
 
 **Notes:**
 
 - `default_what` is an array to support multi-choice values:
   `['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']`
 - VARCHAR constraints use CHECK instead of PostgreSQL ENUMs for easier future changes
+- `dietary_preferences_description` is enforced non-empty at DB level when the flag is `true`; the UI must also
+  prevent saving an empty description when the flag is active (PRD §3.2)
 - Internal values for `default_what`: `nature`, `culture_museums`, `beach_relax`, `city_break`, `foodie`
 - Internal values for `default_speed`: `slow_chill`, `balance`, `intensive`
 - Internal values for `default_type`: `base`, `base_with_trips`, `roadtrip`
 - Internal values for `default_budget`: `budget`, `moderate`, `luxury`
+- Column defaults for preference fields are set explicitly so that auto-created profiles are immediately usable
 
 ---
 
@@ -65,8 +69,9 @@ tables reference `users(id)` via foreign keys.
 | Column          | Type          | Constraints                                                                                                        | Description                                         |
 | --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
 | `id`            | bigserial     | PRIMARY KEY                                                                                                        | Trip identifier                                     |
-| `user_id`       | uuid          | NOT NULL, REFERENCES users(id) ON DELETE CASCADE                                                                   | Owner of the trip                                   |
+| `user_id`       | uuid          | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                                                              | Owner of the trip                                   |
 | `title`         | varchar(255)  | NOT NULL                                                                                                           | Trip name/title                                     |
+| `destination`   | varchar(50)   | NOT NULL                                                                                                           | Trip destination, e.g. "Paris, France"; nullable    |
 | `num_days`      | smallint      | CHECK (num_days IS NULL OR (num_days BETWEEN 1 AND 30))                                                            | Planned trip duration in days (1–30); nullable      |
 | `num_people`    | smallint      | CHECK (num_people IS NULL OR (num_people BETWEEN 1 AND 20))                                                        | Number of travelers (1–20); nullable                |
 | `what`          | varchar(50)[] | DEFAULT '{}', CHECK (what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Per-trip "What?" preferences (overrides profile)    |
@@ -81,12 +86,13 @@ tables reference `users(id)` via foreign keys.
 
 **Notes:**
 
-- `note_body` is fully optional (nullable, no minimum length); max 10,000 characters if provided
+- `note_body` is fully optional (nullable, no minimum length); max 10,000 characters if provided (PRD §3.5 / US-012)
+- `destination` is required; per-trip field for the travel goal (e.g. city/region/country) per PRD §3.4 / US-011
 - Trip status is derived implicitly:
   - **CREATED**: `note_body` is NULL or empty, `plan_json` is NULL
   - **DRAFT**: `note_body` has content, `plan_json` is NULL
   - **CONFIRMED**: `plan_json` is NOT NULL
-- Preference fields (`what`, `speed`, `type`, `budget`, `num_days`, `num_people`) override global defaults from `profiles`
+- Preference fields (`what`, `speed`, `type`, `budget`) override global defaults from `profiles`
 - `plan_json` structure (example):
 
 ```json
@@ -116,7 +122,7 @@ tables reference `users(id)` via foreign keys.
 | Column          | Type         | Constraints                                                              | Description                               |
 | --------------- | ------------ | ------------------------------------------------------------------------ | ----------------------------------------- |
 | `id`            | bigserial    | PRIMARY KEY                                                              | Generation record identifier              |
-| `user_id`       | uuid         | NOT NULL, REFERENCES users(id) ON DELETE CASCADE                         | User who triggered generation             |
+| `user_id`       | uuid         | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                    | User who triggered generation             |
 | `trip_id`       | bigint       | NOT NULL, REFERENCES trips(id) ON DELETE CASCADE                         | Trip for which plan was generated         |
 | `status`        | varchar(20)  | NOT NULL, CHECK (status IN ('success', 'api_error', 'validation_error')) | Generation outcome                        |
 | `model_name`    | varchar(100) |                                                                          | AI model used (NULL for validation_error) |
@@ -129,8 +135,10 @@ tables reference `users(id)` via foreign keys.
 - Used to enforce 10 generations per user in a rolling 24-hour window
 - `status` values:
   - `success`: Plan generated successfully → `model_name` is set, `error_message` is NULL
-  - `api_error`: AI API call failed (timeout, rate limit, etc.) → `model_name` is set, `error_message` contains error details
-  - `validation_error`: Server-side validation failed (note too short/long, etc.) → `model_name` is NULL (AI not invoked), `error_message` contains validation error
+  - `api_error`: AI API call failed (timeout, rate limit, etc.) → `model_name` is set, `error_message` contains error
+    details
+  - `validation_error`: Server-side validation failed (note too short/long, etc.) → `model_name` is NULL (AI not
+    invoked), `error_message` contains validation error
 - Append-only table designed for potential future partitioning by `created_at`
 
 ---
@@ -172,7 +180,7 @@ CREATE INDEX idx_trips_user_updated ON trips (user_id, updated_at DESC);
 -- For rate limiting: count generations per user in rolling 24h window
 CREATE INDEX idx_plan_generations_user_created ON plan_generations (user_id, created_at DESC);
 
--- For trip-specific generation history (optional, for future analytics)
+-- For trip-specific generation history (do not apply now, it's for future analytics)
 CREATE INDEX idx_plan_generations_trip ON plan_generations (trip_id, created_at DESC);
 ```
 
@@ -324,6 +332,38 @@ CREATE TRIGGER update_trips_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 ```
 
+### 5.2 Profile Auto-Creation Trigger
+
+A new profile row is automatically inserted into `profiles` immediately after a user registers. The trigger populates
+all preference defaults so the profile is immediately usable
+
+```sql
+CREATE
+OR REPLACE FUNCTION create_profile_for_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+INSERT INTO public.profiles (user_id, default_what, default_speed, default_type, default_budget)
+VALUES (NEW.id,
+        ARRAY['nature']::varchar[], -- Co? → Przyroda
+        'balance', -- Jak szybko? → Balans
+        'roadtrip', -- Jaki typ? → Roadtrip
+        'moderate' -- Budżet? → Umiarkowanie
+       );
+RETURN NEW;
+END;
+$$
+LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_user_created
+    AFTER INSERT
+    ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION create_profile_for_new_user();
+```
+
+**Defaults align with PRD §3.2:** "Profil tworzony automatycznie przy rejestracji z domyślnymi wartościami: Co?
+Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie."
+
 ---
 
 ## 6. Design Decisions and Rationale
@@ -389,10 +429,13 @@ CREATE TRIGGER update_trips_updated_at
 ### 6.8 Validation (DB Level)
 
 - **DB enforces:**
-  - Note length: NULL allowed (for new trips), or between 1,000 and 10,000 chars (via CHECK constraint)
+  - Note length: NULL allowed (for new trips), or up to 10,000 chars maximum (via CHECK constraint); no minimum
+    required by the PRD
   - Valid preference values (via CHECK constraints)
   - Field length limits (via VARCHAR constraints)
-- **Rationale:** DB protects data integrity; NULL allows trip creation, length constraints ensure quality when notes are
+  - Dietary preferences description: non-empty text required when `has_dietary_preferences = true` (via CHECK
+    constraint)
+- **Rationale:** DB protects data integrity; NULL allows trip creation, length constraint ensures quality when notes are
   saved.
 
 ### 6.9 Minimal Indexing Strategy
@@ -419,43 +462,31 @@ CREATE TRIGGER update_trips_updated_at
   - Prevents unauthorized access even if application logic has bugs
   - Aligns with PRD requirement US-003 (data isolation)
 
+### 6.12 Conditional Dietary Preferences Description
+
+- **Decision:** Add `dietary_preferences_description` text column to `profiles` with a conditional CHECK constraint.
+- **Rationale:** PRD §3.2 requires that when "Mam preferencje żywieniowe" is enabled, the user must provide a
+  non-empty description (e.g., "Mam alergię na ryby"). The CHECK ensures this invariant is enforced at the DB level,
+  not only in the UI.
+- **Constraint:**
+  `CHECK (NOT has_dietary_preferences OR (dietary_preferences_description IS NOT NULL AND char_length(trim(dietary_preferences_description)) > 0))`
+- **UI behaviour:** The description textarea must be shown and required whenever the dietary toggle is active; the save
+  and plan generation button must be disabled while it is empty.
+
 ---
 
-## 7. Migration Considerations
+## 7. Migration History
 
 ### 7.1 Order of Table Creation
 
-1. `profiles` (depends on `users`)
-2. `trips` (depends on `users`)
-3. `plan_generations` (depends on `users` and `trips`)
-
-### 7.2 Initial Data
-
-- No seed data required for MVP
-- Each user creates their own profile on first login (or via trigger)
-
-### 7.3 Profile Auto-Creation (Optional)
-
-Consider adding a trigger to auto-create a profile when a user registers:
-
-```sql
-CREATE
-OR REPLACE FUNCTION create_profile_for_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-INSERT INTO profiles (user_id)
-VALUES (NEW.id);
-RETURN NEW;
-END;
-$$
-LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER on_user_created
-    AFTER INSERT
-    ON users
-    FOR EACH ROW
-    EXECUTE FUNCTION create_profile_for_new_user();
-```
+1. `update_updated_at_column` function
+2. `profiles` table
+3. `trips` table
+4. `plan_generations` table`
+5. Profile auto-creation trigger
+6. RLS disable/enable policies
+7. Profile preference column defaults
+8.
 
 ---
 
@@ -493,46 +524,33 @@ CREATE TRIGGER on_user_created
 
 ---
 
-## 9. Open Questions and Clarifications Needed
+## 9. Reference: Preference Field Values
 
-### 9.1 Preference Field Internal Values
+### 9.1 Internal Values Mapping
 
-- `what` (multi-choice array): `['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']`
-- `speed`: `'slow_chill'`, `'balance'`, `'intensive'`
-- `type`: `'base'`, `'roadtrip'`
-- `budget`: `'budget'`, `'moderate'`, `'luxury'`
+| Field    | DB value          | UI label (PL)                 |
+| -------- | ----------------- | ----------------------------- |
+| `what`   | `nature`          | 🌲 Przyroda                   |
+| `what`   | `culture_museums` | 🏛️ Kultura/Muzea              |
+| `what`   | `beach_relax`     | 🏖️ Plaża/Relaks               |
+| `what`   | `city_break`      | 🏙️ City Break                 |
+| `what`   | `foodie`          | 🍽️ Foodie                     |
+| `speed`  | `slow_chill`      | 🐢 Slow / Chill               |
+| `speed`  | `balance`         | ⚖️ Balans                     |
+| `speed`  | `intensive`       | 🐇 Intensywnie / Max atrakcji |
+| `type`   | `base`            | 📍 Baza wypadowa              |
+| `type`   | `base_with_trips` | 📍+ 🚗 Baza z wypadami        |
+| `type`   | `roadtrip`        | 🚗 Roadtrip                   |
+| `budget` | `budget`          | € Oszczędnie                  |
+| `budget` | `moderate`        | €€ Umiarkowanie               |
+| `budget` | `luxury`          | €€€ Luksusowo                 |
 
-**Note:** These map to PRD labels:
+### 9.2 Note Length Validation
 
-- `nature` → "Przyroda"
-- `culture_museums` → "Kultura/Muzea"
-- `beach_relax` → "Plaża/Relaks"
-- `city_break` → "City Break"
-- `foodie` → "Foodie"
-- `slow_chill` → "Slow/Chill"
-- `balance` → "Balans"
-- `intensive` → "Intensywnie"
-- `base` → "Baza wypadowa"
-- `roadtrip` → "Roadtrip"
-
-### 9.2 Note Length Validation Semantics
-
-- `CHECK (note_body IS NULL OR (char_length(note_body) >= 1000 AND char_length(note_body) <= 10000))`
-- Users CAN create trips with NULL notes (CREATED status)
-- When users add/edit a note, it must be between 1,000 and 10,000 characters
-- The UI should provide clear feedback when note length is outside the valid range
-
-### 9.3 Profile Completeness Definition
-
-**Question:** What exactly makes a profile "complete" for the indicator in US-007?
-
-**Possible criteria:**
-
-- All four boolean flags are set (even if all false)?
-- All default preference fields have values?
-- Some combination of the above?
-
-**Recommendation:** Define explicit business logic for profile completeness check.
+- PRD requirement (US-012): maximum 10,000 characters; no minimum
+- DB constraint: `CHECK (note_body IS NULL OR char_length(note_body) <= 10000)`
+- NULL is allowed (trip with no note yet written)
+- The UI shows a character counter and disables "Generate plan" when length > 10,000
 
 ---
 
@@ -542,6 +560,7 @@ This schema provides a solid foundation for MyAIGuide MVP with:
 
 - ✅ Strict per-user data isolation via RLS
 - ✅ Support for global and per-trip preferences
+- ✅ Dietary preferences with mandatory description enforced at DB level
 - ✅ Efficient rate limiting for AI generations
 - ✅ Flexible plan storage with JSONB
 - ✅ Complete data deletion on account removal
