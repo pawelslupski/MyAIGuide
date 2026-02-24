@@ -32,12 +32,14 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:title': [title: string]
+  'update:destination': [destination: string]
   'update:note': [note: string]
   'update:preferences': [preferences: TripPreferencesDto]
 }>()
 
 // Local state for immediate UI updates
 const localTitle = ref(props.trip.title)
+const localDestination = ref(props.trip.destination ?? '')
 const localNote = ref(props.trip.note_body ?? '')
 const localWhat = ref<WhatPreference[]>((props.trip.what ?? []) as WhatPreference[])
 const localSpeed = ref<SpeedPreference | null>(props.trip.speed as SpeedPreference | null)
@@ -114,6 +116,13 @@ function handleTitleBlur() {
   }
 }
 
+// Immediate save for destination
+function handleDestinationBlur() {
+  if (localDestination.value !== (props.trip.destination ?? '')) {
+    emit('update:destination', localDestination.value)
+  }
+}
+
 // Immediate save for preferences
 function handlePreferencesChange() {
   emit('update:preferences', {
@@ -161,6 +170,7 @@ watch(
   () => props.trip,
   (newTrip) => {
     localTitle.value = newTrip.title
+    localDestination.value = newTrip.destination ?? ''
     localNote.value = newTrip.note_body ?? ''
     localWhat.value = (newTrip.what ?? []) as WhatPreference[]
     localSpeed.value = newTrip.speed as SpeedPreference | null
@@ -198,6 +208,18 @@ watch(
           {{ trip.status }}
         </Badge>
       </div>
+    </div>
+
+    <!-- Destination -->
+    <div class="space-y-2">
+      <Label for="trip-destination">Destination</Label>
+      <Input
+        id="trip-destination"
+        v-model="localDestination"
+        placeholder="e.g. Paris, France"
+        maxlength="50"
+        @blur="handleDestinationBlur"
+      />
     </div>
 
     <!-- Trip Preferences -->

@@ -124,6 +124,22 @@ async function handleTitleUpdate(title: string) {
 }
 
 /**
+ * Handle trip destination update
+ */
+async function handleDestinationUpdate(destination: string) {
+  try {
+    const tripId = parseInt(route.params.id as string, 10)
+    await tripStore.updateTripDestination(tripId, destination)
+  } catch (error: any) {
+    toast({
+      title: 'Failed to update destination',
+      description: error.message || 'An error occurred',
+      variant: 'destructive'
+    })
+  }
+}
+
+/**
  * Handle trip note update
  */
 async function handleNoteUpdate(note: string) {
@@ -191,6 +207,7 @@ async function handlePreferencesUpdate(preferences: TripPreferencesDto) {
             :trip="tripStore.currentTrip"
             :default-preferences="profileStore.defaultPreferences"
             @update:title="handleTitleUpdate"
+            @update:destination="handleDestinationUpdate"
             @update:note="handleNoteUpdate"
             @update:preferences="handlePreferencesUpdate"
           />

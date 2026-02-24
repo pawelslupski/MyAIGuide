@@ -23,7 +23,7 @@ create table public.trips (
 
   -- required trip metadata
   title       varchar(255) not null,
-  destination varchar(50)  not null, -- e.g. "Paris, France"; required per PRD §3.4 / US-011
+  destination varchar(50), -- e.g. "Paris, France"; filled in after creation, required before plan generation
 
   -- optional numeric parameters; null means not yet specified by the user
   num_days    smallint check (num_days   is null or (num_days   between 1 and 30)),

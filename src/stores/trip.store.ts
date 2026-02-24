@@ -118,6 +118,32 @@ export const useTripStore = defineStore('trip', () => {
   }
 
   /**
+   * Update trip destination
+   * Uses optimistic update with rollback on error
+   */
+  async function updateTripDestination(tripId: number, destination: string): Promise<void> {
+    if (!currentTrip.value) return
+
+    const previousDestination = currentTrip.value.destination
+    currentTrip.value.destination = destination // Optimistic update
+
+    try {
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      const updated = await updateTrip(tripId, user.id, { destination })
+      currentTrip.value = updated
+    } catch (err: any) {
+      if (currentTrip.value) {
+        currentTrip.value.destination = previousDestination
+      }
+      throw err
+    }
+  }
+
+  /**
    * Update trip note body
    * Uses optimistic update with rollback on error
    */
@@ -328,6 +354,7 @@ export const useTripStore = defineStore('trip', () => {
     // Actions
     fetchTrip,
     updateTripTitle,
+    updateTripDestination,
     updateTripNote,
     updateTripPreferences,
     createTrip,

@@ -118,7 +118,7 @@ export type Database = {
         Row: {
           budget: string | null
           created_at: string
-          destination: string
+          destination: string | null
           id: number
           note_body: string | null
           num_days: number | null
@@ -135,7 +135,7 @@ export type Database = {
         Insert: {
           budget?: string | null
           created_at?: string
-          destination: string
+          destination?: string | null
           id?: number
           note_body?: string | null
           num_days?: number | null
@@ -152,7 +152,7 @@ export type Database = {
         Update: {
           budget?: string | null
           created_at?: string
-          destination?: string
+          destination?: string | null
           id?: number
           note_body?: string | null
           num_days?: number | null

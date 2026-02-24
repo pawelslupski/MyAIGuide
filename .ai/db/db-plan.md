@@ -71,7 +71,7 @@ tables reference `users(id)` via foreign keys.
 | `id`            | bigserial     | PRIMARY KEY                                                                                                        | Trip identifier                                     |
 | `user_id`       | uuid          | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                                                              | Owner of the trip                                   |
 | `title`         | varchar(255)  | NOT NULL                                                                                                           | Trip name/title                                     |
-| `destination`   | varchar(50)   | NOT NULL                                                                                                           | Trip destination, e.g. "Paris, France"; nullable    |
+| `destination`   | varchar(50)   |                                                                                                                    | Trip destination, e.g. "Paris, France"; nullable    |
 | `num_days`      | smallint      | CHECK (num_days IS NULL OR (num_days BETWEEN 1 AND 30))                                                            | Planned trip duration in days (1–30); nullable      |
 | `num_people`    | smallint      | CHECK (num_people IS NULL OR (num_people BETWEEN 1 AND 20))                                                        | Number of travelers (1–20); nullable                |
 | `what`          | varchar(50)[] | DEFAULT '{}', CHECK (what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Per-trip "What?" preferences (overrides profile)    |
@@ -87,7 +87,9 @@ tables reference `users(id)` via foreign keys.
 **Notes:**
 
 - `note_body` is fully optional (nullable, no minimum length); max 10,000 characters if provided (PRD §3.5 / US-012)
-- `destination` is required; per-trip field for the travel goal (e.g. city/region/country) per PRD §3.4 / US-011
+- `destination` is required before plan generation, but not required on initial trip creation; per-trip field for the
+  travel goal (e.g.
+  city/region/country) per PRD §3.4 / US-011
 - Trip status is derived implicitly:
   - **CREATED**: `note_body` is NULL or empty, `plan_json` is NULL
   - **DRAFT**: `note_body` has content, `plan_json` is NULL

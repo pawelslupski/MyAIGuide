@@ -121,6 +121,7 @@ export async function getTripById(tripId: number, userId: string): Promise<TripD
  */
 export interface TripUpdateFields {
   title?: string
+  destination?: string | null
   note_body?: string | null
   what?: string[] | null
   speed?: string | null
