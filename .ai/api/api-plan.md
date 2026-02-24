@@ -68,7 +68,7 @@ generation history).
 
 #### GET /api/profiles/me
 
-**Description:** Retrieve the current user's global profile with preferences and completeness indicator.
+**Description:** Retrieve the current user's global profile with preferences.
 
 **Authentication:** Required
 
@@ -88,16 +88,10 @@ generation history).
   "default_speed": "balance",
   "default_type": "roadtrip",
   "default_budget": "moderate",
-  "is_complete": true,
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T14:45:00Z"
 }
 ```
-
-**Completeness Logic:**
-
-- `is_complete` is `true` if all four boolean flags are set (not null) AND at least one default preference field has a
-  value
 
 **Error Responses:**
 
@@ -120,7 +114,7 @@ generation history).
   "has_pets": false,
   "has_mobility_issues": false,
   "has_dietary_preferences": true,
-  "default_what": ["culture_museums", "city_break"],
+  "default_what": ["culture_museums", "nature"],
   "default_speed": "intensive",
   "default_type": "base",
   "default_budget": "luxury"
@@ -132,7 +126,7 @@ generation history).
 - `has_kids`, `has_pets`, `has_mobility_issues`, `has_dietary_preferences`: boolean
 - `default_what`: array, each element must be one of: `nature`, `culture_museums`, `beach_relax`, `city_break`, `foodie`
 - `default_speed`: one of `slow_chill`, `balance`, `intensive`
-- `default_type`: one of `base`, `roadtrip`
+- `default_type`: one of `base`, `base_with_trips`, `roadtrip`
 - `default_budget`: one of `budget`, `moderate`, `luxury`
 
 **Success Response (200 OK):**
@@ -149,7 +143,6 @@ generation history).
   "default_speed": "intensive",
   "default_type": "base",
   "default_budget": "luxury",
-  "is_complete": true,
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T15:00:00Z"
 }
@@ -825,15 +818,6 @@ existing plan.
 - **Trip ownership:** Trip must belong to current user
 
 ### 4.2 Business Logic Implementation
-
-#### Profile Completeness
-
-**Logic:** Profile is complete if:
-
-- All four boolean flags are set (not null)
-- At least one default preference field has a non-null value
-
-**Implementation:** Calculated server-side and returned as `is_complete` boolean in profile responses
 
 #### Trip Status Derivation
 

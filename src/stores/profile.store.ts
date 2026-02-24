@@ -2,6 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ProfileDTO, ErrorResponse, TripPreferencesDto } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
+import { validateProfileDTO } from '@/lib/validation/profile.schemas'
+import {
+  createUnauthorizedError,
+  createProfileNotFoundError,
+  createInternalError,
+  toApiError
+} from '@/lib/errors/api.error'
 
 /**
  * Profile Store
@@ -24,8 +31,6 @@ export const useProfileStore = defineStore('profile', () => {
       }) as TripPreferencesDto
   )
 
-  const isComplete = computed(() => profile.value?.is_complete ?? false)
-
   /**
    * Fetch user profile
    * Loads profile data from database
@@ -38,7 +43,7 @@ export const useProfileStore = defineStore('profile', () => {
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user) throw createUnauthorizedError()
 
       const { data, error: fetchError } = await supabaseClient
         .from('profiles')
@@ -46,30 +51,17 @@ export const useProfileStore = defineStore('profile', () => {
         .eq('user_id', user.id)
         .single()
 
-      if (fetchError) throw fetchError
-      if (!data) throw new Error('Profile not found')
-
-      // Compute is_complete based on profile data
-      const isComplete = !!(
-        data.default_what &&
-        data.default_what.length > 0 &&
-        data.default_speed &&
-        data.default_type &&
-        data.default_budget
-      )
-
-      profile.value = {
-        ...data,
-        is_complete: isComplete
+      if (fetchError) {
+        // PGRST116 = no rows returned by .single()
+        if (fetchError.code === 'PGRST116') throw createProfileNotFoundError()
+        throw createInternalError(fetchError.message)
       }
-    } catch (err: any) {
-      error.value = {
-        error: {
-          code: err.code || 'FETCH_ERROR',
-          message: err.message || 'Failed to fetch profile'
-        }
-      }
-      throw err
+
+      profile.value = validateProfileDTO(data)
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      error.value = apiErr.toResponse()
+      throw apiErr
     } finally {
       isLoading.value = false
     }
@@ -98,19 +90,7 @@ export const useProfileStore = defineStore('profile', () => {
       if (updateError) throw updateError
       if (!data) throw new Error('Failed to update profile')
 
-      // Compute is_complete based on updated data
-      const isComplete = !!(
-        data.default_what &&
-        data.default_what.length > 0 &&
-        data.default_speed &&
-        data.default_type &&
-        data.default_budget
-      )
-
-      profile.value = {
-        ...data,
-        is_complete: isComplete
-      }
+      profile.value = data
     } catch (err: any) {
       error.value = {
         error: {
@@ -129,7 +109,6 @@ export const useProfileStore = defineStore('profile', () => {
     error,
     // Getters
     defaultPreferences,
-    isComplete,
     // Actions
     fetchProfile,
     updateProfile

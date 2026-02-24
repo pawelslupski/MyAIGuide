@@ -57,12 +57,9 @@ export interface PlanJson {
 
 /**
  * Profile DTO returned by GET /api/profiles/me
- * Extends database Row with computed is_complete field
- * Note: user_id is included per API spec but may be redundant since user is authenticated
+ * Directly maps to the profiles table Row
  */
-export interface ProfileDTO extends Tables<'profiles'> {
-  is_complete: boolean
-}
+export type ProfileDTO = Tables<'profiles'>
 
 /**
  * Command model for PUT /api/profiles/me
@@ -74,6 +71,7 @@ export type UpdateProfileCommand = Pick<
   | 'has_pets'
   | 'has_mobility_issues'
   | 'has_dietary_preferences'
+  | 'dietary_preferences_description'
   | 'default_what'
   | 'default_speed'
   | 'default_type'
@@ -112,6 +110,7 @@ export interface TripDTO extends Omit<Tables<'trips'>, 'plan_json'> {
  */
 export interface CreateTripCommand {
   title: string
+  destination?: string | null
   note_body?: string | null
   what?: WhatPreference[] | null
   speed?: SpeedPreference | null
@@ -127,6 +126,7 @@ export interface CreateTripCommand {
  */
 export interface UpdateTripCommand {
   title?: string
+  destination?: string | null
   note_body?: string | null
   what?: WhatPreference[] | null
   speed?: SpeedPreference | null

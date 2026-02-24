@@ -54,7 +54,7 @@ This document defines the user interface architecture for MyAIGuide MVP, a Vue 3
 
 #### Protected Views
 
-- **DashboardView.vue** - Trip list with profile completeness banner
+- **DashboardView.vue** - Trip list with pagination
 - **ProfileView.vue** - Global profile and default preferences editor
 - **TripDetailView.vue** - Split/stacked layout for note and plan panels
 - **TripCreateView.vue** - New trip creation form
@@ -318,31 +318,6 @@ Use the `dark:` variant for dark mode specific styles:
 - Test all components in both light and dark modes
 - Ensure sufficient contrast in both themes (WCAG AA: 4.5:1 for text)
 - Use `dark:` variants sparingly - CSS variables handle most cases automatically
-
-### 4.3 Profile Completeness Banner
-
-**Location:** DashboardView.vue (top of page)
-
-**Behavior:**
-
-- Display when `profile.is_complete === false`
-- Prominent banner with warning/info styling
-- Clear message: "Complete your profile to get better trip recommendations"
-- CTA button: "Complete Profile" → navigates to /profile
-- Dismissible (stores dismissal in localStorage, shows again if profile still incomplete)
-
-**Implementation:**
-
-```vue
-<Alert v-if="!profile.is_complete && !isDismissed" variant="info">
-  <AlertTitle>Complete Your Profile</AlertTitle>
-  <AlertDescription>
-    Set your travel preferences to get personalized trip plans.
-  </AlertDescription>
-  <Button @click="navigateToProfile">Complete Profile</Button>
-  <Button variant="ghost" @click="dismissBanner">Dismiss</Button>
-</Alert>
-```
 
 ### 4.4 Trip List Dashboard
 
@@ -701,7 +676,7 @@ function handleGenerationError(error: any) {
 **Implementation:**
 
 ```typescript
-// In TripDetailView.vue
+// In TripView.vue
 import { onBeforeRouteLeave } from 'vue-router'
 
 const planStore = usePlanStore()
@@ -824,8 +799,6 @@ import type { Profile } from '@/types'
 
 export const useProfileStore = defineStore('profile', () => {
   const profile = ref<Profile | null>(null)
-  const isComplete = computed(() => profile.value?.is_complete ?? false)
-
   async function fetchProfile() {
     const { data, error } = await supabaseClient.from('profiles').select('*').single()
 
@@ -845,7 +818,7 @@ export const useProfileStore = defineStore('profile', () => {
     profile.value = data
   }
 
-  return { profile, isComplete, fetchProfile, updateProfile }
+  return { profile, fetchProfile, updateProfile }
 })
 ```
 
@@ -1113,7 +1086,7 @@ const routes = [
   {
     path: '/trips/:id',
     name: 'trip-detail',
-    component: () => import('@/views/TripDetailView.vue'),
+    component: () => import('@/views/TripView.vue'),
     meta: { requiresAuth: true }
   }
 ]
@@ -1163,11 +1136,6 @@ JWT-based authentication will be implemented in a later phase. Currently, the ap
 
 - Back button in header → navigate to `/dashboard`
 - Check for unsaved changes before leaving
-
-**Profile Completion Flow:**
-
-- Banner on dashboard → click "Complete Profile" → navigate to `/profile`
-- After saving profile → navigate back to `/dashboard`
 
 ## 7. Accessibility Considerations (WCAG AA Compliance)
 
@@ -1369,7 +1337,6 @@ All styles are mobile-first by default. Use responsive variants to override for 
 - Cache trip list in Pinia (invalidate on create/update/delete)
 - Cache quota in Pinia (refresh after generation)
 - Use browser localStorage for:
-  - Banner dismissal state
   - User preferences (theme, language)
 
 ## 10. Component Library Usage (shadcn-vue)
@@ -1408,13 +1375,11 @@ All UI components should use shadcn-vue primitives as the foundation:
 
 1. **Landing Page** → Click "Get Started"
 2. **Register** → Enter email/password → Submit
-3. **Dashboard** (empty state) → See profile completeness banner
-4. **Profile** → Fill in preferences → Save
-5. **Dashboard** → Click "Create New Trip"
-6. **Trip Create** → Enter title → Save
-7. **Trip Detail** → Write note (1000+ chars) → Set preferences
-8. **Generate Plan** → Review candidate → Save plan
-9. **Dashboard** → See trip with "Planned" status
+3. **Dashboard** (empty state) → Click "Create New Trip"
+4. **Trip Create** → Enter title → Save
+5. **Trip Detail** → Write note (1000+ chars) → Set preferences
+6. **Generate Plan** → Review candidate → Save plan
+7. **Dashboard** → See trip with "Planned" status
 
 ### 11.2 Returning User - Creating New Trip
 
@@ -1472,7 +1437,6 @@ App.vue
 │   └── AppLayout (protected routes)
 │       ├── Sidebar (Navigation Menu)
 │       ├── DashboardView
-│       │   ├── ProfileCompletenessBanner
 │       │   ├── TripCard (multiple)
 │       │   └── Pagination
 │       ├── ProfileView

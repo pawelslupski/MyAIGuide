@@ -2,11 +2,13 @@
 
 ## 1. Executive Summary
 
-MyAIGuide is a Vue 3.5 SPA for AI-powered trip planning. This document defines the complete UI architecture based on product requirements, API design, and accessibility standards (WCAG AA).
+MyAIGuide is a Vue 3.5 SPA for AI-powered trip planning. This document defines the complete UI architecture based on
+product requirements, API design, and accessibility standards (WCAG AA).
 
 ### Core Concept
 
-The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each trip contains user notes (1000-10000 characters) and travel preferences, which are used to generate a single AI-powered travel plan stored in JSON format.
+The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each trip contains user notes (1000-10000
+characters) and travel preferences, which are used to generate a single AI-powered travel plan stored in JSON format.
 
 ### Key Features
 
@@ -48,13 +50,10 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 ### 3.1 Route Hierarchy
 
 ```
-/                    → LandingView (public)
 /login               → LoginView (public)
 /register            → RegisterView (public)
 /dashboard           → DashboardView (protected)
-/profile             → ProfileView (protected)
-/trips/new           → TripCreateView (protected)
-/trips/:id           → TripDetailView (protected)
+/trips/:id           → TripView (protected)
 ```
 
 ### 3.2 Layout Components
@@ -75,33 +74,20 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 
 **DashboardView**
 
-- Profile completeness banner (conditional)
+- Global profile form includind preference selectors (What/Speed/Type/Budget)
+- "Create New Trip" button
+- Save/Cancel actions
 - Trip cards grid (responsive: 1/2/3 columns)
 - Pagination controls
-- "Create New Trip" button
 
-**ProfileView**
-
-- Global profile form (4 boolean toggles)
-- Default preference selectors (What/Speed/Type/Budget)
-- Completeness indicator
-- Save/Cancel actions
-
-**TripDetailView**
+**TripView**
 
 - Responsive layout (stacked mobile, split-panel desktop)
-- Note editor with character counter
-- Trip preferences (inherited values with light blue background)
+- Note editor with text area and character counter
+- Trip preferences (some values inherited from the global profile)
 - Plan viewer/editor
 - Generation quota counter
 - Generate/Save plan actions
-
-**TripCreateView**
-
-- Trip title input
-- Initial note textarea (optional)
-- Preference selectors (defaults from profile)
-- Create action
 
 ## 4. Key UI Components
 
@@ -115,7 +101,6 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 - Navigation items:
   - Dashboard (Home icon)
   - My Trips (Map icon)
-  - Profile (User icon)
 - User section with Logout button
 
 **Responsive Behavior:**
@@ -133,10 +118,10 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
   <NavigationMenu orientation="vertical">
     <NavigationMenuItem>
       <NavigationMenuLink
-        :to="{ name: 'dashboard' }"
-        :aria-current="isActive('dashboard') ? 'page' : undefined"
+          :to="{ name: 'dashboard' }"
+          :aria-current="isActive('dashboard') ? 'page' : undefined"
       >
-        <Home class="h-5 w-5" />
+        <Home class="h-5 w-5"/>
         <span>Dashboard</span>
       </NavigationMenuLink>
     </NavigationMenuItem>
@@ -151,33 +136,7 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 - Keyboard navigation (Tab, Enter, Arrow keys)
 - Skip to main content link
 
-### 4.2 Profile Completeness Banner
-
-**Location:** Top of DashboardView
-
-**Display Condition:** `profile.is_complete === false`
-
-**Implementation:**
-
-```vue
-<Alert v-if="!profile.is_complete && !isDismissed" variant="info">
-  <AlertTitle>Complete Your Profile</AlertTitle>
-  <AlertDescription>
-    Set your travel preferences to get personalized trip plans.
-  </AlertDescription>
-  <Button @click="navigateToProfile">Complete Profile</Button>
-  <Button variant="ghost" @click="dismissBanner">Dismiss</Button>
-</Alert>
-```
-
-**Features:**
-
-- Info/warning styling
-- Clear CTA: "Complete Profile" → navigates to /profile
-- Dismissible (stored in localStorage)
-- Reappears if profile still incomplete
-
-### 4.3 Trip Card
+### 4.2 Trip Card
 
 **Component:** `TripCard.vue` using shadcn-vue Card
 
@@ -217,13 +176,13 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 </Card>
 ```
 
-### 4.4 Note Editor with Character Counter
+### 4.3 Note Editor with Character Counter
 
 **Component:** `TripNoteEditor.vue`
 
 **Features:**
 
-- Textarea for note content (min 1000, max 10000 chars)
+- Textarea for note content (max 10000 chars)
 - Real-time character counter
 - Color-coded validation feedback
 - Auto-save on blur (debounced)
@@ -245,11 +204,11 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 />
 <p :class="getCounterClass(noteBody.length)">
   {{ noteBody.length }} / 10,000 characters
-  <span v-if="noteBody.length < 1000">(minimum 1,000 required)</span>
+  <span v-if="noteBody.length > 1000">(maksimum 10,000 required)</span>
 </p>
 ```
 
-### 4.5 Trip Preferences Selector
+### 4.4 Trip Preferences Selector
 
 **Component:** `TripPreferences.vue`
 
@@ -269,19 +228,20 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 **Implementation:**
 
 ```vue
+
 <div class="space-y-4">
   <div>
     <Label>What interests you?</Label>
     <MultiSelect
-      v-model="preferences.what"
-      :options="whatOptions"
-      :class="isInherited('what') ? 'bg-blue-50' : ''"
+        v-model="preferences.what"
+        :options="whatOptions"
+        :class="isInherited('what') ? 'bg-blue-50' : ''"
     />
     <Button
-      v-if="!isInherited('what')"
-      variant="ghost"
-      size="sm"
-      @click="resetToDefault('what')"
+        v-if="!isInherited('what')"
+        variant="ghost"
+        size="sm"
+        @click="resetToDefault('what')"
     >
       Reset to profile default
     </Button>
@@ -289,7 +249,7 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 </div>
 ```
 
-### 4.6 Generation Quota Counter
+### 4.5 Generation Quota Counter
 
 **Component:** Part of `PlanViewer.vue`
 
@@ -309,6 +269,7 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 **Implementation:**
 
 ```vue
+
 <div class="mb-4 p-3 rounded-lg" :class="getQuotaClass(quota.used)">
   <div class="flex justify-between items-center">
     <span class="text-sm font-medium">
@@ -318,11 +279,11 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
       Resets {{ formatResetTime(quota.reset_at) }}
     </span>
   </div>
-  <Progress :value="(quota.used / quota.limit) * 100" class="mt-2" />
+  <Progress :value="(quota.used / quota.limit) * 100" class="mt-2"/>
 </div>
 ```
 
-### 4.7 Plan Candidate vs Saved Plan
+### 4.6 Plan Candidate vs Saved Plan
 
 **Component:** `PlanViewer.vue`
 
@@ -345,7 +306,7 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 ```vue
 <!-- Candidate -->
 <Alert v-if="!planIsSaved" variant="warning" class="mb-4">
-  <AlertTriangle class="h-4 w-4" />
+  <AlertTriangle class="h-4 w-4"/>
   <AlertTitle>Unsaved Plan</AlertTitle>
   <AlertDescription>
     Changes will be lost if you refresh or navigate away.
@@ -358,7 +319,7 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 
 <!-- Saved -->
 <Alert v-else variant="success" class="mb-4">
-  <CheckCircle class="h-4 w-4" />
+  <CheckCircle class="h-4 w-4"/>
   <AlertTitle>Plan Saved</AlertTitle>
   <AlertDescription>
     Last saved {{ formatRelativeTime(trip.updated_at) }}
@@ -366,7 +327,7 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
 </Alert>
 ```
 
-### 4.8 Plan Day List
+### 4.7 Plan Day List
 
 **Component:** `PlanDayList.vue` using shadcn-vue Accordion
 
@@ -392,9 +353,9 @@ The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each 
     <AccordionContent>
       <div class="space-y-4">
         <div
-          v-for="activity in day.activities"
-          :key="activity.timeOfDay"
-          class="border-l-4 pl-4"
+            v-for="activity in day.activities"
+            :key="activity.timeOfDay"
+            class="border-l-4 pl-4"
         >
           <Badge variant="outline">{{ activity.timeOfDay }}</Badge>
           <h4 class="font-medium">{{ activity.locationName }}</h4>
@@ -613,12 +574,6 @@ import { useAuthStore } from '@/stores/auth.store'
 
 const routes = [
   {
-    path: '/',
-    name: 'landing',
-    component: () => import('@/views/LandingView.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginView.vue'),
@@ -637,21 +592,9 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/profile',
-    name: 'profile',
-    component: () => import('@/views/ProfileView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/trips/new',
-    name: 'trip-create',
-    component: () => import('@/views/TripCreateView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
     path: '/trips/:id',
     name: 'trip-detail',
-    component: () => import('@/views/TripDetailView.vue'),
+    component: () => import('@/views/TripView.vue'),
     meta: { requiresAuth: true }
   }
 ]
@@ -720,13 +663,14 @@ onBeforeRouteLeave((to, from, next) => {
 
 ```vue
 <div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 md:gap-6 md:p-6 lg:grid-cols-3">
-  <TripCard v-for="trip in trips" :key="trip.id" :trip="trip" />
+  <TripCard v-for="trip in trips" :key="trip.id" :trip="trip"/>
 </div>
 ```
 
 **Trip Detail Split Panel:**
 
 ```vue
+
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
   <div class="order-1"><!-- Note Editor --></div>
   <div class="order-2 lg:sticky lg:top-4"><!-- Plan Viewer --></div>
@@ -736,23 +680,26 @@ onBeforeRouteLeave((to, from, next) => {
 **Responsive Typography:**
 
 ```vue
+
 <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold">
-<p class="text-sm md:text-base">
+  <p class="text-sm md:text-base">
 ```
 
 **Responsive Spacing:**
 
 ```vue
+
 <div class="p-4 md:p-6 lg:p-8">
-<div class="space-y-4 md:space-y-6">
-<div class="gap-2 sm:gap-4 md:gap-6">
+  <div class="space-y-4 md:space-y-6">
+    <div class="gap-2 sm:gap-4 md:gap-6">
 ```
 
 **Responsive Flexbox:**
 
 ```vue
+
 <div class="flex flex-col md:flex-row gap-4">
-<div class="flex flex-col sm:flex-row sm:justify-between">
+  <div class="flex flex-col sm:flex-row sm:justify-between">
 ```
 
 **Responsive Visibility:**
@@ -792,7 +739,7 @@ onBeforeRouteLeave((to, from, next) => {
 <nav aria-label="Main navigation">
   <NavigationMenuItem>
     <NavigationMenuLink
-      :aria-current="isActive ? 'page' : undefined"
+        :aria-current="isActive ? 'page' : undefined"
     >
       Dashboard
     </NavigationMenuLink>
@@ -815,7 +762,7 @@ onBeforeRouteLeave((to, from, next) => {
 
 ```vue
 <Button aria-label="Toggle navigation menu">
-  <Menu class="h-6 w-6" />
+  <Menu class="h-6 w-6"/>
 </Button>
 ```
 
@@ -860,10 +807,10 @@ onBeforeRouteLeave((to, from, next) => {
 <!-- Visible focus indicators -->
 <Button class="focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
 
-<!-- Focus trap in modals -->
-<Dialog @update:open="handleDialogOpen">
-  <!-- Focus automatically managed by shadcn-vue Dialog -->
-</Dialog>
+  <!-- Focus trap in modals -->
+  <Dialog @update:open="handleDialogOpen">
+    <!-- Focus automatically managed by shadcn-vue Dialog -->
+  </Dialog>
 ```
 
 ### 8.4 Screen Reader Support
@@ -1024,7 +971,7 @@ const PlanEditor = defineAsyncComponent(() => import('@/components/PlanEditor.vu
 
 - Fetch trips (paginated, 20 per page)
 
-**On Trip Detail Mount:**
+**On Trip Mount:**
 
 - Fetch specific trip data
 - Load saved plan if exists
@@ -1047,13 +994,12 @@ const PlanEditor = defineAsyncComponent(() => import('@/components/PlanEditor.vu
 
 ### 11.1 New User Onboarding
 
-1. **Landing Page** → Click "Get Started"
 2. **Register** → Enter email/password → Submit
-3. **Dashboard** (empty state) → See profile completeness banner
+3. **Dashboard** (empty state)
 4. **Profile** → Fill in preferences → Save
 5. **Dashboard** → Click "Create New Trip"
 6. **Trip Create** → Enter title → Save
-7. **Trip Detail** → Write note (1000+ chars) → Set preferences
+7. **Trip View** → Write note → Set trip preferences
 8. **Generate Plan** → Review candidate → Save plan
 9. **Dashboard** → See trip with "Planned" status
 
@@ -1062,7 +1008,7 @@ const PlanEditor = defineAsyncComponent(() => import('@/components/PlanEditor.vu
 1. **Login** → Enter credentials
 2. **Dashboard** → See existing trips
 3. **Create New Trip** → Enter title and note
-4. **Trip Detail** → Adjust preferences → Generate plan
+4. **Trip View** → Adjust preferences → Generate plan
 5. **Review Plan** → Edit if needed → Save
 6. **Dashboard** → Trip appears with "Planned" status
 
@@ -1236,4 +1182,5 @@ This UI architecture provides a complete, production-ready foundation for MyAIGu
 ✅ **Navigation Guards** - Prevent data loss from unsaved changes
 ✅ **Performance Optimized** - Code splitting, caching, lazy loading
 
-The architecture is designed to scale with future enhancements while maintaining clean, maintainable code aligned with Vue 3 best practices and MyAIGuide product requirements.
+The architecture is designed to scale with future enhancements while maintaining clean, maintainable code aligned with
+Vue 3 best practices and MyAIGuide product requirements.

@@ -33,7 +33,7 @@ TripDetailView is the core view of MyAIGuide application, serving as the primary
 {
   path: '/trips/:id',
   name: 'trip-detail',
-  component: () => import('@/views/TripDetailView.vue'),
+  component: () => import('@/views/TripView.vue'),
   meta: {
     requiresAuth: true,
     title: 'Trip Details'

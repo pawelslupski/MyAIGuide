@@ -39,7 +39,6 @@ export class ApiError extends Error {
 /**
  * Error factory functions for common HTTP errors
  */
-
 export function createUnauthorizedError(): ApiError {
   return new ApiError(401, 'UNAUTHORIZED', 'Authentication required')
 }
@@ -52,27 +51,14 @@ export function createNotFoundError(): ApiError {
   return new ApiError(404, 'NOT_FOUND', 'Trip not found')
 }
 
+export function createProfileNotFoundError(): ApiError {
+  return new ApiError(404, 'NOT_FOUND', 'Profile not found')
+}
+
 export function createInvalidTripIdError(provided: string): ApiError {
   return new ApiError(400, 'INVALID_TRIP_ID', 'Trip ID must be a valid positive integer', {
     provided
   })
-}
-
-export function createNoteValidationError(
-  noteBodyLength: number,
-  minLength: number,
-  maxLength: number
-): ApiError {
-  return new ApiError(
-    400,
-    'VALIDATION_ERROR',
-    `Note must be between ${minLength} and ${maxLength} characters`,
-    {
-      note_body_length: noteBodyLength,
-      min_length: minLength,
-      max_length: maxLength
-    }
-  )
 }
 
 export function createNoteRequiredError(): ApiError {

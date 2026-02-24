@@ -16,27 +16,18 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast/use-toast'
 import TripCard from '@/components/TripCard.vue'
-import ProfileCompletenessBanner from '@/components/ProfileCompletenessBanner.vue'
 import TripListPagination from '@/components/TripListPagination.vue'
 import { useTripStore } from '@/stores/trip.store'
 import { useProfileStore } from '@/stores/profile.store'
-
-const BANNER_KEY = 'myaiguide-dashboard-banner-dismissed'
 
 const router = useRouter()
 const tripStore = useTripStore()
 const profileStore = useProfileStore()
 const { toast } = useToast()
 
-const bannerDismissed = ref(localStorage.getItem(BANNER_KEY) === 'true')
 const showDeleteDialog = ref(false)
 const tripIdToDelete = ref<number | null>(null)
 const isDeleting = ref(false)
-
-function dismissBanner() {
-  localStorage.setItem(BANNER_KEY, 'true')
-  bannerDismissed.value = true
-}
 
 function openDeleteDialog(tripId: number) {
   tripIdToDelete.value = tripId
@@ -91,12 +82,6 @@ onMounted(async () => {
 
 <template>
   <AppLayout>
-    <!-- Profile completeness banner -->
-    <ProfileCompletenessBanner
-      v-if="!profileStore.isComplete && !bannerDismissed"
-      @dismiss="dismissBanner"
-    />
-
     <!-- Page header -->
     <div class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">My Trips</h1>

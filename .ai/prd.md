@@ -196,7 +196,8 @@ ID: US-011
 Opis: Jako użytkownik chcę ustawić preferencje stylu podróży dla konkretnej wycieczki.  
 Kryteria akceptacji:
 
-- W widoku wycieczki można wybrać wartości pól Cel, Ile osób, Liczba dni, Co?, Jak szybko?, Jaki typ?, Budżet etc.;
+- W widoku wycieczki można wybrać wartości pól Cel _wymagany_, Ile osób, Liczba dni, Co?, Jak szybko?, Jaki typ?, Budżet
+  etc.;
 - Cześć pól z profilu głównego jest tylko do odczytu jak np. informacje o dzieciach, diecie, mobilności i zwierzętach,
 - ponieważ są to dane niezmienne na poziomie wycieczki
 - Część domyślnych wartości pochodzi domyślnie z profilu globalnego, lecz możemy na poziomie wycieczek niektóre

@@ -47,7 +47,7 @@ const routes = [
   {
     path: '/trips/:id',
     name: 'trip-detail',
-    component: () => import('@/views/TripDetailView.vue'),
+    component: () => import('@/views/TripView.vue'),
     meta: { requiresAuth: true },
     beforeEnter: (to: any) => {
       const tripId = parseInt(to.params.id as string, 10)
