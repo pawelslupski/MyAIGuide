@@ -1,5 +1,5 @@
 ---
-type: always_apply
+type: agent_requested
 description: Backend/Database coding guidelines for MyAIGuide
 ---
 
@@ -12,7 +12,7 @@ description: Backend/Database coding guidelines for MyAIGuide
 - Use Supabase as the single backend service for authentication and database interactions
 - Follow Supabase guidelines for security and performance
 - Use Supabase client type from `src/db/supabase.client.ts`, not directly from `@supabase/supabase-js`
-- Use the custom Database type from `src/db/supabase.types.ts` for type-safe queries
+- Use the custom Database type from `src/db/database.types.ts` for type-safe queries
 - Never expose Supabase service role key on the frontend - use Edge Functions for privileged operations
 
 #### DATA_VALIDATION

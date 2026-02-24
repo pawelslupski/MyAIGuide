@@ -1,5 +1,5 @@
 ---
-type: always_apply
+type: agent_requested
 description: Frontend coding guidelines for MyAIGuide
 ---
 
@@ -11,7 +11,7 @@ description: Frontend coding guidelines for MyAIGuide
 
 - Use the Composition API instead of the Options API for better type inference and code reuse
 - Implement <script setup> for more concise component definitions
-- Use Suspense and async components for handling loading states during code-splitting
+- Use suspense and async components for handling loading states during code-splitting
 - Leverage the defineProps and defineEmits macros for type-safe props and events
 - Use the new defineOptions for additional component options
 - Implement provide/inject for dependency injection instead of prop drilling in deeply nested components

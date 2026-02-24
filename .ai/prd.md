@@ -22,16 +22,27 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
 ### 3.1 System kont i bezpieczeństwo
 
 - Rejestracja/logowanie z wykorzystaniem e‑maila i hasła.
-- Dostęp do notatek, profilu i planów wyłącznie po zalogowaniu.
+- Dostęp do profilu, listy wycieczek, notatek i planów wyłącznie po zalogowaniu.
 - Izolacja danych per konto.
-- Trwałe usunięcie konta usuwa też wszystkie notatki i plany.
+- Trwałe usunięcie konta usuwa też wszystkie wycieczki jak i związane z nimi notatki i plany.
 
 ### 3.2 Profil globalny użytkownika
 
 - Cztery przełączniki cech: „Podróż z dziećmi”, „Podróż ze zwierzętami”, „Mam ograniczenia mobilności”, „Mam preferencje
-  żywieniowe”.
+  żywieniowe” \*jeśli preferencje żywieniowe zaznaczone to w planie mają być uwzględnione informacje o miejscach do
+  jedzenia spełniających te preferencje. Z kolei w formularzu preferencj niezbędne jest dodatkowe pole na opis np. „Mam
+  alergię na ryby, proszę
+  uwzględnić w planie”, które nie może zostać pozostawione puste.
 - Domyślne preferencje stylu podróży: Co? / Jak szybko? / Jaki typ? / Budżet.
-- Wskaźnik kompletności profilu (np. baner „profil kompletny/niekompletny”).
+  1. Co? (Wielokrotny wybór): [🌲 Przyroda] [🏛️ Kultura/Muzea] [🏖️ Plaża/Relaks] [🏙️ City Break] [🍽️ Foodie].
+  2. Jak szybko? (Jeden wybór): [🐢 Slow / Chill] [⚖️ Balans] [🐇 Intensywnie / Max atrakcji].
+  3. Jaki typ? (Jeden wybór): [📍 Baza wypadowa (jedno miejsce, atrakcje w sensownym zasięgu),
+  4. Baza wypadowa(jedno miejsce) z fakultatywnymi dalszymi
+     wycieczkami/wypadami] [🚗 Roadtrip (ciągle w ruchu, kilka miejsc do spania)].
+  5. Budżet - oszczędnie €, umiarkowanie €€, luksusowo €€€
+- Profil tworzony automatycznie przy rejestracji z domyślnymi wartościami preferencjami:
+  Co? Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie.
+- Wszystkie preferencje powinny mieć przyjazne dla oka ikony
 
 ### 3.3 Moduł notatek / wycieczek
 
@@ -41,16 +52,12 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
 
 ### 3.4 Preferencje per wycieczka
 
-- Konfiguracja pól:
-  - Co? (multi‑choice): Przyroda, Kultura/Muzea, Plaża/Relaks, City Break, Foodie.
-  - Jak szybko? (single‑choice): Slow/Chill, Balans, Intensywnie.
-  - Jaki typ? (single‑choice): Baza wypadowa, Roadtrip.
-  - Budżet (single‑choice): €, €€, €€€.
-- Domyślne wartości kopiowane z profilu z możliwością nadpisania.
+- Konfiguracja pól: Ta sama co w profilu głównym plus cel, ile osób, liczba dni
+- Domyślne wartości kopiowane z profilu głównego z możliwością nadpisania.
 
 ### 3.5 Generowanie planu z AI
 
-- Plan generowany na podstawie: jednej notatki, profilu globalnego i preferencji wycieczki.
+- Plan generowany na podstawie: profilu globalnego, preferencji na poziomie wycieczki i notatki.
 - Struktura wyniku (JSON) zawiera m.in.: Day, TimeOfDay (Rano/Popołudnie/Wieczór), LocationName, Description,
   CategoryTag.
 - Język planu = język notatki (automatyczne wykrywanie).
@@ -58,7 +65,7 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
   - maksymalnie 10 000 znaków.
 - Dzienny limit generowania planów: 10 generacji na użytkownika w ruchomym oknie 24h z widocznym licznikiem.
 
-### 3.6 Widok review, edycja i zapis planu
+### 3.6 Widok trip review, edycja i zapis planu
 
 - Wygenerowany plan trafia najpierw jako tymczasowy kandydat (tylko w pamięci aplikacji).
 - Użytkownik może edytować pola kandydata (np. opis, aktywności).
@@ -80,7 +87,7 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
   - integracja z modelem AI generującym ustrukturyzowany plan.
 - Poza zakresem MVP:
   - współdzielenie planów między użytkownikami,
-  - zaawansowane planowanie logistyki (rezerwacje, dokładne godziny, optymalizacja tras),
+  - zaawansowane planowanie logistyki (rezerwacje, dokładne godziny),
   - obsługa multimediów (zdjęcia),
   - wersjonowanie wielu planów dla jednej notatki,
   - automatyczne retry i streaming odpowiedzi modelu,
@@ -108,9 +115,8 @@ Kryteria akceptacji:
 
 - Logowanie i rejestracja odbywają się na dedykowanych stronach.
 - Logowanie wymaga podania adresu email i hasła.
-- Próba wejścia na strony notatek/profilu/planów bez zalogowania przekierowuje do logowania.
+- Próba wejścia na strony dashobardu/wycieczki bez zalogowania przekierowuje do logowania.
 - Po zalogowaniu użytkownik widzi swój dashboard; po wylogowaniu traci dostęp do chronionych zasobów.
-- Użytkownik może logować się do systemu poprzez przycisk w prawym górnym rogu.
 - Użytkownik może się wylogować z systemu poprzez przycisk w prawym górnym rogu na ekranie głównym
 - Nie korzystamy z zewnętrznych serwisów logowania (np. Google, GitHub).
 - Odzyskiwanie hasła powinno być możliwe.
@@ -123,7 +129,7 @@ ID: US-003
 Opis: Jako użytkownik chcę mieć pewność, że nikt nie widzi moich danych.  
 Kryteria akceptacji:
 
-- Użytkownik widzi wyłącznie swoje notatki, profil i plany.
+- Użytkownik widzi wyłącznie swój profil, swoje wycieczki, prefencje, notatki, plany.
 - Próba dostępu do zasobów innego użytkownika kończy się błędem autoryzacji.
 
 ### US-004 Usunięcie konta i danych
@@ -138,10 +144,11 @@ Kryteria akceptacji:
 ### US-005 Konfiguracja profilu globalnego
 
 ID: US-005  
-Opis: Jako użytkownik chcę ustawić informacje o dzieciach, diecie, mobilności i zwierzętach.  
+Opis: Jako użytkownik chcę ustawić informacje o dzieciach, diecie, ograniczeniach mobilności i zwierzętach.  
 Kryteria akceptacji:
 
-- Ekran profilu zawiera przełączniki opisane odpowiednimi etykietami.
+- Nie ma dedykowanego ekran profilu, profil globalny jest umieszczony w górnej części strony głównej (dashboard),
+  ponad listą posiadanych wycieczek i zawiera przełączniki opisane odpowiednimi etykietami oraz ikonami
 - Zmiany zapisują się i wpływają na kolejne generowane plany.
 
 ### US-006 Domyślne preferencje stylu podróży
@@ -150,17 +157,10 @@ ID: US-006
 Opis: Jako użytkownik chcę ustawić domyślne preferencje stylu podróży.  
 Kryteria akceptacji:
 
-- W profilu dostępne są domyślne wartości dla pól Co?, Jak szybko?, Jaki typ?, Budżet.
-- Nowe wycieczki startują z tymi wartościami, z możliwością edycji.
-
-### US-007 Wskaźnik kompletności profilu
-
-ID: US-007  
-Opis: Jako użytkownik chcę widzieć, czy mój profil jest kompletny.  
-Kryteria akceptacji:
-
-- System wskazuje stan profilu (kompletny/niekompletny).
-- Po uzupełnieniu wszystkich wymaganych pól stan zmienia się na „kompletny”.
+- W profilu dostępne są domyślne wartości dla pól Co?, Jak szybko?, Jaki typ?, Budżet etc.
+- Nowe wycieczki startują z tymi wartościami domyślnie wypełnionymi, z możliwością ich dalszej edycji
+  oraz z możliwością ich nadpisywania na poziomie wycieczki wraz z dodatkowymi dedykowanymi preferencjami na poziomie
+  wycieczki.
 
 ### US-008 Utworzenie nowej wycieczki i notatki
 
@@ -168,8 +168,9 @@ ID: US-008
 Opis: Jako użytkownik chcę utworzyć wycieczkę z nazwą i notatką.  
 Kryteria akceptacji:
 
-- Możliwość dodania wycieczki z nazwą i treścią notatki (może być początkowo pusta).
-- Nowa wycieczka pojawia się na liście; data ostatniej modyfikacji jest ustawiona.
+- Możliwość dodania wycieczki z nazwą i opcjonalnie treścią notatki (może być początkowo pusta).
+- Nowa wycieczka pojawia się na liście; data ostatniej modyfikacji jest ustawiona wraz z domyślnymi preferencjami
+  skopiowanymi z profilu globalnego.
 
 ### US-009 Edycja i usuwanie notatki
 
@@ -177,7 +178,7 @@ ID: US-009
 Opis: Jako użytkownik chcę edytować i usuwać notatki.  
 Kryteria akceptacji:
 
-- Możliwość zmiany nazwy wycieczki i treści notatki; data modyfikacji jest aktualizowana.
+- Możliwość zmiany nazwy wycieczki, preferencji i treści notatki; data modyfikacji jest aktualizowana.
 - Usunięcie wycieczki usuwa ją z listy wraz z ewentualnym planem po potwierdzeniu.
 
 ### US-010 Przegląd listy wycieczek
@@ -187,7 +188,7 @@ Opis: Jako użytkownik chcę widzieć listę wycieczek posortowaną wg ostatnich
 Kryteria akceptacji:
 
 - Dashboard wyświetla listę wycieczek posortowaną malejąco po dacie ostatniej modyfikacji.
-- Kliknięcie pozycji otwiera widok szczegółów z panelami [Notatka] i [Plan].
+- Kliknięcie pozycji otwiera widok szczegółów z panelami [Preferencje], [Notatka] i [Plan].
 
 ### US-011 Preferencje per wycieczka
 
@@ -195,9 +196,12 @@ ID: US-011
 Opis: Jako użytkownik chcę ustawić preferencje stylu podróży dla konkretnej wycieczki.  
 Kryteria akceptacji:
 
-- W widoku wycieczki można wybrać wartości pól Ile osób, Liczba dni, Co?, Jak szybko?, Jaki typ?, Budżet;
-- Część domyślnych wartości pochodzi z profilu.
-- Zapisane preferencje są wykorzystywane przy kolejnych generacjach planu.
+- W widoku wycieczki można wybrać wartości pól Cel, Ile osób, Liczba dni, Co?, Jak szybko?, Jaki typ?, Budżet etc.;
+- Cześć pól z profilu głównego jest tylko do odczytu jak np. informacje o dzieciach, diecie, mobilności i zwierzętach,
+- ponieważ są to dane niezmienne na poziomie wycieczki
+- Część domyślnych wartości pochodzi domyślnie z profilu globalnego, lecz możemy na poziomie wycieczek niektóre
+  nadpisywać
+- Zapisane preferencje są wykorzystywane przy kolejnych generacjach planu danej wycieczki
 
 ### US-012 Walidacja treści notatki
 
@@ -254,11 +258,10 @@ ID: US-017
 Opis: Jako użytkownik chcę, aby plan był w języku notatki.  
 Kryteria akceptacji:
 
-- System generuje plan w języku notatki (np. PL/EN), co potwierdzają testowe notatki w różnych językach.
+- System generuje plan w języku notatki (np. PL/EN)
 - W przypadku mieszanych treści wybierany jest dominujący język; brak ręcznego przełącznika języka w MVP.
 
 ## 6. Metryki sukcesu
 
-- ≥ 90% aktywnych użytkowników ma kompletny profil globalny (wymagane pola + ewentualne domyślne preferencje).
 - ≥ 75% aktywnych użytkowników generuje i zapisuje co najmniej 3 plany rocznie (liczone tylko plany po akcji „Zapisz
   plan”).

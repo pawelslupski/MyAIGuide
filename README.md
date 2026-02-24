@@ -1,348 +1,189 @@
 # MyAIGuide
 
-AI-powered web app for quickly turning travel notes and preferences into structured trip plans.
+> AI-powered travel planner that turns your rough notes into structured, day-by-day itineraries.
 
-![Node.js version](https://img.shields.io/badge/node-24.11.1-339933?logo=node.js&logoColor=white)
-![Vue 3](https://img.shields.io/badge/vue-3.5-42b883?logo=vue.js&logoColor=white)
-![Project status](https://img.shields.io/badge/status-in%20development-yellow)
+[![Vue 3](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vue.js)](https://vuejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase)](https://supabase.com/)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite)](https://vitejs.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Table of contents
+## Table of Contents
 
-1. [Project name](#myaiguide)
-2. [Project description](#project-description)
-3. [Tech stack](#tech-stack)
-4. [Getting started locally](#getting-started-locally)
-5. [Available scripts](#available-scripts)
-6. [Project scope](#project-scope)
-7. [Project status](#project-status)
-8. [License](#license)
+- [Project Description](#project-description)
+- [Tech Stack](#tech-stack)
+- [Getting Started Locally](#getting-started-locally)
+- [Available Scripts](#available-scripts)
+- [Project Scope](#project-scope)
+- [Project Status](#project-status)
+- [License](#license)
 
-## Project description
+---
 
-MyAIGuide is a single-page web application (SPA) that helps you turn messy travel ideas into concrete, day-by-day
-itineraries. Each note represents exactly one trip and produces one structured plan in JSON format that you can review,
-edit and save.
+## Project Description
 
-The app solves the problem of collecting links, screenshots and random notes from many sources by letting you:
+MyAIGuide is a single-page web application that helps users plan trips with minimal effort. The core idea is simple:
+**one note = one trip = one AI-generated plan**.
 
-- Store potential trips as simple text notes.
-- Define a global travel profile (e.g. travelling with kids, dietary needs, mobility limitations, pets).
-- Fine-tune preferences per trip (what you want to see, pace, trip type, budget).
-- Generate AI-powered daily plans from a single note plus your preferences.
-- Review and adjust the generated plan before saving it.
+Users write informal travel notes (destinations, ideas, constraints) and the app uses an AI model to produce a
+structured, day-by-day itinerary tailored to their preferences. Plans are organized by time of day
+(Morning / Afternoon / Evening) and include location names, activity descriptions, and category tags.
 
-Generated plans include a structured breakdown by day and time of day (Morning / Afternoon / Evening) with fields such
-as location name, description and category tags. The language of the plan matches the language of the note (automatic
-language detection, no manual language switch in the MVP).
+Key capabilities:
 
-## Tech stack
+- **Global travel profile** — configure once: travelling with children, pets, dietary preferences, mobility
+  constraints, and default travel style (pace, trip type, budget).
+- **Per-trip preferences** — override defaults with trip-specific details: destination, number of people, trip
+  duration, travel style.
+- **AI plan generation** — one click sends notes + preferences to an AI model and returns a structured itinerary.
+  Language of the plan automatically matches the language of the note.
+- **Plan candidate workflow** — generated plans are held in memory for review and editing before being explicitly
+  saved to the database.
+- **Generation quota** — 10 AI generations per user per rolling 24-hour window with a live counter.
 
-### Frontend
+---
 
-- Vue 3.5 (Composition API, `<script setup>`).
-- Vite 7 as the dev server and bundler.
-- TypeScript 5 for static typing.
-- Vue Router for client-side routing.
-- Pinia for state management (e.g. in-memory candidate plans, generation counters).
-- Tailwind CSS 3 for utility-first styling.
-- shadcn-vue for accessible, reusable UI components.
+## Tech Stack
 
-### Backend & database
+| Layer                | Technology                                           |
+| -------------------- | ---------------------------------------------------- |
+| Framework            | Vue 3.5 (Composition API, `<script setup>`)          |
+| Language             | TypeScript 5.9                                       |
+| Build tool           | Vite 7                                               |
+| State management     | Pinia 3                                              |
+| Routing              | Vue Router 4                                         |
+| UI components        | shadcn-vue 2 (Radix Vue / Reka UI)                   |
+| Styling              | Tailwind CSS 3                                       |
+| Icons                | lucide-vue-next                                      |
+| Validation           | Zod 4                                                |
+| Backend              | Supabase (PostgreSQL 17 + Auth + Row Level Security) |
+| Serverless functions | Supabase Edge Functions (Deno 2)                     |
+| AI integration       | OpenRouter.ai (claude-sonnet-4-6 by default)         |
+| Code quality         | ESLint 9, Prettier 3, Husky + lint-staged            |
+| CI/CD                | GitHub Actions                                       |
+| Hosting              | DigitalOcean (Docker)                                |
 
-- Supabase as the backend platform:
-  - PostgreSQL as the primary relational database.
-  - Row Level Security (RLS) to isolate data per user account.
-  - Supabase Auth for email+password signup, login and session management.
-  - Supabase Edge Functions for secure server-side AI calls and other business logic.
+---
 
-### AI integration
-
-- OpenRouter.ai as a unified API over multiple AI providers (OpenAI, Anthropic, Google, etc.).
-- All AI calls are performed from Supabase Edge Functions so API keys stay on the server.
-- Ability to experiment with different models and set cost limits per API key.
-
-### Tooling & developer experience
-
-- Node.js `24.11.1` (managed via `.nvmrc`).
-- ESLint 9 with TypeScript and Vue support.
-- Prettier 3 with the Tailwind CSS plugin.
-- Husky and lint-staged for pre-commit linting and formatting.
-- vue-tsc for strict TypeScript type-checking of Vue components.
-- Vite preview server for testing production builds locally.
-
-### CI/CD & hosting
-
-- GitHub Actions for continuous integration and deployment pipelines.
-- DigitalOcean for hosting the application (e.g. via container image or App Platform).
-
-For more details, see:
-
-- Product Requirements (PRD, Polish): `.ai/prd.md`
-- Tech stack document (Polish): `.ai/tech-stack.md`
-
-## Getting started locally
+## Getting Started Locally
 
 ### Prerequisites
 
-- **Node.js** `24.11.1` (recommended: use `nvm` and run `nvm use` in the project root)
-- **npm** (or another Node package manager of your choice)
-- **Supabase CLI** - Install via `npm install -g supabase` or
-  see [Supabase CLI docs](https://supabase.com/docs/guides/cli)
-- **Docker** - Required for running Supabase locally
+- **Node.js** ≥ 20 and **npm** ≥ 10
+- **Supabase CLI** — [installation guide](https://supabase.com/docs/guides/cli)
+- **Docker** — required by Supabase CLI for local development
+- An **OpenRouter.ai** API key
 
-### Installation
-
-1. **Install dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-2. **(Optional) Enable Git hooks:**
-   ```bash
-   npm run prepare
-   ```
-   This configures Husky for pre-commit linting and formatting.
-
-### Environment configuration
-
-This project requires Supabase (local or remote) and OpenRouter.ai API access.
-
-#### 1. Create `.env` file in project root
-
-````bash
-# Supabase Configuration
-VITE_SUPABASE_URL=http://127.0.0.1:54321
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJFUzI1NiIsImtpZCI6ImI4MTI2OWYxLTIxZDgtNGYyZS1iNzE5LWMyMjQwYTg0MGQ5MCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjIwODM2NjQ1MTV9.u5l7NDWah4uQrD2p0rRei_svb1FMmrQcTu1PWP77_2JUgSWDMA9XoilSXv6zLL4iYUNISSanesZrHh2eVY54DA
-
-# OpenRouter API Key (get yours at https://openrouter.ai/keys)
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-
-**Note:** The `VITE_SUPABASE_ANON_KEY` shown above is the default local Supabase key. For production, use your actual Supabase project credentials.
-
-#### 2. Create `supabase/.env.local` file
+### 1. Clone the repository
 
 ```bash
-# OpenRouter API Key for Edge Functions
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-````
+git clone https://github.com/your-username/my-ai-guide.git
+cd my-ai-guide
+```
 
-This file provides environment variables to Supabase Edge Functions running locally.
+### 2. Install dependencies
 
-### Running the app for the first time
+```bash
+npm install
+```
 
-**Important:** You need to start services in the correct order:
+### 3. Configure environment variables
 
-#### Step 1: Start Supabase
+Create a `.env` file in the project root:
+
+```env
+VITE_SUPABASE_URL=http://localhost:54321
+VITE_SUPABASE_ANON_KEY=<your-local-supabase-anon-key>
+```
+
+Create `supabase/.env.local` for Edge Functions:
+
+```env
+OPENROUTER_API_KEY=<your-openrouter-api-key>
+```
+
+### 4. Start Supabase locally
 
 ```bash
 supabase start
 ```
 
-This command:
+The Supabase CLI will print your local URL and anon key — copy these into your `.env` file.
 
-- Starts local Supabase services (PostgreSQL, Auth, Storage, etc.) using Docker
-- Prints service URLs and credentials
-- May take a few minutes on first run
+Apply any pending database migrations:
 
-**Expected output:**
-
-```
-supabase local development setup is running.
-
-API URL: http://127.0.0.1:54321
-DB URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-Studio URL: http://127.0.0.1:54323
+```bash
+supabase db reset
 ```
 
-#### Step 2: Serve Edge Functions
+### 5. Start the Edge Function
 
-In a **new terminal**, start the Edge Functions server:
+In a separate terminal:
 
 ```bash
 supabase functions serve generate-travel-plan --no-verify-jwt --env-file supabase/.env.local
 ```
 
-**Flags explained:**
-
-- `--no-verify-jwt` - Disables JWT verification for local development (authentication is mocked)
-- `--env-file supabase/.env.local` - Loads environment variables (including OpenRouter API key)
-
-**Expected output:**
-
-```
-Serving functions on http://127.0.0.1:54321/functions/v1/
-```
-
-#### Step 3: Start the frontend dev server
-
-In a **new terminal**, start Vite:
+### 6. Start the development server
 
 ```bash
 npm run dev
 ```
 
-**Expected output:**
+The app will be available at **http://localhost:5173**.
 
-```
-VITE v7.x.x  ready in XXX ms
+---
 
-➜  Local:   http://localhost:5173/
-```
+## Available Scripts
 
-#### Step 4: Open the app
+| Script             | Description                                                |
+| ------------------ | ---------------------------------------------------------- |
+| `npm run dev`      | Start the Vite development server on port 5173             |
+| `npm run build`    | Type-check with `vue-tsc`, then produce a production build |
+| `npm run preview`  | Serve the production build locally for preview             |
+| `npm run lint`     | Run ESLint with zero-warning policy                        |
+| `npm run lint:fix` | Run ESLint and auto-fix all fixable issues                 |
+| `npm run format`   | Format all files with Prettier                             |
 
-Navigate to **http://localhost:5173/trips/1** in your browser.
+> Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on staged `.ts` and `.vue` files.
 
-### Quick start summary
+---
 
-For subsequent runs, use these commands in **separate terminals**:
-
-```bash
-# Terminal 1: Supabase services
-supabase start
-
-# Terminal 2: Edge Functions
-supabase functions serve generate-travel-plan --no-verify-jwt --env-file supabase/.env.local
-
-# Terminal 3: Frontend dev server
-npm run dev
-```
-
-### Stopping services
-
-- **Frontend:** Press `Ctrl+C` in the terminal running `npm run dev`
-- **Edge Functions:** Press `Ctrl+C` in the terminal running `supabase functions serve`
-- **Supabase:** Run `supabase stop` (or `supabase stop --no-backup` to also remove data)
-
-### Building for production
-
-To create an optimized production build:
-
-```bash
-npm run build
-```
-
-To preview the built app locally:
-
-```bash
-npm run preview
-```
-
-## Available scripts
-
-All scripts are defined in `package.json`.
-
-- `npm run dev` – start the Vite development server.
-- `npm run build` – run TypeScript type-checking via `vue-tsc -b` and then build the production bundle with Vite.
-- `npm run preview` – serve the contents of the production build locally.
-- `npm run lint` – run ESLint on the entire project and fail on any warnings.
-- `npm run lint:fix` – run ESLint with automatic fixes where possible.
-- `npm run format` – format the codebase with Prettier (including Markdown and CSS).
-- `npm run prepare` – configure Husky Git hooks (automatically run by package managers that support `prepare`).
-
-Linting and formatting are also wired into `lint-staged`, so on each commit:
-
-- `*.{ts,vue}` files are linted with ESLint and formatted with Prettier.
-- `*.{js,ts,vue,json,css,md}` files are formatted with Prettier.
-
-## Project scope
+## Project Scope
 
 ### In scope (MVP)
 
-The MVP of MyAIGuide focuses on individual trip planning:
+- Email and password authentication (register, login, logout, password recovery)
+- Secure per-user data isolation via Row Level Security
+- Account deletion with full data removal
+- Global travel profile with preference toggles and defaults
+- Full CRUD for trips and notes (max 10,000 characters per note)
+- Per-trip preference overrides (destination, number of people, trip duration, travel style)
+- AI-powered plan generation with structured JSON output
+- Plan candidate workflow: generate → review → edit → save
+- Generation quota: 10 generations per user per rolling 24-hour window
+- Automatic plan language detection matching the note language _only PL/EN for now_
 
-- **User accounts and security**
-  - Email+password registration and login.
-  - Access to notes, profile and plans only after authentication.
-  - Strong isolation of data between user accounts.
-  - Deleting an account permanently removes all notes and plans.
+### Out of scope (post-MVP)
 
-- **Global user profile**
-  - Four main switches:
-    - Travelling with children.
-    - Travelling with pets.
-    - Mobility limitations.
-    - Dietary preferences.
-  - Default travel style preferences:
-    - What? (e.g. Nature, Culture/Museums, Beach/Relax, City Break, Foodie).
-    - How fast? (Slow/Chill, Balanced, Intensive).
-    - Type of trip (Base camp vs. Road trip).
-    - Budget level (€ / €€ / €€€).
-  - A profile completeness indicator (e.g. banner showing “profile complete / incomplete”).
+- Sharing or collaboration on plans between users
+- Detailed logistics planning (exact times, reservations, bookings)
+- Multimedia support (photos, maps)
+- Multiple plan versions for a single trip
+- Automatic retry and response streaming from the AI model
+- Native mobile applications
 
-- **Notes & trips**
-  - Each note represents one trip.
-  - Full CRUD operations on notes/trips.
-  - Dashboard listing all trips, sorted by last modified date (descending).
-  - Trip detail view with separate panels for the Note and the Plan.
+---
 
-- **Per-trip preferences**
-  - Each trip can override the global defaults for:
-    - What? (multi-choice categories).
-    - How fast? (single-choice).
-    - Type of trip (single-choice).
-    - Budget (single-choice).
-  - Saved per-trip preferences are used for subsequent plan generations.
+## Project Status
 
-- **AI-generated plans**
-  - Plans are generated from:
-    - A single note describing the trip.
-    - The global profile.
-    - Per-trip preferences.
-  - Output is a structured JSON-like plan containing:
-    - Day.
-    - TimeOfDay (Morning / Afternoon / Evening).
-    - LocationName.
-    - Description.
-    - CategoryTag.
-  - The language of the plan matches the language of the note (automatic detection).
-  - Note length validation:
-    - Minimum: 1,000 characters to enable “Generate plan”.
-    - Maximum: 10,000 characters; the generate action is disabled when exceeded.
-  - Daily generation limit:
-    - 10 generations per user in a rolling 24-hour window.
-    - Visible counter such as `X/10 in the last 24 hours`.
-    - The generate button is disabled with a clear message once the limit is reached.
+**MVP — active development.**
 
-- **Plan review, editing and saving**
-  - New plans are initially stored only in memory as temporary candidates.
-  - Users can review and edit the candidate (e.g. descriptions, activities) before saving.
-  - Saving persists the candidate to the database and binds it 1:1 to the note.
-  - Regenerating a plan replaces the previously saved plan.
-  - Unsaved candidates are lost when refreshing the page or closing the browser.
+The project is in MVP phase. Core features (auth, trip management, AI generation, plan saving) are implemented and
+functional. Further iterations will focus on UX refinements and expanding features based on user feedback.
 
-- **Error handling & edge cases**
-  - Clear error messages and a manual “Try again” action for timeouts or API errors.
-  - No automatic retry or streaming in the MVP.
-  - After the daily generation limit is exceeded, the generate button remains disabled with an explanatory message.
-
-### Out of scope (MVP)
-
-The following features are explicitly out of scope for the first version:
-
-- Sharing plans between users.
-- Advanced logistics (bookings, precise timings, automatic route optimisation).
-- Handling photos or other media.
-- Keeping multiple versions of plans for a single note.
-- Automatic retries and streaming responses from the AI model.
-- Native mobile apps (MVP is a web SPA only).
-
-## Project status
-
-The project is in active early development:
-
-- The product requirements and technical stack are defined.
-- The frontend scaffold (Vue 3 + TypeScript + Vite) and tooling are set up.
-- Core features such as authentication, trip management, profile handling and AI plan generation are being implemented
-  iteratively.
-
-Expect breaking changes and rapid iteration while the MVP is built.
+---
 
 ## License
 
-A specific open-source license has not been chosen yet.
-
-Until an explicit `LICENSE` file is added to this repository, all rights are reserved by the repository owner. If you
-plan to use MyAIGuide in your own projects or have questions about licensing, please open an issue or contact the
-maintainer.
+This project is licensed under the [MIT License](LICENSE).

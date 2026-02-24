@@ -5,7 +5,7 @@ description: Comprehensive coding guidelines for MyAIGuide - Vue 3 SPA with Type
 
 # AI Rules for MyAIGuide
 
-MyAIGuide is a web SPA for quickly creating trip plans based on simple notes and travel preferences.
+MyAIGuide is a web SPA for quickly creating trip plans based on simple notes and both user & travel preferences.
 
 ## Tech Stack
 
