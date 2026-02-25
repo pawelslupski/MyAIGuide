@@ -2,78 +2,86 @@
 
 ## 1. Endpoint Overview
 
-`GET /api/profiles/me` retrieves the authenticated user's global travel profile — preference flags (kids, pets,
-mobility, dietary) and default trip preferences (what, speed, type, budget).
+Retrieves the full profile of the currently authenticated user. The profile contains global traveler flags (`has_kids`, `has_pets`, `has_mobility_issues`, `has_dietary_preferences`, `dietary_preferences_description`) and default trip-preference fields (`default_what`, `default_speed`, `default_type`, `default_budget`).
 
-**Implementation approach:** This project uses the Supabase JS Client directly in Pinia stores (no standalone
-REST server). The "endpoint" is implemented as the `fetchProfile()` action in `src/stores/profile.store.ts`,
-which queries Supabase PostgREST and relies on RLS for data isolation. Per the API plan (section 6.2), standard
-CRUD operations like this use the Supabase JS Client — not an Edge Function.
+This endpoint is a **standard CRUD read** implemented via the **Supabase JS client + PostgREST + RLS** — no Edge Function is required. A profile is automatically created by the `on_user_created` database trigger on registration, so it is always present for authenticated users.
 
 ---
 
 ## 2. Request Details
 
 - **HTTP Method:** GET
-- **URL Pattern:** `/api/profiles/me` (maps to `supabase.from('profiles').select('*')` filtered by authenticated user)
+- **URL Structure:** `/api/profiles/me` (maps to a Supabase PostgREST query on the `profiles` table filtered by the authenticated user's `user_id`)
 - **Parameters:**
-  - Required: none
+  - Required: `Authorization: Bearer <supabase_session_token>` (HTTP header)
   - Optional: none
+- **Path parameters:** none
+- **Query parameters:** none
 - **Request Body:** none
-- **Headers:**
-  - `Authorization: Bearer <supabase_session_token>` — required; handled automatically by the Supabase JS Client session
 
 ---
 
 ## 3. Used Types
 
-All types are defined in `src/types.ts`:
+### Response DTO — `ProfileDTO`
+
+Defined in `src/types.ts`. Extends the raw DB row, narrowing string preference columns to typed enum unions:
 
 ```typescript
-// Response DTO — direct mapping to profiles table row
-type ProfileDTO = Tables<'profiles'>
-// {
-//   id: number
-//   user_id: string
-//   has_kids: boolean
-//   has_pets: boolean
-//   has_mobility_issues: boolean
-//   has_dietary_preferences: boolean
-//   default_what: string[]
-//   default_speed: string | null
-//   default_type: string | null
-//   default_budget: string | null
-//   created_at: string
-//   updated_at: string
-// }
-
-// Standard error response
-interface ErrorResponse {
-  error: { code: string; message: string; details?: Record<string, unknown> }
+export interface ProfileDTO extends Omit<
+  Tables<'profiles'>,
+  'default_what' | 'default_speed' | 'default_type' | 'default_budget'
+> {
+  default_what: WhatPreference[] // enum array
+  default_speed: SpeedPreference // 'slow_chill' | 'balance' | 'intensive'
+  default_type: TypePreference // 'base' | 'base_with_trips' | 'roadtrip'
+  default_budget: BudgetPreference // 'budget' | 'moderate' | 'luxury'
 }
 ```
 
-New Zod schema to be created in `src/lib/validation/profile.schemas.ts`:
+### Validation Schema — `ProfileDTOSchema`
+
+Defined in `src/lib/validation/profile.schemas.ts`. Used to validate the Supabase response before returning it to the caller:
 
 ```typescript
-// ProfileDTOSchema — validates Supabase response shape per DATA_VALIDATION rule in backend.mdc
-const ProfileDTOSchema: z.ZodObject<...>
+export const ProfileDTOSchema = z.object({
+  id: z.number().int().positive(),
+  user_id: z.string().uuid(),
+  has_kids: z.boolean(),
+  has_pets: z.boolean(),
+  has_mobility_issues: z.boolean(),
+  has_dietary_preferences: z.boolean(),
+  dietary_preferences_description: z.string().nullable(),
+  default_what: z.array(WhatPreferenceSchema).default([]),
+  default_speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable(),
+  default_type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable(),
+  default_budget: z.enum(['budget', 'moderate', 'luxury']).nullable(),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime()
+})
 ```
+
+### No Command Model
+
+GET endpoint — no request body, no command model required.
 
 ---
 
 ## 4. Response Details
 
-### Success — 200 OK
+### Success — `200 OK`
+
+Returns the full `ProfileDTO` object:
 
 ```json
 {
   "id": 123,
-  "user_id": "uuid-string",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
   "has_kids": false,
   "has_pets": false,
   "has_mobility_issues": false,
   "has_dietary_preferences": true,
+  "dietary_preferences_description": "Fish allergy – please include suitable restaurants",
   "default_what": ["nature", "foodie"],
   "default_speed": "balance",
   "default_type": "roadtrip",
@@ -85,20 +93,20 @@ const ProfileDTOSchema: z.ZodObject<...>
 
 ### Error Responses
 
-| Status | Code             | Condition                                                                     |
-| ------ | ---------------- | ----------------------------------------------------------------------------- |
-| 401    | `UNAUTHORIZED`   | No valid Supabase session                                                     |
-| 404    | `NOT_FOUND`      | Profile row does not exist (edge case — should be auto-created by DB trigger) |
-| 500    | `INTERNAL_ERROR` | Supabase connection failure or unexpected DB error                            |
-| 500    | `INTERNAL_ERROR` | Zod validation mismatch on DB response (schema drift)                         |
+| HTTP Code | Error Code       | Condition                                               |
+| --------- | ---------------- | ------------------------------------------------------- |
+| `401`     | `UNAUTHORIZED`   | Missing, invalid, or expired Bearer token               |
+| `404`     | `NOT_FOUND`      | Profile row not found (defensive; should never occur)   |
+| `500`     | `INTERNAL_ERROR` | Supabase DB error or response schema validation failure |
 
-All errors follow the standard `ErrorResponse` format:
+All errors follow the shared `ErrorResponse` structure:
 
 ```json
 {
   "error": {
     "code": "ERROR_CODE",
-    "message": "Human-readable description"
+    "message": "Human-readable message",
+    "details": {}
   }
 }
 ```
@@ -108,28 +116,46 @@ All errors follow the standard `ErrorResponse` format:
 ## 5. Data Flow
 
 ```
-Component (e.g. DashboardView)
+Client (Vue SPA)
+  │
+  │  1. User is authenticated (Pinia auth store / Supabase Auth SDK holds session)
   │
   ▼
-profileStore.fetchProfile()           [src/stores/profile.store.ts]
+profile.store.ts :: fetchProfile()
   │
-  ├─► supabaseClient.auth.getUser()   → validates session, extracts user.id
-  │     └─ throws UNAUTHORIZED if no session
+  │  2. Resolve authenticated user via supabaseClient.auth.getUser()
+  │     → throw createUnauthorizedError() if user is null
   │
-  ├─► supabase.from('profiles')
-  │     .select('*')
-  │     .eq('user_id', user.id)       → RLS enforces auth.uid() = user_id at DB level
-  │     .single()
-  │     └─ returns ProfileDTO row or error
+  ▼
+profile.service.ts :: getProfile(userId: string)
   │
-  ├─► ProfileDTOSchema.parse(data)    → Zod validation (response integrity check)
-  │     └─ throws INTERNAL_ERROR on schema mismatch
+  │  3. Query Supabase PostgREST:
+  │     supabaseClient
+  │       .from('profiles')
+  │       .select('*')
+  │       .eq('user_id', userId)
+  │       .single()
   │
-  └─► profile.value = validatedData   → reactive Pinia state updated
+  │  4. RLS policy enforces auth.uid() = user_id at DB level
+  │
+  │  5. If fetchError.code === 'PGRST116' → throw createProfileNotFoundError() (404)
+  │     If other fetchError                → throw createInternalError(message)  (500)
+  │
+  │  6. Validate response with ProfileDTOSchema.parse(data)
+  │     On ZodError → throw createInternalError('Profile data validation failed')
+  │
+  │  7. Return validated ProfileDTO
+  │
+  ▼
+profile.store.ts
+  │
+  │  8. Assign to profile.value = result
+  │     Set isLoading = false
+  │
+  ▼
+Client (Vue SPA)
+     Reads profile from store; displays preferences in UI
 ```
-
-The `defaultPreferences` computed getter derives `TripPreferencesDto` from the stored profile, used as fallbacks
-when creating new trips.
 
 ---
 
@@ -137,216 +163,160 @@ when creating new trips.
 
 ### Authentication
 
-- Supabase JS Client automatically attaches the active session JWT to every request
-- `supabaseClient.auth.getUser()` must be called first to confirm session validity before trusting `user.id`
-- If no valid session exists, throw `createUnauthorizedError()` immediately (guard clause)
+- Resolve the current user using `supabaseClient.auth.getUser()` **before** any database interaction.
+- If no session exists, throw `createUnauthorizedError()` (401) immediately — no DB query is made.
+- Supabase manages JWT storage and auto-refresh; the anon key is used (no service role key needed).
 
-### Authorization — Defense in Depth
+### Authorization (IDOR prevention)
 
-| Layer          | Mechanism                                                                              |
-| -------------- | -------------------------------------------------------------------------------------- |
-| Application    | `auth.getUser()` guard; query filtered by `user.id`                                    |
-| Database (RLS) | `USING (auth.uid() = user_id)` — blocks cross-user reads even on misconfigured queries |
+- The query filters by `user_id = userId` **and** RLS policy enforces `auth.uid() = user_id` at the PostgreSQL level.
+- No resource ID is exposed in the URL — the user can only ever access their own profile.
+- Defense in depth: application-level `user_id` filter + DB-level RLS.
 
-RLS policy (`profiles` table):
+### Data Exposure
 
-```sql
-CREATE POLICY "Users can view own profile"
-  ON profiles FOR SELECT
-  USING (auth.uid() = user_id);
-```
+- All profile fields returned are appropriate for the profile owner — no sensitive data from other users is accessible.
+- `dietary_preferences_description` may contain personal medical information; it is only returned to the authenticated owner and protected by RLS.
 
-### Additional Notes
+### No Privileged Operations
 
-- Never expose Supabase service role key on the frontend — the anon key is used via `src/db/supabase.client.ts`
-- Profile data contains no sensitive PII beyond user preferences
+- Standard anon key + RLS is sufficient; no Supabase service role key is required for this endpoint.
+- No Edge Function needed.
 
 ---
 
 ## 7. Error Handling
 
-### New Error Factory Required
+| Scenario                              | Root Cause                                   | Error Factory                  | HTTP |
+| ------------------------------------- | -------------------------------------------- | ------------------------------ | ---- |
+| No session / invalid token            | `auth.getUser()` returns null user           | `createUnauthorizedError()`    | 401  |
+| Expired JWT (not refreshed)           | `auth.getUser()` returns null user           | `createUnauthorizedError()`    | 401  |
+| Profile row missing (trigger failure) | `PGRST116` from `.single()` with no rows     | `createProfileNotFoundError()` | 404  |
+| DB connection failure                 | Non-PGRST116 Supabase error                  | `createInternalError(msg)`     | 500  |
+| Response fails schema validation      | ZodError from `ProfileDTOSchema.parse(data)` | `createInternalError(msg)`     | 500  |
 
-Add to `src/lib/errors/api.error.ts`:
-
-```typescript
-export function createProfileNotFoundError(): ApiError {
-  return new ApiError(404, 'NOT_FOUND', 'Profile not found')
-}
-```
-
-### Error Mapping in Store
-
-```typescript
-catch (err: unknown) {
-  const apiErr = toApiError(err)   // converts any error to ApiError
-  error.value = apiErr.toResponse()
-  throw apiErr
-}
-```
-
-| Error source                           | Resulting code   | Status |
-| -------------------------------------- | ---------------- | ------ |
-| `auth.getUser()` returns no user       | `UNAUTHORIZED`   | 401    |
-| Supabase returns `PGRST116` (no rows)  | `NOT_FOUND`      | 404    |
-| Supabase returns other PostgREST error | `INTERNAL_ERROR` | 500    |
-| Zod parse failure                      | `INTERNAL_ERROR` | 500    |
-
-### No Generation Log Required
-
-Profile fetch failures are not recorded in `plan_generations` — that table is exclusively for AI generation
-attempts. Errors are surfaced through the store's `error` ref for component-level display.
+All errors are caught in `profile.store.ts::fetchProfile()` in the single `catch` block, converted via `toApiError(err)`, stored in `error.value`, and rethrown for components to handle.
 
 ---
 
 ## 8. Performance Considerations
 
-- **Index:** `idx_profiles_user_id` (UNIQUE) on `profiles(user_id)` — O(1) lookup by user
-- **Single row:** `.single()` ensures exactly one row is returned; PostgreSQL stops scanning after the first match
-- **Caching:** Profile is stored in Pinia state for the session. Components should check `profile.value` before
-  calling `fetchProfile()` again to avoid redundant queries. Add a `isProfileLoaded` computed if needed.
-- **No pagination needed:** 1:1 relationship between user and profile
+- **Index:** `idx_profiles_user_id` (unique index on `profiles.user_id`) makes the lookup O(1) — no full table scan.
+- **Single row:** `.single()` terminates the query immediately after the first match.
+- **No joins:** The query fetches all columns from one table — minimal data transfer.
+- **Caching:** The Pinia store holds the profile in memory after the first fetch. Components should check `profile.value` before calling `fetchProfile()` to avoid redundant requests.
 
 ---
 
 ## 9. Implementation Steps
 
-### Step 1 — Create Zod schema for ProfileDTO
+1. **Create `src/lib/services/profile.service.ts`**
 
-**File:** `src/lib/validation/profile.schemas.ts` (new file)
+   Extract the Supabase query logic from `profile.store.ts` into a standalone service function following the `trip.service.ts` pattern:
 
-Define `ProfileDTOSchema` using Zod, matching the `profiles` table structure and DB constraints:
+   ```typescript
+   // src/lib/services/profile.service.ts
+   import { supabaseClient } from '@/db/supabase.client'
+   import type { ProfileDTO } from '@/types'
+   import { validateProfileDTO } from '@/lib/validation/profile.schemas'
+   import { createProfileNotFoundError, createInternalError } from '@/lib/errors/api.error'
+   import { ZodError } from 'zod'
 
-```typescript
-import { z } from 'zod'
+   /**
+    * Fetch the authenticated user's profile by their userId.
+    *
+    * @param userId - Authenticated user UUID (from Supabase Auth session)
+    * @returns Promise<ProfileDTO> - Typed, validated profile data
+    * @throws ApiError 404 if profile row not found (edge case; trigger should always create it)
+    * @throws ApiError 500 on DB error or response validation failure
+    */
+   export async function getProfile(userId: string): Promise<ProfileDTO> {
+     const { data, error } = await supabaseClient
+       .from('profiles')
+       .select('*')
+       .eq('user_id', userId)
+       .single()
 
-export const WhatPreferenceSchema = z.enum([
-  'nature',
-  'culture_museums',
-  'beach_relax',
-  'city_break',
-  'foodie'
-])
+     if (error) {
+       if (error.code === 'PGRST116') throw createProfileNotFoundError()
+       throw createInternalError(error.message)
+     }
 
-export const ProfileDTOSchema = z.object({
-  id: z.number().int().positive(),
-  user_id: z.string().uuid(),
-  has_kids: z.boolean(),
-  has_pets: z.boolean(),
-  has_mobility_issues: z.boolean(),
-  has_dietary_preferences: z.boolean(),
-  default_what: z.array(WhatPreferenceSchema).default([]),
-  default_speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable(),
-  default_type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable(),
-  default_budget: z.enum(['budget', 'moderate', 'luxury']).nullable(),
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime()
-})
+     try {
+       return validateProfileDTO(data)
+     } catch (err) {
+       if (err instanceof ZodError) {
+         throw createInternalError('Profile data validation failed')
+       }
+       throw err
+     }
+   }
+   ```
 
-export function validateProfileDTO(data: unknown) {
-  return ProfileDTOSchema.parse(data)
-}
-```
+2. **Refactor `src/stores/profile.store.ts::fetchProfile()`**
 
-> Note: `WhatPreferenceSchema` is also defined in `plan.schemas.ts`. Extract it to a shared
-> `preference.schemas.ts` to avoid duplication, or re-export from `profile.schemas.ts`.
+   Replace the inline Supabase query with a call to the new service function. The store retains responsibility for:
+   - Auth session check (`supabaseClient.auth.getUser()`)
+   - State management (`isLoading`, `error`, `profile`)
+   - Error conversion via `toApiError`
 
-### Step 2 — Add `createProfileNotFoundError` factory
+   ```typescript
+   // In profile.store.ts
+   import { getProfile } from '@/lib/services/profile.service'
 
-**File:** `src/lib/errors/api.error.ts` (edit existing)
+   async function fetchProfile(): Promise<void> {
+     isLoading.value = true
+     error.value = null
 
-Add after the existing `createNotFoundError` (which is trip-specific):
+     try {
+       const {
+         data: { user }
+       } = await supabaseClient.auth.getUser()
+       if (!user) throw createUnauthorizedError()
 
-```typescript
-export function createProfileNotFoundError(): ApiError {
-  return new ApiError(404, 'NOT_FOUND', 'Profile not found')
-}
-```
+       profile.value = await getProfile(user.id)
+     } catch (err: unknown) {
+       const apiErr = toApiError(err)
+       error.value = apiErr.toResponse()
+       throw apiErr
+     } finally {
+       isLoading.value = false
+     }
+   }
+   ```
 
-### Step 3 — Update `fetchProfile()` in profile store
+3. **Verify `ProfileDTOSchema` covers all DB columns**
 
-**File:** `src/stores/profile.store.ts` (edit existing)
+   Open `src/lib/validation/profile.schemas.ts` and confirm the schema includes every column returned by `SELECT *` on `profiles`. The existing schema already covers all fields — no changes required.
 
-Integrate Zod validation and `ApiError` pattern into the existing `fetchProfile()` action:
+4. **Add `createProfileNotFoundError` factory (if missing)**
 
-```typescript
-import { validateProfileDTO } from '@/lib/validation/profile.schemas'
-import {
-  createUnauthorizedError,
-  createProfileNotFoundError,
-  createInternalError,
-  toApiError
-} from '@/lib/errors/api.error'
+   Confirm `src/lib/errors/api.error.ts` exports `createProfileNotFoundError()`. It already exists:
 
-async function fetchProfile(): Promise<void> {
-  isLoading.value = true
-  error.value = null
+   ```typescript
+   export function createProfileNotFoundError(): ApiError {
+     return new ApiError(404, 'NOT_FOUND', 'Profile not found')
+   }
+   ```
 
-  try {
-    const {
-      data: { user }
-    } = await supabaseClient.auth.getUser()
-    if (!user) throw createUnauthorizedError()
+   No changes required.
 
-    const { data, error: fetchError } = await supabaseClient
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
+5. **Update `updateProfile` action in the store (cleanup)**
 
-    if (fetchError) {
-      // PGRST116 = no rows returned by .single()
-      if (fetchError.code === 'PGRST116') throw createProfileNotFoundError()
-      throw createInternalError(fetchError.message)
-    }
+   The existing `updateProfile` in `profile.store.ts` uses a raw Supabase query without error factories. Align it with the pattern used by `fetchProfile` (use `toApiError`, typed errors). This is a parallel improvement — do after the service extraction is verified.
 
-    // Validate DB response shape (guards against schema drift)
-    profile.value = validateProfileDTO(data)
-  } catch (err: unknown) {
-    const apiErr = toApiError(err)
-    error.value = apiErr.toResponse()
-    throw apiErr
-  } finally {
-    isLoading.value = false
-  }
-}
-```
+6. **Write a service-level unit test (recommended)**
 
-### Step 4 — Guard against redundant calls in components
+   Create `src/lib/services/profile.service.test.ts`. Mock `supabaseClient` and test:
+   - Returns `ProfileDTO` on a valid Supabase response.
+   - Throws `404 NOT_FOUND` when Supabase returns `PGRST116`.
+   - Throws `500 INTERNAL_ERROR` on a generic Supabase error.
+   - Throws `500 INTERNAL_ERROR` when the response fails `ProfileDTOSchema` (e.g., unknown enum value).
 
-**File:** any component calling `fetchProfile()` (e.g. `src/views/DashboardView.vue`)
+7. **Integration smoke-test (manual)**
 
-Add a guard to skip the fetch if profile is already loaded:
-
-```typescript
-if (!profileStore.profile) {
-  await profileStore.fetchProfile()
-}
-```
-
-Or add an `isProfileLoaded` computed to the store:
-
-```typescript
-const isProfileLoaded = computed(() => profile.value !== null)
-```
-
-### Step 5 — Verify RLS policy is applied
-
-**File:** `supabase/migrations/` — confirm the SELECT policy exists:
-
-```sql
-CREATE POLICY "Users can view own profile"
-  ON profiles FOR SELECT
-  USING (auth.uid() = user_id);
-```
-
-This is defined in `db-plan.md` section 4.1. Verify it is included in the active migration files.
-
-### Step 6 — Manual verification checklist
-
-- [ ] Authenticated user receives their own profile (200)
-- [ ] Unauthenticated request is rejected (401)
-- [ ] Request with a valid session but no profile row returns 404
-- [ ] `defaultPreferences` computed reflects fetched profile values
-- [ ] `isLoading` and `error` state are correctly set/cleared during the fetch lifecycle
-- [ ] Cross-user access is blocked by RLS (cannot access another user's profile even with valid auth)
+   In the running dev environment:
+   - Login as a test user.
+   - Navigate to the profile page — confirm the store loads without errors.
+   - Open DevTools → Network → confirm the Supabase PostgREST request returns `200` with the expected JSON shape.
+   - Logout and reload — confirm the page redirects / shows 401 handling instead of crashing.
