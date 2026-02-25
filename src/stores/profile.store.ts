@@ -2,13 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ProfileDTO, ErrorResponse, TripPreferencesDto } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
-import { validateProfileDTO } from '@/lib/validation/profile.schemas'
-import {
-  createUnauthorizedError,
-  createProfileNotFoundError,
-  createInternalError,
-  toApiError
-} from '@/lib/errors/api.error'
+import { createUnauthorizedError, toApiError } from '@/lib/errors/api.error'
+import { getProfile, updateProfile as updateProfileService } from '@/lib/services/profile.service'
 
 /**
  * Profile Store
@@ -45,19 +40,7 @@ export const useProfileStore = defineStore('profile', () => {
       } = await supabaseClient.auth.getUser()
       if (!user) throw createUnauthorizedError()
 
-      const { data, error: fetchError } = await supabaseClient
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-
-      if (fetchError) {
-        // PGRST116 = no rows returned by .single()
-        if (fetchError.code === 'PGRST116') throw createProfileNotFoundError()
-        throw createInternalError(fetchError.message)
-      }
-
-      profile.value = validateProfileDTO(data)
+      profile.value = await getProfile(user.id)
     } catch (err: unknown) {
       const apiErr = toApiError(err)
       error.value = apiErr.toResponse()
@@ -74,31 +57,19 @@ export const useProfileStore = defineStore('profile', () => {
   async function updateProfile(updates: Partial<ProfileDTO>): Promise<void> {
     if (!profile.value) return
 
+    error.value = null
+
     try {
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user) throw createUnauthorizedError()
 
-      const { data, error: updateError } = await supabaseClient
-        .from('profiles')
-        .update(updates)
-        .eq('user_id', user.id)
-        .select()
-        .single()
-
-      if (updateError) throw updateError
-      if (!data) throw new Error('Failed to update profile')
-
-      profile.value = data
-    } catch (err: any) {
-      error.value = {
-        error: {
-          code: err.code || 'UPDATE_ERROR',
-          message: err.message || 'Failed to update profile'
-        }
-      }
-      throw err
+      profile.value = await updateProfileService(user.id, updates)
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      error.value = apiErr.toResponse()
+      throw apiErr
     }
   }
 

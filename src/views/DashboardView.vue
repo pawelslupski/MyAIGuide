@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/components/ui/toast/use-toast'
 import TripCard from '@/components/TripCard.vue'
 import TripListPagination from '@/components/TripListPagination.vue'
+import UserProfilePanel from '@/components/UserProfilePanel.vue'
 import { useTripStore } from '@/stores/trip.store'
 import { useProfileStore } from '@/stores/profile.store'
 
@@ -82,6 +83,9 @@ onMounted(async () => {
 
 <template>
   <AppLayout>
+    <!-- User profile panel -->
+    <UserProfilePanel class="mb-8" />
+
     <!-- Page header -->
     <div class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">My Trips</h1>

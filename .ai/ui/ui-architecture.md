@@ -35,29 +35,30 @@ This document defines the user interface architecture for MyAIGuide MVP, a Vue 3
 ### 3.1 Route Hierarchy
 
 ```
-/                           → Landing/Login page (public)
-/register                   → Registration page (public)
-/login                      → Login page (public)
-/dashboard                  → Trip list dashboard (protected)
-/profile                    → User profile settings (protected)
-/trips/:tripId              → Trip detail view (protected)
-/trips/new                  → Create new trip (protected)
+/                           → Trip list dashboard (protected) – default route after login
+/login                      → Login page (public, guestOnly)
+/register                   → Registration page (public, guestOnly)
+/forgot-password            → Password reset request page (public, guestOnly)
+/reset-password             → New password entry page (public)
+/trips/:id                  → Trip detail view (protected)
 ```
+
+> **Note:** There is no dedicated landing page or `/trips/new` route. Trips are created inline from the dashboard. The route parameter for trip detail is `:id` (integer).
 
 ### 3.2 View Components
 
 #### Public Views
 
-- **LandingView.vue** - Marketing page with login/register CTAs
 - **LoginView.vue** - Email/password login form
 - **RegisterView.vue** - Email/password registration form
+- **ForgotPasswordView.vue** - Password reset request form (email input)
+- **ResetPasswordView.vue** - New password entry form (post email-link)
 
 #### Protected Views
 
-- **DashboardView.vue** - Trip list with pagination
-- **ProfileView.vue** - Global profile and default preferences editor
-- **TripDetailView.vue** - Split/stacked layout for note and plan panels
-- **TripCreateView.vue** - New trip creation form
+- **DashboardView.vue** - Trip list with pagination and inline trip creation; includes `UserProfilePanel` at the top (per PRD §3.2 / US-005 — no dedicated profile route)
+- **TripView.vue** - Split/stacked layout for note and plan panels (route: `/trips/:id`)
+- **NotFoundView.vue** - 404 fallback for unmatched routes
 
 ### 3.3 Layout Components
 
@@ -319,7 +320,20 @@ Use the `dark:` variant for dark mode specific styles:
 - Ensure sufficient contrast in both themes (WCAG AA: 4.5:1 for text)
 - Use `dark:` variants sparingly - CSS variables handle most cases automatically
 
-### 4.4 Trip List Dashboard
+### 4.4 User Profile Panel
+
+**Location:** `UserProfilePanel.vue` — embedded at the top of `DashboardView.vue` (per PRD §3.2 / US-005; no dedicated `/profile` route).
+
+**Sections:**
+
+1. **About you** — four traveler flag pill-toggles with icons: kids (`Baby`), pets (`PawPrint`), mobility issues (`Accessibility`), dietary preferences (`Utensils`). Toggling dietary ON reveals a textarea; saving is deferred until the user provides a non-empty description (DB CHECK constraint). Toggling OFF saves immediately with `dietary_preferences_description: null`.
+2. **Default travel style** — multi-select interest pills (what), single-select pace row, single-select trip-type row, single-select budget row. All changes auto-save via `profileStore.updateProfile()` on click.
+
+**Auto-save pattern:** `isUpdating` ref disables all controls during an in-flight save. Errors show destructive toast.
+
+---
+
+### 4.5 Trip List Dashboard
 
 **Location:** DashboardView.vue
 
@@ -732,278 +746,368 @@ import type { User, Session } from '@supabase/supabase-js'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const session = ref<Session | null>(null)
-  const isAuthenticated = computed(() => !!user.value)
+  const isLoading = ref(true) // true until the initial getSession() resolves
 
-  async function login(email: string, password: string) {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email,
-      password
+  const isAuthenticated = computed(() => !!session.value)
+  const userEmail = computed(() => user.value?.email ?? null)
+
+  /**
+   * Must be called synchronously in App.vue <script setup> before any
+   * navigation. Sets up the onAuthStateChange listener and resolves the
+   * initial session from storage.
+   */
+  function initialize(): void {
+    supabaseClient.auth.onAuthStateChange((event, newSession) => {
+      session.value = newSession
+      user.value = newSession?.user ?? null
+      if (event === 'SIGNED_OUT') {
+        // Clear all other stores on logout
+        resetAllStores()
+      }
     })
-    if (error) throw error
-    user.value = data.user
-    session.value = data.session
-  }
 
-  async function register(email: string, password: string) {
-    const { data, error } = await supabaseClient.auth.signUp({
-      email,
-      password
-    })
-    if (error) throw error
-    user.value = data.user
-    session.value = data.session
-  }
-
-  async function logout() {
-    await supabaseClient.auth.signOut()
-    user.value = null
-    session.value = null
-  }
-
-  async function deleteAccount() {
-    // Call custom Edge Function for account deletion
-    const { error } = await supabaseClient.functions.invoke('delete-account')
-    if (error) throw error
-    await logout()
-  }
-
-  // Initialize auth state on app load
-  async function initialize() {
-    const { data } = await supabaseClient.auth.getSession()
-    if (data.session) {
-      user.value = data.session.user
+    supabaseClient.auth.getSession().then(({ data }) => {
       session.value = data.session
-    }
+      user.value = data.session?.user ?? null
+      isLoading.value = false
+    })
+  }
+
+  async function login(email: string, password: string): Promise<void> {
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    // State updated via onAuthStateChange listener
+  }
+
+  async function register(email: string, password: string): Promise<void> {
+    const { error } = await supabaseClient.auth.signUp({ email, password })
+    if (error) throw error
+  }
+
+  async function logout(): Promise<void> {
+    const { error } = await supabaseClient.auth.signOut()
+    if (error) throw error
+  }
+
+  function resetAllStores(): void {
+    // Dynamically import to avoid circular deps
+    import('@/stores/trip.store').then(({ useTripStore }) => useTripStore().clearTrip())
+    import('@/stores/plan.store').then(({ usePlanStore }) => usePlanStore().discardCandidate())
+    import('@/stores/profile.store').then(({ useProfileStore }) => {
+      useProfileStore().profile = null
+    })
+    import('@/stores/quota.store').then(({ useQuotaStore }) => {
+      useQuotaStore().quota = null
+    })
   }
 
   return {
     user,
     session,
+    isLoading,
     isAuthenticated,
+    userEmail,
+    initialize,
     login,
     register,
-    logout,
-    deleteAccount,
-    initialize
+    logout
   }
 })
 ```
 
+> **Note:** `deleteAccount` is not in the client-side store. Account deletion must be triggered via a Supabase Edge Function (`DELETE /api/users/me`) and is typically called from a settings page or modal.
+
 #### ProfileStore (`stores/profile.store.ts`)
+
+Delegates all DB operations to `src/lib/services/profile.service.ts` which applies Zod validation on responses.
 
 ```typescript
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { ProfileDTO, ErrorResponse, TripPreferencesDto } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
-import type { Profile } from '@/types'
+import { getProfile, updateProfile as updateProfileService } from '@/lib/services/profile.service'
 
 export const useProfileStore = defineStore('profile', () => {
-  const profile = ref<Profile | null>(null)
-  async function fetchProfile() {
-    const { data, error } = await supabaseClient.from('profiles').select('*').single()
+  // State
+  const profile = ref<ProfileDTO | null>(null)
+  const isLoading = ref(false)
+  const error = ref<ErrorResponse | null>(null)
 
-    if (error) throw error
-    profile.value = data
+  // Getters
+  const defaultPreferences = computed(
+    () =>
+      ({
+        what: profile.value?.default_what ?? [],
+        speed: profile.value?.default_speed ?? null,
+        type: profile.value?.default_type ?? null,
+        budget: profile.value?.default_budget ?? null,
+        num_days: null,
+        num_people: null
+      }) as TripPreferencesDto
+  )
+
+  async function fetchProfile(): Promise<void> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+      profile.value = await getProfile(user.id)
+    } finally {
+      isLoading.value = false
+    }
   }
 
-  async function updateProfile(updates: Partial<Profile>) {
-    const { data, error } = await supabaseClient
-      .from('profiles')
-      .update(updates)
-      .eq('user_id', (await supabaseClient.auth.getUser()).data.user?.id)
-      .select()
-      .single()
-
-    if (error) throw error
-    profile.value = data
+  async function updateProfile(updates: Partial<ProfileDTO>): Promise<void> {
+    if (!profile.value) return
+    const {
+      data: { user }
+    } = await supabaseClient.auth.getUser()
+    if (!user) throw new Error('Not authenticated')
+    profile.value = await updateProfileService(user.id, updates)
   }
 
-  return { profile, fetchProfile, updateProfile }
+  return {
+    profile,
+    isLoading,
+    error,
+    defaultPreferences,
+    fetchProfile,
+    updateProfile
+  }
 })
 ```
 
 #### TripStore (`stores/trip.store.ts`)
 
+Manages two distinct concerns: the **dashboard list** (paginated `DashboardTripViewModel[]`) and the **detail view** (single `TripDTO`). Update operations are granular and each performs an optimistic update with rollback on error. DB operations delegate to `src/lib/services/trip.service.ts`.
+
 ```typescript
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { supabaseClient } from '@/db/supabase.client'
-import type { Trip, CreateTripDto, Pagination } from '@/types'
+import { ref, computed } from 'vue'
+import type {
+  TripDTO,
+  TripPreferencesDto,
+  ErrorResponse,
+  DashboardTripViewModel,
+  PaginationDTO
+} from '@/types'
 
 export const useTripStore = defineStore('trip', () => {
-  const trips = ref<Trip[]>([])
-  const currentTrip = ref<Trip | null>(null)
-  const pagination = ref<Pagination>({
+  // — Detail view state —
+  const currentTrip = ref<TripDTO | null>(null)
+  const isLoading = ref(false)
+  const isSaving = ref(false)
+  const error = ref<ErrorResponse | null>(null)
+
+  // — Dashboard list state —
+  const trips = ref<DashboardTripViewModel[]>([])
+  const tripsPagination = ref<PaginationDTO>({
     current_page: 1,
     total_pages: 1,
     total_count: 0,
     limit: 20
   })
+  const isLoadingTrips = ref(false)
+  const isCreatingTrip = ref(false)
+  const tripsError = ref<ErrorResponse | null>(null)
 
-  async function fetchTrips(page = 1, limit = 20) {
-    const from = (page - 1) * limit
-    const to = from + limit - 1
+  // — Getters —
+  const tripStatus = computed(() => currentTrip.value?.status ?? null)
+  const hasNote = computed(() => !!currentTrip.value?.note_body)
+  const hasPlan = computed(() => currentTrip.value?.plan_json !== null)
 
-    const { data, error, count } = await supabaseClient
-      .from('trips')
-      .select('*', { count: 'exact' })
-      .order('updated_at', { ascending: false })
-      .range(from, to)
-
-    if (error) throw error
-
-    trips.value = data || []
-    pagination.value = {
-      current_page: page,
-      total_pages: Math.ceil((count || 0) / limit),
-      total_count: count || 0,
-      limit
-    }
+  // — Actions (detail) —
+  async function fetchTrip(tripId: number): Promise<void> {
+    /* ... */
+  }
+  async function updateTripTitle(tripId: number, title: string): Promise<void> {
+    /* optimistic */
+  }
+  async function updateTripDestination(tripId: number, destination: string): Promise<void> {
+    /* optimistic */
+  }
+  async function updateTripNote(tripId: number, noteBody: string): Promise<void> {
+    /* optimistic */
+  }
+  async function updateTripPreferences(
+    tripId: number,
+    preferences: TripPreferencesDto
+  ): Promise<void> {
+    /* optimistic */
+  }
+  function clearTrip(): void {
+    currentTrip.value = null
+    error.value = null
   }
 
-  async function fetchTrip(id: number) {
-    const { data, error } = await supabaseClient.from('trips').select('*').eq('id', id).single()
-
-    if (error) throw error
-    currentTrip.value = data
+  // — Actions (list) —
+  async function fetchTrips(page = 1, limit = 20): Promise<void> {
+    /* builds DashboardTripViewModel[] */
   }
-
-  async function createTrip(tripData: CreateTripDto) {
-    const { data, error } = await supabaseClient.from('trips').insert(tripData).select().single()
-
-    if (error) throw error
-    return data
+  async function createTrip(title = 'New Trip'): Promise<number> {
+    /* returns new trip id */
   }
-
-  async function updateTrip(id: number, updates: Partial<Trip>) {
-    const { data, error } = await supabaseClient
-      .from('trips')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) throw error
-    currentTrip.value = data
-  }
-
-  async function deleteTrip(id: number) {
-    const { error } = await supabaseClient.from('trips').delete().eq('id', id)
-
-    if (error) throw error
-    trips.value = trips.value.filter((t) => t.id !== id)
+  async function deleteTripById(tripId: number): Promise<void> {
+    /* removes from list */
   }
 
   return {
-    trips,
     currentTrip,
-    pagination,
-    fetchTrips,
+    isLoading,
+    isSaving,
+    error,
+    trips,
+    tripsPagination,
+    isLoadingTrips,
+    isCreatingTrip,
+    tripsError,
+    tripStatus,
+    hasNote,
+    hasPlan,
     fetchTrip,
+    updateTripTitle,
+    updateTripDestination,
+    updateTripNote,
+    updateTripPreferences,
+    clearTrip,
+    fetchTrips,
     createTrip,
-    updateTrip,
-    deleteTrip
+    deleteTripById
   }
 })
 ```
 
+Key types used:
+
+- `DashboardTripViewModel` – lightweight card model `{ id, title, status, notePreview, updatedAt }`
+- `TripDTO` – full trip with typed preferences, `plan_json: PlanJson | null`, and computed `status`
+- `TripPreferencesDto` – `{ what, speed, type, budget, num_days, num_people }`
+
 #### PlanStore (`stores/plan.store.ts`)
+
+Manages the temporary in-memory plan candidate. Quota is handled by the separate `QuotaStore`. Generation is orchestrated client-side via `src/lib/services/generation.service.ts` (language detection, AI prompt building, Edge Function call). Saving delegates to `src/lib/services/trip.service.ts`.
 
 ```typescript
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabaseClient } from '@/db/supabase.client'
-import type { PlanCandidate, GenerationQuota, PlanJson } from '@/types'
+import type { GeneratedPlanDTO, PlanJson, ErrorResponse } from '@/types'
 
 export const usePlanStore = defineStore('plan', () => {
-  const candidate = ref<PlanCandidate | null>(null)
-  const quota = ref<GenerationQuota | null>(null)
+  // State
+  const planCandidate = ref<GeneratedPlanDTO | null>(null)
   const isGenerating = ref(false)
-  const hasUnsavedCandidate = computed(() => !!candidate.value && !candidate.value.isSaved)
+  const isSaving = ref(false)
+  const generationError = ref<ErrorResponse | null>(null)
+  const saveError = ref<ErrorResponse | null>(null)
 
-  async function fetchQuota() {
-    const { data, error } = await supabaseClient.functions.invoke('get-generation-quota')
-    if (error) throw error
-    quota.value = data
+  // Getters
+  const hasCandidate = computed(() => planCandidate.value !== null)
+  const candidatePlan = computed(() => planCandidate.value?.plan ?? null)
+
+  // Actions
+  async function generatePlan(tripId: number): Promise<void> {
+    // Reads currentTrip from TripStore, fetches profile if needed,
+    // calls generation.service.callAIService(), stores result as planCandidate
   }
 
-  async function generatePlan(tripId: number) {
-    isGenerating.value = true
-    try {
-      const { data, error } = await supabaseClient.functions.invoke('generate-plan', {
-        body: { tripId }
-      })
-
-      if (error) throw error
-
-      candidate.value = {
-        ...data,
-        isSaved: false,
-        tripId
-      }
-
-      // Refresh quota after generation
-      await fetchQuota()
-
-      return data
-    } finally {
-      isGenerating.value = false
-    }
+  async function savePlanToTrip(tripId: number): Promise<void> {
+    // Calls trip.service.savePlanToTrip(), updates TripStore.currentTrip,
+    // clears planCandidate on success
   }
 
-  async function savePlan(tripId: number) {
-    if (!candidate.value) throw new Error('No candidate plan to save')
-
-    const { data, error } = await supabaseClient
-      .from('trips')
-      .update({
-        plan_json: candidate.value.plan,
-        plan_language: candidate.value.language
-      })
-      .eq('id', tripId)
-      .select()
-      .single()
-
-    if (error) throw error
-
-    candidate.value = {
-      ...candidate.value,
-      isSaved: true
-    }
-
-    return data
+  function discardCandidate(): void {
+    planCandidate.value = null
+    generationError.value = null
+    saveError.value = null
   }
 
-  function clearCandidate() {
-    candidate.value = null
-  }
-
-  function editCandidate(updates: Partial<PlanJson>) {
-    if (!candidate.value) return
-    candidate.value = {
-      ...candidate.value,
-      plan: {
-        ...candidate.value.plan,
-        ...updates
-      }
-    }
+  function updateCandidatePlan(plan: PlanJson): void {
+    if (planCandidate.value) planCandidate.value.plan = plan
   }
 
   return {
-    candidate,
-    quota,
+    planCandidate,
     isGenerating,
-    hasUnsavedCandidate,
-    fetchQuota,
+    isSaving,
+    generationError,
+    saveError,
+    hasCandidate,
+    candidatePlan,
     generatePlan,
-    savePlan,
-    clearCandidate,
-    editCandidate
+    savePlanToTrip,
+    discardCandidate,
+    updateCandidatePlan
   }
 })
 ```
 
-### 5.2 Optimistic Updates
+**Important behavioural differences from earlier design:**
+
+- `planCandidate` is **cleared** (set to `null`) after a successful save — there is no `isSaved` flag
+- `hasCandidate` replaces `hasUnsavedCandidate` — a non-null candidate is always unsaved
+- Quota is NOT managed in PlanStore — see `QuotaStore` below
+
+#### QuotaStore (`stores/quota.store.ts`)
+
+Dedicated store for tracking the rolling 24-hour generation quota. Separated from PlanStore so any component can read quota independently.
+
+```typescript
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import type { GenerationQuotaDTO, ErrorResponse } from '@/types'
+import { checkGenerationQuota } from '@/lib/services/generation.service'
+
+export const useQuotaStore = defineStore('quota', () => {
+  const quota = ref<GenerationQuotaDTO | null>(null)
+  const isLoading = ref(false)
+  const error = ref<ErrorResponse | null>(null)
+
+  const isQuotaExceeded = computed(() => (quota.value?.used ?? 0) >= (quota.value?.limit ?? 10))
+  const remainingGenerations = computed(() =>
+    quota.value ? quota.value.limit - quota.value.used : 10
+  )
+
+  async function fetchQuota(): Promise<void> {
+    // Calls generation.service.checkGenerationQuota(userId) directly via DB query
+  }
+
+  function incrementUsed(): void {
+    // Optimistic increment after successful generation
+    if (quota.value) {
+      quota.value.used += 1
+      quota.value.remaining = quota.value.limit - quota.value.used
+    }
+  }
+
+  return {
+    quota,
+    isLoading,
+    error,
+    isQuotaExceeded,
+    remainingGenerations,
+    fetchQuota,
+    incrementUsed
+  }
+})
+```
+
+### 5.2 Service Layer (`src/lib/services/`)
+
+Stores do **not** call Supabase directly for complex operations. Instead they delegate to typed service functions that handle DB access, validation (Zod), and error mapping.
+
+| File                    | Responsibility                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `profile.service.ts`    | `getProfile(userId)`, `updateProfile(userId, updates)` – validates response via `profile.schemas.ts`                          |
+| `trip.service.ts`       | `getTripById`, `updateTrip`, `createTrip`, `savePlanToTrip` – derives `TripStatus`, validates plan via `plan.schemas.ts`      |
+| `generation.service.ts` | `checkGenerationQuota`, `detectLanguage`, `buildAIPrompt`, `callAIService` (invokes Edge Function), `recordGenerationAttempt` |
+
+Error handling is centralised in `src/lib/errors/api.error.ts` which provides typed `ApiError` constructors (`createNotFoundError`, `createForbiddenError`, `createValidationError`, `createInternalError`, `createUnauthorizedError`).
+
+### 5.3 Optimistic Updates
 
 **Pattern:** Update UI immediately, revert on error
 
@@ -1043,87 +1147,98 @@ async function updateTripTitle(tripId: number, newTitle: string) {
 ```typescript
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth.store'
-import { supabaseClient } from '@/db/supabase.client'
 
 const routes = [
-  {
-    path: '/',
-    name: 'landing',
-    component: () => import('@/views/LandingView.vue'),
-    meta: { requiresAuth: false }
-  },
+  // Public – redirect to dashboard when already logged in
   {
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginView.vue'),
-    meta: { requiresAuth: false }
+    meta: { requiresAuth: false, guestOnly: true }
   },
   {
     path: '/register',
     name: 'register',
     component: () => import('@/views/RegisterView.vue'),
+    meta: { requiresAuth: false, guestOnly: true }
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/views/ForgotPasswordView.vue'),
+    meta: { requiresAuth: false, guestOnly: true }
+  },
+  // Public – accessible also when logged in (deep-link from email)
+  {
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('@/views/ResetPasswordView.vue'),
     meta: { requiresAuth: false }
   },
+  // Protected
   {
-    path: '/dashboard',
+    path: '/',
     name: 'dashboard',
     component: () => import('@/views/DashboardView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/profile',
-    name: 'profile',
-    component: () => import('@/views/ProfileView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/trips/new',
-    name: 'trip-create',
-    component: () => import('@/views/TripCreateView.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/trips/:id',
     name: 'trip-detail',
     component: () => import('@/views/TripView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
+    // Guard: validate that :id is a positive integer before entering
+    beforeEnter: (to) => {
+      const tripId = parseInt(to.params.id as string, 10)
+      if (isNaN(tripId) || tripId <= 0) return { name: 'not-found' }
+    }
+  },
+  // Catch-all 404
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('@/views/NotFoundView.vue')
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(_to, _from, savedPosition) {
+    return savedPosition ?? { top: 0 }
+  }
 })
 
-// Global navigation guard
-router.beforeEach(async (to, from, next) => {
+// Global guard – waits for AuthStore.isLoading to resolve before making auth decisions
+router.beforeEach(async (to) => {
+  const { watch } = await import('vue')
+  const { useAuthStore } = await import('@/stores/auth.store')
   const authStore = useAuthStore()
 
-  // Initialize auth state if not already done
-  if (!authStore.user) {
-    await authStore.initialize()
+  if (authStore.isLoading) {
+    await new Promise<void>((resolve) => {
+      const unwatch = watch(
+        () => authStore.isLoading,
+        (loading) => {
+          if (!loading) {
+            unwatch()
+            resolve()
+          }
+        },
+        { immediate: true }
+      )
+    })
   }
 
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next({ name: 'login', query: { redirect: to.fullPath } })
-  } else if (!to.meta.requiresAuth && authStore.isAuthenticated && to.name !== 'landing') {
-    next({ name: 'dashboard' })
-  } else {
-    next()
-  }
+  if (to.meta.requiresAuth && !authStore.isAuthenticated)
+    return { name: 'login', query: { redirect: to.fullPath } }
+  if (to.meta.guestOnly && authStore.isAuthenticated) return { name: 'dashboard' }
 })
 
 export default router
 ```
 
-**Note on JWT Authentication:**
-JWT-based authentication will be implemented in a later phase. Currently, the application uses Supabase's built-in session management. When JWT is implemented:
-
-- Session tokens will be stored in HTTP-only cookies
-- JWT will be included in `Authorization: Bearer <token>` header for API requests
-- Token refresh logic will be handled automatically by Supabase client
-- Custom middleware may be added for additional security checks
+> **Note on session initialisation:** `authStore.initialize()` is called once synchronously in `App.vue <script setup>` **before** the router is mounted. The guard's `isLoading` wait prevents the race condition where a page refresh would redirect to `/login` before Supabase has restored the session from storage.
 
 ### 6.2 Navigation Patterns
 
@@ -1423,7 +1538,10 @@ This UI architecture provides:
 3. **Mobile-First Responsive:** Use Tailwind responsive variants with mobile-first approach
 4. **Sidebar Navigation:** shadcn-vue Navigation Menu in sidebar layout (not horizontal nav)
 5. **WCAG AA:** Minimum 4.5:1 contrast ratio, keyboard navigation, screen reader support
-6. **JWT Auth:** Planned for later phase, currently using Supabase session management
+6. **Service Layer:** Stores delegate complex DB logic to `src/lib/services/*.ts`; Zod schemas in `src/lib/validation/*.ts` validate responses
+7. **Separate QuotaStore:** Generation quota is managed independently in `stores/quota.store.ts`, not inside PlanStore
+8. **Inline Trip Creation:** No `/trips/new` route; trips are created directly from the Dashboard view and the user is navigated to `/trips/:id`
+9. **No minimum note length:** Per PRD, only the 10,000-character maximum is enforced; there is no minimum required for plan generation
 
 ### Component Hierarchy:
 
@@ -1431,40 +1549,43 @@ This UI architecture provides:
 App.vue
 ├── Router View
 │   ├── AuthLayout (public routes)
-│   │   ├── LandingView
 │   │   ├── LoginView
-│   │   └── RegisterView
-│   └── AppLayout (protected routes)
-│       ├── Sidebar (Navigation Menu)
-│       ├── DashboardView
-│       │   ├── TripCard (multiple)
-│       │   └── Pagination
-│       ├── ProfileView
-│       │   ├── ProfileForm
-│       │   └── PreferenceSelector
-│       ├── TripDetailView
-│       │   ├── TripNoteEditor
-│       │   │   └── CharacterCounter
-│       │   ├── TripPreferences
-│       │   └── PlanViewer
-│       │       ├── GenerationQuotaCounter
-│       │       ├── PlanCandidateBanner
-│       │       └── PlanDayList
-│       │           ├── PlanDayAccordion
-│       │           └── ActivityCard
-│       └── TripCreateView
+│   │   ├── RegisterView
+│   │   ├── ForgotPasswordView
+│   │   └── ResetPasswordView
+│   ├── AppLayout (protected routes)
+│   │   ├── Sidebar (Navigation Menu)
+│   │   ├── DashboardView             → route: /
+│   │   │   ├── UserProfilePanel      (traveler flags + default preferences, auto-save)
+│   │   │   ├── TripCard (multiple)
+│   │   │   └── TripListPagination
+│   │   └── TripView                  → route: /trips/:id
+│   │       ├── TripEditor (note + trip preferences)
+│   │       │   └── CharacterCounter
+│   │       └── PlanPanel
+│   │           ├── GenerationQuotaCounter
+│   │           ├── PlanCandidateBanner
+│   │           └── PlanDayList
+│   │               ├── PlanDayAccordion
+│   │               └── ActivityCard
+│   └── NotFoundView                  → route: /:pathMatch(.*)
 ```
+
+> Trip creation is **inline** (no dedicated view/route). `DashboardView` calls `tripStore.createTrip()` which returns the new trip id, then navigates to `/trips/:id`.
 
 The architecture is production-ready, fully accessible (WCAG AA), and designed to scale with future enhancements while maintaining a clean, maintainable codebase aligned with Vue 3 best practices and the MyAIGuide product requirements.
 **Features:**
 
 - Textarea for note content
 - Real-time character counter below textarea
-- Counter format: "X / 10,000 characters (minimum 1,000 required)"
+- Counter format: "X / 10,000 characters"
 - Color coding:
-  - Red: <1000 or >10,000 (invalid)
-  - Yellow: 1000-1500 (valid but minimal)
-  - Green: 1500-10,000 (optimal)
+  - Green: 0–9,000 (OK)
+  - Yellow: 9,001–9,999 (approaching limit)
+  - Red: ≥10,000 (limit reached, "Generate Plan" disabled)
+
+> **Note:** Per PRD §3.5 / US-012 there is **no minimum** note length required — only a maximum of 10,000 characters. Validation blocks generation only when the note exceeds the max, not when it is short or empty.
+
 - Auto-save on blur (debounced)
 - Visual feedback during save
 
@@ -1479,7 +1600,7 @@ The architecture is production-ready, fully accessible (WCAG AA), and designed t
 />
 <p :class="getCounterClass(noteBody.length)">
   {{ noteBody.length }} / 10,000 characters
-  <span v-if="noteBody.length < 1000">(minimum 1,000 required)</span>
+  <span v-if="noteBody.length >= 10000">(limit reached)</span>
 </p>
 ```
 

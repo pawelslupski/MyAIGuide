@@ -3,1184 +3,695 @@
 ## 1. Executive Summary
 
 MyAIGuide is a Vue 3.5 SPA for AI-powered trip planning. This document defines the complete UI architecture based on
-product requirements, API design, and accessibility standards (WCAG AA).
+the Product Requirements Document (PRD), API design, and accessibility standards (WCAG AA). It reflects the
+implemented codebase as of the current state and supersedes earlier drafts.
 
 ### Core Concept
 
-The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each trip contains user notes (1000-10000
-characters) and travel preferences, which are used to generate a single AI-powered travel plan stored in JSON format.
+The application follows a simple data model: **1 note = 1 trip = 1 plan**. Each trip contains user notes (up to
+10,000 characters, no minimum) and per-trip travel preferences, which are used to generate a single AI-powered travel
+plan stored in JSON format.
 
-### Key Features
+### Key Design Decisions
 
-- **User Accounts** - Email/password authentication with Supabase Auth
-- **Global Profile** - 4 travel characteristics (kids, pets, mobility, dietary) + default preferences
-- **Trip Management** - CRUD operations for trip notes with per-trip preference overrides
-- **AI Plan Generation** - OpenRouter.ai integration with 10 generations per 24-hour rolling window
-- **Plan Candidate System** - Review and edit AI-generated plans before saving (temporary, lost on refresh)
-- **Language Detection** - Automatic detection from note content for localized plans
-- **Responsive Design** - Mobile-first with split-panel desktop layout (≥1024px)
+- **No dedicated profile route** – per PRD §3.2 / US-005 the global profile panel lives at the top of the dashboard
+  above the trip list; there is no `/profile` page.
+- **Dashboard at `/`** – the root path is the dashboard (authenticated default route).
+- **Note validation**: maximum 10,000 characters, **no minimum length** enforced anywhere.
+- **Plan candidate is ephemeral** – generated plan lives only in Pinia state; page refresh discards it.
+- **Language is auto-detected** from note content; no manual language selector.
+
+---
 
 ## 2. Technology Stack
 
 ### Frontend Framework
 
-- **Vue 3.5** - Composition API with `<script setup>` syntax
-- **TypeScript 5** - Static typing
-- **Vite 7** - Build tool and dev server
+- **Vue 3.5** – Composition API with `<script setup>` syntax
+- **TypeScript 5** – Static typing throughout
+- **Vite 7** – Build tool and dev server
 
 ### UI & Styling
 
-- **shadcn-vue** - Primary component library (accessible, customizable)
-- **Tailwind CSS 3** - Utility-first styling with responsive variants
-- **Lucide Vue Next** - Icon library
+- **shadcn-vue** – Primary component library (accessible, customizable)
+- **Tailwind CSS 3** – Utility-first styling with responsive variants and dark-mode support
+- **Lucide Vue Next** – Icon library (consistent icon set for preference flags and actions)
 
 ### State & Routing
 
-- **Pinia** - State management (auth, profile, trips, plans)
-- **Vue Router** - Client-side routing with navigation guards
+- **Pinia** – State management (auth, profile, trips, plans, quota)
+- **Vue Router** – Client-side routing with `beforeEach` navigation guards
 
 ### Backend Integration
 
-- **Custom Supabase Client** - `@/db/supabase.client.ts` for all database operations
-- **Supabase Auth** - Authentication (JWT implementation in later phase)
-- **Supabase Edge Functions** - AI generation, complex business logic
+- **Custom Supabase Client** – `@/db/supabase.client.ts` for auth + database operations
+- **Supabase Auth** – Email/password only (no OAuth per PRD §3.1 / US-002)
+- **Supabase Edge Functions** – AI plan generation, quota calculation, account deletion
+
+---
 
 ## 3. Application Structure
 
 ### 3.1 Route Hierarchy
 
 ```
-/login               → LoginView (public)
-/register            → RegisterView (public)
-/dashboard           → DashboardView (protected)
-/trips/:id           → TripView (protected)
+/                           → DashboardView       (protected, requiresAuth)   ← default after login
+/login                      → LoginView            (public, guestOnly)
+/register                   → RegisterView         (public, guestOnly)
+/forgot-password            → ForgotPasswordView   (public, guestOnly)
+/reset-password             → ResetPasswordView    (public)
+/trips/:id                  → TripView             (protected, requiresAuth)
+/:pathMatch(.*)*            → NotFoundView         (fallback 404)
 ```
+
+> There is no `/profile` route. The global profile panel (`UserProfilePanel`) is embedded directly in the dashboard.
+> Trip creation is **inline** from the dashboard — clicking "New Trip" calls `tripStore.createTrip()` and navigates to
+> `/trips/:id` immediately. There is no `/trips/new` route.
 
 ### 3.2 Layout Components
 
-**AuthLayout** - Minimal layout for public pages
+**`AuthLayout`** – Minimal centered layout for public (auth) pages.
 
-- LandingView
-- LoginView
-- RegisterView
+- Wraps: `LoginView`, `RegisterView`, `ForgotPasswordView`, `ResetPasswordView`
+- No sidebar; just a centered card with the brand header.
 
-**AppLayout** - Main application shell for protected pages
+**`AppLayout`** – Main application shell for all protected pages.
 
-- Sidebar navigation (shadcn-vue Navigation Menu)
-- Main content area
-- User menu
+- Persistent sidebar on desktop (≥1024px), collapsible overlay on mobile/tablet.
+- Main content area with `<slot />`.
+- User email + logout button in sidebar footer.
 
 ### 3.3 View Components
 
-**DashboardView**
+#### Public Views
 
-- Global profile form includind preference selectors (What/Speed/Type/Budget)
-- "Create New Trip" button
-- Save/Cancel actions
-- Trip cards grid (responsive: 1/2/3 columns)
-- Pagination controls
+| View                     | Path               | Purpose                                         |
+| ------------------------ | ------------------ | ----------------------------------------------- |
+| `LoginView.vue`          | `/login`           | Email/password login form                       |
+| `RegisterView.vue`       | `/register`        | Email/password + confirmation registration form |
+| `ForgotPasswordView.vue` | `/forgot-password` | Password reset request (email input)            |
+| `ResetPasswordView.vue`  | `/reset-password`  | New password entry (post email-link)            |
 
-**TripView**
+#### Protected Views
 
-- Responsive layout (stacked mobile, split-panel desktop)
-- Note editor with text area and character counter
-- Trip preferences (some values inherited from the global profile)
-- Plan viewer/editor
-- Generation quota counter
-- Generate/Save plan actions
+| View                | Path         | Purpose                                               |
+| ------------------- | ------------ | ----------------------------------------------------- |
+| `DashboardView.vue` | `/`          | `UserProfilePanel` at top + trip list with pagination |
+| `TripView.vue`      | `/trips/:id` | Split/stacked layout: note editor + plan panel        |
+| `NotFoundView.vue`  | `/*`         | 404 fallback for unmatched routes                     |
+
+---
 
 ## 4. Key UI Components
 
-### 4.1 Sidebar Navigation
+### 4.1 Sidebar Navigation (`Sidebar.vue`)
 
-**Component:** `Sidebar.vue` using shadcn-vue Navigation Menu
+**Built on:** shadcn-vue Navigation Menu
 
 **Structure:**
 
-- Brand/logo header
-- Navigation items:
-  - Dashboard (Home icon)
-  - My Trips (Map icon)
-- User section with Logout button
+- Brand / logo header
+- Navigation items with icons:
+  - Dashboard (Home icon) → `/`
+  - My Trips (Map icon) → `/`
+- User section at bottom: logged-in email + Logout button
 
 **Responsive Behavior:**
 
-- Desktop (≥1024px): Persistent sidebar, 256px width
-- Mobile/Tablet (<1024px): Collapsible overlay with hamburger toggle
-
-**Implementation:**
-
-```vue
-<aside
-  class="fixed inset-y-0 left-0 z-50 w-64 border-r bg-background transition-transform lg:translate-x-0"
-  :class="isOpen ? 'translate-x-0' : '-translate-x-full'"
->
-  <NavigationMenu orientation="vertical">
-    <NavigationMenuItem>
-      <NavigationMenuLink
-          :to="{ name: 'dashboard' }"
-          :aria-current="isActive('dashboard') ? 'page' : undefined"
-      >
-        <Home class="h-5 w-5"/>
-        <span>Dashboard</span>
-      </NavigationMenuLink>
-    </NavigationMenuItem>
-  </NavigationMenu>
-</aside>
-```
+- Desktop (≥1024px): persistent sidebar, 256 px width
+- Mobile / Tablet (<1024px): hidden by default, slides in as overlay on hamburger click
 
 **Accessibility:**
 
-- `aria-label="Main navigation"` on nav element
-- `aria-current="page"` for active route
-- Keyboard navigation (Tab, Enter, Arrow keys)
-- Skip to main content link
+- `aria-label="Main navigation"` on `<nav>` element
+- `aria-current="page"` on the active route link
+- Keyboard-navigable (Tab, Enter, Arrow keys)
+- Skip-to-main-content link at page top
 
-### 4.2 Trip Card
+---
 
-**Component:** `TripCard.vue` using shadcn-vue Card
+### 4.2 User Profile Panel (`UserProfilePanel.vue`)
 
-**Display:**
+**Location:** Top of `DashboardView`, above the trip list (per PRD §3.2 / US-005).
+
+**Card structure: "Your Travel Profile"**
+
+#### Section A – About you (traveler flags)
+
+Four pill-toggle buttons, each with a Lucide icon:
+
+| Field                     | Label                   | Icon            |
+| ------------------------- | ----------------------- | --------------- |
+| `has_kids`                | Traveling with kids     | `Baby`          |
+| `has_pets`                | Traveling with pets     | `PawPrint`      |
+| `has_mobility_issues`     | Mobility considerations | `Accessibility` |
+| `has_dietary_preferences` | Dietary preferences     | `Utensils`      |
+
+**Dietary preferences edge case** (DB CHECK constraint: flag `true` requires non-empty description):
+
+- Toggle **OFF → ON**: show `Textarea` optimistically; **do not** save the flag until the user fills in a description.
+  `onBlur` with empty text → destructive toast, revert pill to OFF.
+  `onBlur` with text → save `{ has_dietary_preferences: true, dietary_preferences_description: <text> }` together.
+- Toggle **ON → OFF**: save immediately `{ has_dietary_preferences: false, dietary_preferences_description: null }`.
+
+#### Section B – Default travel style
+
+| Sub-section       | Selection          | Options                                                                                                              |
+| ----------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Interests (What?) | Multi-select pills | Nature `TreePine`, Culture/Museums `Landmark`, Beach/Relax `Waves`, City Break `Building2`, Foodie `UtensilsCrossed` |
+| Pace (How fast?)  | Single-select row  | Slow & Chill `Snail`, Balanced `Scale`, Intensive `Zap`                                                              |
+| Trip type         | Single-select row  | Base `MapPin`, Base + Day Trips `Map`, Road Trip `Car`                                                               |
+| Budget            | Single-select row  | Budget `PiggyBank`, Moderate `Wallet`, Luxury `Gem`                                                                  |
+
+**Auto-save pattern:**
+
+- Every pill toggle / selection calls `profileStore.updateProfile()` immediately.
+- `isUpdating` ref disables all controls while a save is in flight (prevents race conditions).
+- Destructive toast on any save error.
+
+**Loading state:** Skeleton placeholders while `profileStore.isLoading && !profile`.
+
+---
+
+### 4.3 Trip Card (`TripCard.vue`)
+
+**Built on:** shadcn-vue Card
+
+**Displayed information:**
 
 - Trip title
-- Status badge (CREATED/DRAFT/CONFIRMED)
-- Note preview (truncated, 100 chars)
-- Last modified timestamp
+- Status badge (CREATED / DRAFT / CONFIRMED — derived, never stored)
+- Truncated note preview (≤100 characters)
+- Last modified timestamp (relative)
 
-**Status Badge Logic (derived from trip data):**
+**Status badge logic (derived server-side):**
 
-- **CREATED** (Gray #6B7280): `note_body` is empty or null, no `plan_json`
-- **DRAFT** (Orange #D97706): `note_body` exists but no `plan_json`
-- **CONFIRMED** (Green #059669): Both `note_body` and `plan_json` exist
+| Status      | Condition                                     | Badge color  |
+| ----------- | --------------------------------------------- | ------------ |
+| `CREATED`   | `note_body` null / empty AND `plan_json` null | Gray         |
+| `DRAFT`     | `note_body` has content AND `plan_json` null  | Orange/amber |
+| `CONFIRMED` | `plan_json` is NOT NULL                       | Green        |
 
-**Implementation:**
+**Interaction:** click anywhere on card → navigate to `/trips/:id`.
 
-```vue
-<Card @click="navigateToTrip(trip.id)" class="cursor-pointer transition-shadow hover:shadow-lg">
-  <CardHeader class="p-4 md:p-6">
-    <div class="flex flex-col sm:flex-row sm:justify-between gap-2">
-      <CardTitle class="text-lg md:text-xl">{{ trip.title }}</CardTitle>
-      <Badge :variant="getStatusVariant(trip.status)">
-        {{ getStatusLabel(trip.status) }}
-      </Badge>
-    </div>
-  </CardHeader>
-  <CardContent class="p-4 md:p-6 pt-0">
-    <p class="text-sm text-muted-foreground line-clamp-2">
-      {{ truncateNote(trip.note_body) }}
-    </p>
-    <p class="text-xs text-muted-foreground mt-2">
-      Updated {{ formatDate(trip.updated_at) }}
-    </p>
-  </CardContent>
-</Card>
-```
+---
 
-### 4.3 Note Editor with Character Counter
-
-**Component:** `TripNoteEditor.vue`
+### 4.4 Note Editor (`TripNoteEditor.vue`)
 
 **Features:**
 
-- Textarea for note content (max 10000 chars)
-- Real-time character counter
-- Color-coded validation feedback
-- Auto-save on blur (debounced)
+- `<Textarea>` for note content (no minimum, max 10,000 characters)
+- Real-time character counter: `N / 10,000`
+- Counter color coding (WCAG AA):
+  - Normal (`text-muted-foreground`): 0–9,000 characters
+  - Warning (`text-yellow-600`): 9,001–9,999 characters
+  - Error (`text-destructive`): ≥ 10,000 characters
+- "Generate Plan" button is disabled when character count > 10,000
+- Auto-save on blur (debounced 500 ms via `tripStore.updateTrip()`)
 
-**Character Counter Colors (WCAG AA):**
+---
 
-- Red (#DC2626): <1000 or >10000 (invalid)
-- Yellow (#D97706): 1000-1500 (valid but minimal)
-- Green (#059669): 1500-10000 (optimal)
+### 4.5 Trip Preferences Panel (`TripPreferences.vue`)
 
-**Implementation:**
+**Fields in TripView (per-trip overrides):**
 
-```vue
-<Textarea
-  v-model="noteBody"
-  :maxlength="10000"
-  placeholder="Describe your trip plans..."
-  class="min-h-[300px]"
-/>
-<p :class="getCounterClass(noteBody.length)">
-  {{ noteBody.length }} / 10,000 characters
-  <span v-if="noteBody.length > 1000">(maksimum 10,000 required)</span>
-</p>
-```
+| Field             | Required for generation? | Editable at trip level?    |
+| ----------------- | ------------------------ | -------------------------- |
+| Destination       | ✅ Yes                   | ✅ Yes                     |
+| Number of days    | No                       | ✅ Yes (1–30)              |
+| Number of people  | No                       | ✅ Yes (1–20)              |
+| Interests (What?) | No                       | ✅ Yes (overrides profile) |
+| Pace (Speed)      | No                       | ✅ Yes (overrides profile) |
+| Trip type         | No                       | ✅ Yes (overrides profile) |
+| Budget            | No                       | ✅ Yes (overrides profile) |
 
-### 4.4 Trip Preferences Selector
+**Read-only at trip level** (always sourced from profile, shown for context only):
 
-**Component:** `TripPreferences.vue`
+- `has_kids`, `has_pets`, `has_mobility_issues`, `has_dietary_preferences` + description
 
-**Fields:**
+**Inherited-value indicator:**
 
-- What? (multi-select): Nature, Culture/Museums, Beach/Relax, City Break, Foodie
-- How fast? (single-select): Slow/Chill, Balance, Intensive
-- What type? (single-select): Base, Roadtrip
-- Budget (single-select): €, €€, €€€
+- Values that match the current profile default are shown with a subtle muted style and a tooltip "From your profile".
+- Overridden values show a "Reset to profile default" ghost button.
 
-**Inherited Values Indicator:**
+---
 
-- Light blue background (`bg-blue-50`) for values from global profile
-- "Reset to profile default" button when overridden
-- Tooltip: "From profile" or "Custom value"
+### 4.6 Generation Quota Counter
 
-**Implementation:**
+**Location:** Plan panel, directly above the "Generate Plan" button.
 
-```vue
+**Display format:** `X / 10 generations used in the last 24 h`
 
-<div class="space-y-4">
-  <div>
-    <Label>What interests you?</Label>
-    <MultiSelect
-        v-model="preferences.what"
-        :options="whatOptions"
-        :class="isInherited('what') ? 'bg-blue-50' : ''"
-    />
-    <Button
-        v-if="!isInherited('what')"
-        variant="ghost"
-        size="sm"
-        @click="resetToDefault('what')"
-    >
-      Reset to profile default
-    </Button>
-  </div>
-</div>
-```
+**Progress bar** visualization with color states (WCAG AA):
 
-### 4.5 Generation Quota Counter
+| Used | Color                 |
+| ---- | --------------------- |
+| 0–7  | Green                 |
+| 8–9  | Yellow/amber          |
+| 10   | Red (button disabled) |
 
-**Component:** Part of `PlanViewer.vue`
+When quota = 10/10, show: reset time (`Resets at HH:MM`).
 
-**Display:**
+Data source: `quota` field returned in the `POST …/generate-plan` response; also from
+`GET /api/users/me/generation-quota` on TripView mount.
 
-- Persistent above "Generate Plan" button
-- Format: "X/10 generations used today"
-- Progress bar visualization
-- Reset time when at limit
+---
 
-**Visual States (WCAG AA):**
+### 4.7 Plan Candidate vs. Saved Plan (`PlanViewer.vue`)
 
-- Green: 0-7 generations (plenty remaining)
-- Yellow: 8-9 generations (running low)
-- Red: 10 generations (limit reached)
+**Unsaved candidate state:**
 
-**Implementation:**
-
-```vue
-
-<div class="mb-4 p-3 rounded-lg" :class="getQuotaClass(quota.used)">
-  <div class="flex justify-between items-center">
-    <span class="text-sm font-medium">
-      {{ quota.used }}/{{ quota.limit }} generations used today
-    </span>
-    <span v-if="quota.remaining === 0" class="text-xs">
-      Resets {{ formatResetTime(quota.reset_at) }}
-    </span>
-  </div>
-  <Progress :value="(quota.used / quota.limit) * 100" class="mt-2"/>
-</div>
-```
-
-### 4.6 Plan Candidate vs Saved Plan
-
-**Component:** `PlanViewer.vue`
-
-**Candidate Plan (unsaved):**
-
-- Yellow/amber Alert banner: "⚠️ Unsaved Plan - changes will be lost on refresh"
-- Prominent "Save Plan" button (primary, large)
+- Amber alert banner: "Unsaved plan – changes will be lost on page refresh"
+- Prominent "Save Plan" button (primary, large, full-width)
 - "Discard" button (outline)
-- Editable fields (description, location name)
+- All activity fields editable inline (description, location name)
 
-**Saved Plan:**
+**Saved plan state:**
 
-- Green Alert banner: "✓ Plan saved"
-- Timestamp: "Last saved [relative time]"
-- "Generate New Plan" button
-- Read-only by default, "Edit" button to enable editing
+- Green alert banner: "Plan saved · Last updated [relative timestamp]"
+- "Regenerate Plan" button
+- Read-only by default; inline "Edit" affordance per activity field
 
-**Implementation:**
+**No plan yet:**
 
-```vue
-<!-- Candidate -->
-<Alert v-if="!planIsSaved" variant="warning" class="mb-4">
-  <AlertTriangle class="h-4 w-4"/>
-  <AlertTitle>Unsaved Plan</AlertTitle>
-  <AlertDescription>
-    Changes will be lost if you refresh or navigate away.
-  </AlertDescription>
-</Alert>
-<div class="mb-4 flex gap-2">
-  <Button @click="savePlan" size="lg" class="flex-1">Save Plan</Button>
-  <Button @click="discardPlan" variant="outline">Discard</Button>
-</div>
+- Placeholder message with instructions to write a note and generate a plan.
+- Pre-generation checklist shown if destination is missing.
 
-<!-- Saved -->
-<Alert v-else variant="success" class="mb-4">
-  <CheckCircle class="h-4 w-4"/>
-  <AlertTitle>Plan Saved</AlertTitle>
-  <AlertDescription>
-    Last saved {{ formatRelativeTime(trip.updated_at) }}
-  </AlertDescription>
-</Alert>
+---
+
+### 4.8 Plan Day List (`PlanDayList.vue`)
+
+**Built on:** shadcn-vue Accordion
+
+**Structure per day:**
+
+```
+AccordionItem: "Day 1"
+  ├── Morning
+  │     locationName  (editable in candidate mode)
+  │     description   (editable in candidate mode)
+  │     categoryTag   badge
+  ├── Afternoon
+  └── Evening
 ```
 
-### 4.7 Plan Day List
+Category tag badge colors (consistent icon mapping to `WhatPreference`):
 
-**Component:** `PlanDayList.vue` using shadcn-vue Accordion
+- `nature` → TreePine
+- `culture_museums` → Landmark
+- `beach_relax` → Waves
+- `city_break` → Building2
+- `foodie` → UtensilsCrossed
 
-**Structure:**
-
-- Accordion for each day
-- Day header: "Day 1", "Day 2", etc.
-- Activities grouped by time: Morning / Afternoon / Evening
-- Each activity shows:
-  - Time of day badge
-  - Location name (editable in candidate mode)
-  - Description (editable in candidate mode)
-  - Category tag badge (color-coded)
-
-**Implementation:**
-
-```vue
-<Accordion type="multiple" class="space-y-4">
-  <AccordionItem v-for="day in plan.days" :key="day.day">
-    <AccordionTrigger>
-      <h3 class="text-lg font-semibold">Day {{ day.day }}</h3>
-    </AccordionTrigger>
-    <AccordionContent>
-      <div class="space-y-4">
-        <div
-            v-for="activity in day.activities"
-            :key="activity.timeOfDay"
-            class="border-l-4 pl-4"
-        >
-          <Badge variant="outline">{{ activity.timeOfDay }}</Badge>
-          <h4 class="font-medium">{{ activity.locationName }}</h4>
-          <p class="text-sm text-muted-foreground">
-            {{ activity.description }}
-          </p>
-          <Badge :variant="getCategoryVariant(activity.categoryTag)">
-            {{ formatCategoryTag(activity.categoryTag) }}
-          </Badge>
-        </div>
-      </div>
-    </AccordionContent>
-  </AccordionItem>
-</Accordion>
-```
+---
 
 ## 5. State Management (Pinia)
 
-### 5.1 AuthStore
+### 5.1 AuthStore (`stores/auth.store.ts`)
 
-**File:** `stores/auth.store.ts`
+**State:** `user`, `session`, `isLoading`
 
-**State:**
+**Computed:** `isAuthenticated`
 
-- `user: User | null`
-- `session: Session | null`
-- `isAuthenticated: computed(() => !!user.value)`
+**Actions:** `login()`, `register()`, `logout()`, `resetPasswordForEmail()`, `initialize()`
 
-**Actions:**
+Supabase auth state listener (`onAuthStateChange`) keeps store in sync with session changes.
 
-```typescript
-async function login(email: string, password: string) {
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
-    email,
-    password
-  })
-  if (error) throw error
-  user.value = data.user
-  session.value = data.session
-}
+---
 
-async function register(email: string, password: string) {
-  const { data, error } = await supabaseClient.auth.signUp({
-    email,
-    password
-  })
-  if (error) throw error
-  user.value = data.user
-  session.value = data.session
-}
+### 5.2 ProfileStore (`stores/profile.store.ts`)
 
-async function logout() {
-  await supabaseClient.auth.signOut()
-  user.value = null
-  session.value = null
-}
+**State:** `profile: ProfileDTO | null`, `isLoading`, `error`
 
-async function initialize() {
-  const { data } = await supabaseClient.auth.getSession()
-  if (data.session) {
-    user.value = data.session.user
-    session.value = data.session
-  }
-}
-```
-
-### 5.2 ProfileStore
-
-**File:** `stores/profile.store.ts`
-
-**State:**
-
-- `profile: Profile | null`
-- `isComplete: computed(() => profile.value?.is_complete ?? false)`
+**Computed:** `defaultPreferences` – returns `{ what, speed, type, budget }` snapshot for use when creating trips.
 
 **Actions:**
 
-```typescript
-async function fetchProfile() {
-  const { data, error } = await supabaseClient.from('profiles').select('*').single()
+- `fetchProfile()` – `GET /api/profiles/me`
+- `updateProfile(updates)` – `PATCH /api/profiles/me`
 
-  if (error) throw error
-  profile.value = data
-}
+Profile is always guaranteed to exist for authenticated users (created by DB trigger on registration).
 
-async function updateProfile(updates: Partial<Profile>) {
-  const { data, error } = await supabaseClient
-    .from('profiles')
-    .update(updates)
-    .eq('user_id', (await supabaseClient.auth.getUser()).data.user?.id)
-    .select()
-    .single()
+---
 
-  if (error) throw error
-  profile.value = data
-}
-```
+### 5.3 TripStore (`stores/trip.store.ts`)
 
-### 5.3 TripStore
-
-**File:** `stores/trip.store.ts`
-
-**State:**
-
-- `trips: Trip[]`
-- `currentTrip: Trip | null`
-- `pagination: Pagination`
+**State:** `trips: TripListItemDTO[]`, `currentTrip: TripDTO | null`, `tripsPagination`, `isLoadingTrips`,
+`isCreatingTrip`
 
 **Actions:**
 
-```typescript
-async function fetchTrips(page = 1, limit = 20) {
-  const from = (page - 1) * limit
-  const to = from + limit - 1
+- `fetchTrips(page)` – `GET /api/trips?page=N`
+- `fetchTripById(id)` – `GET /api/trips/:id`
+- `createTrip()` – `POST /api/trips` (title only; returns new trip id for navigation)
+- `updateTrip(id, updates)` – `PATCH /api/trips/:id`
+- `deleteTripById(id)` – `DELETE /api/trips/:id`
 
-  const { data, error, count } = await supabaseClient
-    .from('trips')
-    .select('*', { count: 'exact' })
-    .order('updated_at', { ascending: false })
-    .range(from, to)
+---
 
-  if (error) throw error
-  trips.value = data || []
-  pagination.value = {
-    current_page: page,
-    total_pages: Math.ceil((count || 0) / limit),
-    total_count: count || 0,
-    limit
-  }
-}
+### 5.4 PlanStore (`stores/plan.store.ts`)
 
-async function createTrip(tripData: CreateTripDto) {
-  const { data, error } = await supabaseClient.from('trips').insert(tripData).select().single()
+**State:** `candidate: GeneratedPlanDTO | null`, `quota: GenerationQuotaDTO | null`, `isGenerating`
 
-  if (error) throw error
-  return data
-}
-
-async function updateTrip(id: number, updates: Partial<Trip>) {
-  const { data, error } = await supabaseClient
-    .from('trips')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) throw error
-  currentTrip.value = data
-}
-```
-
-### 5.4 PlanStore
-
-**File:** `stores/plan.store.ts`
-
-**State:**
-
-- `candidate: PlanCandidate | null`
-- `quota: GenerationQuota | null`
-- `isGenerating: boolean`
-- `hasUnsavedCandidate: computed(() => !!candidate.value && !candidate.value.isSaved)`
+**Computed:** `hasUnsavedCandidate`
 
 **Actions:**
 
-```typescript
-async function generatePlan(tripId: number) {
-  isGenerating.value = true
-  try {
-    const { data, error } = await supabaseClient.functions.invoke('generate-plan', {
-      body: { tripId }
-    })
+- `generatePlan(tripId)` – `POST /api/trips/:id/generate-plan`; stores result as `candidate`; updates `quota`
+- `savePlan(tripId)` – `PUT /api/trips/:id/plan`; persists `candidate`; clears `candidate`
+- `discardCandidate()` – clears `candidate` without saving
+- `fetchQuota()` – `GET /api/users/me/generation-quota`
 
-    if (error) throw error
+The candidate is intentionally **not persisted** to localStorage; it is lost on page refresh (per PRD §3.6 / US-016).
 
-    candidate.value = {
-      ...data,
-      isSaved: false,
-      tripId
-    }
-
-    await fetchQuota()
-    return data
-  } finally {
-    isGenerating.value = false
-  }
-}
-
-async function savePlan(tripId: number) {
-  if (!candidate.value) throw new Error('No candidate plan to save')
-
-  const { data, error } = await supabaseClient
-    .from('trips')
-    .update({
-      plan_json: candidate.value.plan,
-      plan_language: candidate.value.language
-    })
-    .eq('id', tripId)
-    .select()
-    .single()
-
-  if (error) throw error
-  candidate.value = { ...candidate.value, isSaved: true }
-  return data
-}
-```
+---
 
 ## 6. Routing and Navigation
 
-### 6.1 Router Configuration
+### 6.1 Route Guard Strategy
 
-**File:** `router/index.ts`
+`router.beforeEach` blocks navigation until `authStore.isLoading === false` (wait for Supabase session restore),
+then enforces:
 
-```typescript
-import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth.store'
+- `requiresAuth: true` + not authenticated → redirect to `/login?redirect=<path>`
+- `guestOnly: true` + authenticated → redirect to `/`
 
-const routes = [
-  {
-    path: '/login',
-    name: 'login',
-    component: () => import('@/views/LoginView.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/register',
-    name: 'register',
-    component: () => import('@/views/RegisterView.vue'),
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/dashboard',
-    name: 'dashboard',
-    component: () => import('@/views/DashboardView.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/trips/:id',
-    name: 'trip-detail',
-    component: () => import('@/views/TripView.vue'),
-    meta: { requiresAuth: true }
-  }
-]
+### 6.2 Unsaved Candidate Guard
 
-const router = createRouter({
-  history: createWebHistory(),
-  routes
-})
-
-router.beforeEach(async (to, from, next) => {
-  const authStore = useAuthStore()
-
-  if (!authStore.user) {
-    await authStore.initialize()
-  }
-
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next({ name: 'login', query: { redirect: to.fullPath } })
-  } else {
-    next()
-  }
-})
-
-export default router
-```
-
-### 6.2 Navigation Guards for Unsaved Changes
-
-**Implementation in TripDetailView.vue:**
+In `TripView.vue`:
 
 ```typescript
-import { onBeforeRouteLeave } from 'vue-router'
-
-const planStore = usePlanStore()
-
-onBeforeRouteLeave((to, from, next) => {
+onBeforeRouteLeave(() => {
   if (planStore.hasUnsavedCandidate) {
-    const confirmed = window.confirm(
-      'You have an unsaved plan. Your changes will be lost. Leave anyway?'
-    )
-    if (confirmed) {
-      planStore.clearCandidate()
-      next()
-    } else {
-      next(false)
-    }
-  } else {
-    next()
+    return window.confirm('You have an unsaved plan. Leave and discard it?')
   }
 })
 ```
 
-## 7. Responsive Design with Tailwind
+### 6.3 Trip ID Validation Guard
 
-### 7.1 Breakpoints
+The `/trips/:id` route has an `beforeEnter` guard that parses the id parameter as an integer; non-numeric or
+non-positive values are redirected to `not-found`.
 
-- **sm:** 640px - Small tablets
-- **md:** 768px - Tablets
-- **lg:** 1024px - Desktops (split-panel threshold)
-- **xl:** 1280px - Large desktops
-- **2xl:** 1536px - Extra large screens
+---
 
-### 7.2 Mobile-First Responsive Patterns
+## 7. Responsive Design
 
-**Dashboard Grid:**
+### 7.1 Breakpoints (Tailwind defaults)
 
-```vue
-<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 md:gap-6 md:p-6 lg:grid-cols-3">
-  <TripCard v-for="trip in trips" :key="trip.id" :trip="trip"/>
-</div>
+| Breakpoint | Min width | Usage                                       |
+| ---------- | --------- | ------------------------------------------- |
+| `sm`       | 640px     | Two-column trip grid                        |
+| `md`       | 768px     | Larger padding, spacing                     |
+| `lg`       | 1024px    | Split panel in TripView; persistent sidebar |
+| `xl`       | 1280px    | Three-column trip grid                      |
+
+### 7.2 Layout Patterns
+
+**Dashboard trip grid:**
+
+```
+grid-cols-1 → sm:grid-cols-2 → lg:grid-cols-3
 ```
 
-**Trip Detail Split Panel:**
+**TripView split panel:**
 
-```vue
-
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-  <div class="order-1"><!-- Note Editor --></div>
-  <div class="order-2 lg:sticky lg:top-4"><!-- Plan Viewer --></div>
-</div>
+```
+Single column (mobile)  →  lg:grid-cols-2 (note left, plan right, sticky)
 ```
 
-**Responsive Typography:**
+**Sidebar:**
 
-```vue
-
-<h1 class="text-2xl md:text-3xl lg:text-4xl font-bold">
-  <p class="text-sm md:text-base">
+```
+Mobile: hidden, overlay on toggle
+Desktop (lg+): fixed left, 256px, always visible
 ```
 
-**Responsive Spacing:**
-
-```vue
-
-<div class="p-4 md:p-6 lg:p-8">
-  <div class="space-y-4 md:space-y-6">
-    <div class="gap-2 sm:gap-4 md:gap-6">
-```
-
-**Responsive Flexbox:**
-
-```vue
-
-<div class="flex flex-col md:flex-row gap-4">
-  <div class="flex flex-col sm:flex-row sm:justify-between">
-```
-
-**Responsive Visibility:**
-
-```vue
-<Button class="lg:hidden"><!-- Mobile only --></Button>
-<nav class="hidden lg:block"><!-- Desktop only --></nav>
-```
+---
 
 ## 8. Accessibility (WCAG AA)
 
-### 8.1 Color Contrast Requirements
+### 8.1 Color Contrast
 
-**Text Contrast:**
+All text meets minimum 4.5:1 (normal text) or 3:1 (large text) ratios.
 
-- Normal text: Minimum 4.5:1 contrast ratio
-- Large text (18pt+): Minimum 3:1 contrast ratio
+Key color assignments:
 
-**Component Colors (WCAG AA compliant):**
+- Status badges use shadcn-vue `Badge` variant colors verified against WCAG AA
+- Character counter warning/error states: `text-yellow-600` / `text-destructive`
+- Profile pill active state: `bg-primary text-primary-foreground`
+- Focus rings: `focus-visible:ring-2 focus-visible:ring-ring`
 
-- Status badges:
-  - CREATED: `#6B7280` (gray) on white background
-  - DRAFT: `#D97706` (orange) on white background
-  - CONFIRMED: `#059669` (green) on white background
-- Character counter:
-  - Invalid: `#DC2626` (red)
-  - Warning: `#D97706` (orange)
-  - Valid: `#059669` (green)
-- Inherited preferences: `#EFF6FF` (light blue) with `#1E293B` (dark text)
-- Focus indicators: 2px outline with 3:1 contrast ratio
+### 8.2 ARIA & Semantics
 
-### 8.2 ARIA Labels and Semantic HTML
-
-**Navigation:**
-
-```vue
-<nav aria-label="Main navigation">
-  <NavigationMenuItem>
-    <NavigationMenuLink
-        :aria-current="isActive ? 'page' : undefined"
-    >
-      Dashboard
-    </NavigationMenuLink>
-  </NavigationMenuItem>
-</nav>
-```
-
-**Forms:**
-
-```vue
-<Label for="trip-title">Trip Title</Label>
-<Input id="trip-title" v-model="title" />
-
-<!-- Or with aria-labelledby -->
-<div id="budget-label">Budget</div>
-<Select aria-labelledby="budget-label" v-model="budget" />
-```
-
-**Buttons:**
-
-```vue
-<Button aria-label="Toggle navigation menu">
-  <Menu class="h-6 w-6"/>
-</Button>
-```
-
-**Alerts and Live Regions:**
-
-```vue
-<Alert role="alert">
-  <AlertTitle>Error</AlertTitle>
-  <AlertDescription>Failed to save trip</AlertDescription>
-</Alert>
-
-<div aria-live="polite" aria-atomic="true">
-  {{ quota.used }}/{{ quota.limit }} generations used
-</div>
-```
-
-**Modals:**
-
-```vue
-<Dialog aria-modal="true">
-  <DialogContent>
-    <DialogTitle>Confirm Deletion</DialogTitle>
-    <DialogDescription>This action cannot be undone.</DialogDescription>
-  </DialogContent>
-</Dialog>
-```
+- `<nav aria-label="Main navigation">` on sidebar nav element
+- `aria-current="page"` on active nav link
+- `aria-live="polite"` on quota counter for screen reader updates
+- shadcn-vue Dialog manages `aria-modal`, focus trap, and `Escape` dismissal automatically
+- All icon-only buttons include `aria-label`
 
 ### 8.3 Keyboard Navigation
 
-**Requirements:**
+- Full Tab order through all interactive elements
+- Preference pill toggles and accordion items keyboard-operable
+- Modal dialogs trap focus; close on `Escape`
+- Skip-to-main-content link at page top
 
-- All interactive elements accessible via Tab key
-- Modal dialogs trap focus within
-- Dialogs close on Escape key
-- Dropdown menus navigable with arrow keys
-- Form submission on Enter key
-- Skip to main content link at page top
-
-**Focus Management:**
-
-```vue
-<!-- Visible focus indicators -->
-<Button class="focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-
-  <!-- Focus trap in modals -->
-  <Dialog @update:open="handleDialogOpen">
-    <!-- Focus automatically managed by shadcn-vue Dialog -->
-  </Dialog>
-```
-
-### 8.4 Screen Reader Support
-
-**Semantic HTML:**
-
-```vue
-<template>
-  <div>
-    <header><!-- App header --></header>
-    <nav><!-- Sidebar navigation --></nav>
-    <main>
-      <article><!-- Trip detail --></article>
-      <section><!-- Plan section --></section>
-    </main>
-  </div>
-</template>
-```
-
-**Alt Text:**
-
-```vue
-<img :src="iconUrl" :alt="trip.title + ' icon'" />
-<Icon aria-hidden="true" />
-<!-- Decorative icons -->
-```
-
-**Announcements:**
-
-```vue
-<!-- Toast notifications with aria-live -->
-<Toast aria-live="assertive" aria-atomic="true">
-  Plan generated successfully
-</Toast>
-```
-
-### 8.5 Additional Accessibility Features
-
-- Minimum font size: 16px for body text
-- Line height: 1.5 for body text
-- Text resizable up to 200% without loss of functionality
-- Clear error messages with correction suggestions
-- Consistent navigation structure across all pages
+---
 
 ## 9. Error Handling and Notifications
 
 ### 9.1 Toast Notification System
 
-**Component:** shadcn-vue Toast
+**Component:** shadcn-vue `Toast` / `Toaster`
 
-**Error Types:**
+| Error type                  | Variant                      | Duration                |
+| --------------------------- | ---------------------------- | ----------------------- |
+| Validation errors (400)     | `destructive`                | 5 s                     |
+| AI generation failure (502) | `destructive` + Retry action | persistent              |
+| Quota exceeded (429)        | `destructive`                | 10 s (shows reset time) |
+| Profile/trip save failure   | `destructive`                | 5 s                     |
+| Network errors              | `destructive` + Retry action | persistent              |
 
-**1. Validation Errors (400):**
+### 9.2 Inline Error States
 
-```typescript
-toast({
-  variant: 'destructive',
-  title: 'Validation Error',
-  description: 'Note must be between 1000 and 10000 characters',
-  duration: 5000
-})
-```
+- Trip list: `<Alert variant="destructive">` with "Failed to load trips" + Retry button
+- TripView load failure: similar inline alert
+- Generation button: disabled with tooltip when quota = 10/10 or destination missing
 
-**2. AI Generation Errors (500):**
+### 9.3 Confirmation Dialogs
 
-```typescript
-toast({
-  variant: 'destructive',
-  title: 'Generation Failed',
-  description: 'Failed to generate plan. Please try again.',
-  action: h(Button, { onClick: () => retryGeneration() }, 'Retry')
-})
-```
+- Delete trip: shadcn-vue `Dialog` with "Delete trip?" + destructive button
+- Discard unsaved plan: `window.confirm` in route-leave guard (MVP; can be upgraded to Dialog later)
+- Account deletion: requires typing confirmation string "DELETE MY ACCOUNT"
 
-**3. Quota Exceeded (429):**
+---
 
-```typescript
-toast({
-  variant: 'warning',
-  title: 'Generation Limit Reached',
-  description: `You've used all 10 generations. Resets ${formatResetTime(resetAt)}`,
-  duration: 10000
-})
-```
-
-**4. Network Errors:**
-
-```typescript
-toast({
-  variant: 'destructive',
-  title: 'Connection Error',
-  description: 'Check your internet connection.',
-  action: h(Button, { onClick: () => retryRequest() }, 'Retry')
-})
-```
-
-### 9.2 Optimistic Updates
-
-**Pattern:**
-
-```typescript
-async function updateTripTitle(tripId: number, newTitle: string) {
-  const tripStore = useTripStore()
-  const originalTitle = tripStore.currentTrip?.title
-
-  // Optimistic update
-  if (tripStore.currentTrip) {
-    tripStore.currentTrip.title = newTitle
-  }
-
-  try {
-    await tripStore.updateTrip(tripId, { title: newTitle })
-    toast({ title: 'Trip updated', variant: 'success' })
-  } catch (error) {
-    // Revert on error
-    if (tripStore.currentTrip && originalTitle) {
-      tripStore.currentTrip.title = originalTitle
-    }
-    toast({
-      title: 'Update failed',
-      description: 'Could not update trip title',
-      variant: 'destructive'
-    })
-  }
-}
-```
-
-## 10. Performance Optimization
+## 10. Performance
 
 ### 10.1 Code Splitting
 
-**Route-based lazy loading:**
+All views are lazy-loaded via dynamic import in the router:
 
 ```typescript
-const routes = [
-  {
-    path: '/dashboard',
-    component: () => import('@/views/DashboardView.vue')
-  }
-]
+component: () => import('@/views/DashboardView.vue')
 ```
 
-**Component-level splitting:**
+### 10.2 Data Fetching Order
 
-```typescript
-const PlanEditor = defineAsyncComponent(() => import('@/components/PlanEditor.vue'))
-```
+**On app mount (AppLayout / main.ts):**
 
-### 10.2 Data Fetching Strategy
+1. `authStore.initialize()` — restore Supabase session
 
-**On App Mount:**
+**On DashboardView mount:**
 
-- Initialize auth state
-- Fetch user profile
-- Fetch generation quota
+1. `profileStore.fetchProfile()` (warms store for UserProfilePanel)
+2. `tripStore.fetchTrips(1)` (parallel with profile fetch)
 
-**On Dashboard Mount:**
+**On TripView mount:**
 
-- Fetch trips (paginated, 20 per page)
+1. `tripStore.fetchTripById(id)`
+2. `planStore.fetchQuota()`
 
-**On Trip Mount:**
+### 10.3 Pinia Cache Invalidation
 
-- Fetch specific trip data
-- Load saved plan if exists
+| Store               | Invalidated when                                                  |
+| ------------------- | ----------------------------------------------------------------- |
+| ProfileStore        | `updateProfile()` call (replaces in-place)                        |
+| TripStore — list    | After `createTrip()` or `deleteTripById()`                        |
+| TripStore — current | After `updateTrip()` (replaces in-place)                          |
+| PlanStore candidate | On `discardCandidate()`, `savePlan()`, or route leave             |
+| PlanStore quota     | After each `generatePlan()` (quota snapshot returned in response) |
 
-### 10.3 Caching Strategy
-
-**Pinia State:**
-
-- Profile data (refresh on update)
-- Trip list (invalidate on CRUD operations)
-- Generation quota (refresh after generation)
-- Plan candidate (temporary, cleared on navigation)
-
-**localStorage:**
-
-- Banner dismissal state
-- User preferences (theme, language - future)
+---
 
 ## 11. User Journey Maps
 
 ### 11.1 New User Onboarding
 
-2. **Register** → Enter email/password → Submit
-3. **Dashboard** (empty state)
-4. **Profile** → Fill in preferences → Save
-5. **Dashboard** → Click "Create New Trip"
-6. **Trip Create** → Enter title → Save
-7. **Trip View** → Write note → Set trip preferences
-8. **Generate Plan** → Review candidate → Save plan
-9. **Dashboard** → See trip with "Planned" status
+1. Visit `/` → redirected to `/login`
+2. Click "Create account" → `/register` → fill email / password / confirm
+3. Submit → account created, profile auto-generated with defaults → redirect to `/`
+4. `UserProfilePanel` at top of dashboard → set traveler flags and default preferences
+5. Click "New Trip" → trip created → navigate to `/trips/:id`
+6. Write note in the Note editor panel
+7. Set trip destination (required for generation)
+8. Click "Generate Plan" → loading spinner → plan candidate appears
+9. Review / edit activity descriptions → click "Save Plan"
+10. Back to dashboard → trip card shows status `CONFIRMED`
 
-### 11.2 Returning User - Creating New Trip
+### 11.2 Returning User – New Trip
 
-1. **Login** → Enter credentials
-2. **Dashboard** → See existing trips
-3. **Create New Trip** → Enter title and note
-4. **Trip View** → Adjust preferences → Generate plan
-5. **Review Plan** → Edit if needed → Save
-6. **Dashboard** → Trip appears with "Planned" status
+1. Visit `/` → already authenticated → dashboard loads
+2. Profile panel shows current settings; optionally adjust
+3. Click "New Trip" → `/trips/:id` (new)
+4. Write note → generate → save
+5. Dashboard shows updated trip list
 
 ### 11.3 Editing Existing Trip
 
-1. **Dashboard** → Click trip card
-2. **Trip Detail** → Edit note or preferences
-3. **Generate New Plan** → Review candidate
-4. **Save Plan** → Overwrites previous plan
-5. **Dashboard** → Updated timestamp visible
+1. Dashboard → click trip card → `/trips/:id`
+2. Edit note or per-trip preferences
+3. Click "Generate Plan" → new candidate replaces old display
+4. Save → overwrites previous confirmed plan
+5. Back to dashboard → updated timestamp
 
-## 12. shadcn-vue Component Usage
+### 11.4 Quota Limit Handling
 
-### 12.1 Core Components
+1. User reaches 10/10 generations
+2. "Generate Plan" button becomes disabled; quota counter shows red with reset time
+3. After ≥24 h the oldest recorded generation falls outside the rolling window
+4. Quota counter refreshes (next page load or after next generation attempt)
 
-- **Navigation Menu** - Sidebar navigation
-- **Button** - All actions (primary, secondary, ghost, outline variants)
-- **Card** - Trip cards, content containers
-- **Alert** - Banners, notifications, warnings
-- **Badge** - Status indicators, category tags
-- **Dialog / AlertDialog** - Confirmations, modals
-- **Toast** - Notifications, errors, success messages
-- **Accordion** - Plan day expansion
-- **Select** - Dropdown selectors
-- **Textarea** - Note editor
-- **Progress** - Quota visualization
-- **Separator** - Visual dividers
-- **Skeleton** - Loading states
+### 11.5 Dietary Preferences
 
-### 12.2 Form Components
+1. Toggle "Dietary preferences" pill ON → textarea appears immediately (optimistic)
+2. User types description, blurs textarea → both flag + description saved together
+3. Empty blur → destructive toast "Description required", pill reverts to OFF
+4. Toggle ON pill OFF → immediate save of `{ has_dietary_preferences: false, dietary_preferences_description: null }`
 
-- **Label** - Form field labels
-- **Input** - Text inputs
-- **Checkbox** - Boolean preferences
-- **RadioGroup** - Single-choice preferences
-- **Form** - Form validation wrapper (with Zod schemas)
+### 11.6 Password Recovery
 
-## 13. Authentication Flow
+1. `/login` → click "Forgot password?" → `/forgot-password`
+2. Enter email → submit → confirmation message (always 200 to avoid email enumeration)
+3. User clicks link in email → `/reset-password`
+4. Enter new password → submit → redirect to `/login`
 
-### 13.1 Current Implementation
+### 11.7 Account Deletion
 
-**Supabase Auth with Session Management:**
+1. User menu in sidebar → "Delete Account"
+2. Modal: warning text + input field requiring "DELETE MY ACCOUNT"
+3. Submit → `DELETE /api/users/me` → all data wiped → redirect to `/login`
 
-- Email/password registration and login
-- Session tokens managed by Supabase client
-- Automatic token refresh
-- Session persistence in browser storage
+---
 
-**Router Guards:**
+## 12. User Story → UI Element Mapping
 
-```typescript
-router.beforeEach(async (to, from, next) => {
-  const authStore = useAuthStore()
+| US     | Story                         | UI element                                                                         |
+| ------ | ----------------------------- | ---------------------------------------------------------------------------------- |
+| US-001 | Registration                  | `RegisterView` form + redirect to `/`                                              |
+| US-002 | Login / Logout / Auth guard   | `LoginView`, logout button in sidebar, `router.beforeEach` guard                   |
+| US-003 | Data isolation                | RLS on server; UI shows only own data                                              |
+| US-004 | Account deletion              | Delete Account modal in sidebar user menu                                          |
+| US-005 | Global profile flags          | `UserProfilePanel` Section A (traveler flag pills) in `DashboardView`              |
+| US-006 | Default travel preferences    | `UserProfilePanel` Section B (what/speed/type/budget pills)                        |
+| US-008 | Create trip + note            | "New Trip" button in `DashboardView` → inline creation → `TripView`                |
+| US-009 | Edit / delete trip            | Note editor + preferences in `TripView`; delete via card menu / detail page        |
+| US-010 | Trip list                     | `DashboardView` trip grid sorted by `updated_at` DESC with pagination              |
+| US-011 | Per-trip preferences          | `TripPreferences` panel in `TripView` (overridable, with read-only profile flags)  |
+| US-012 | Note length validation        | Character counter in `TripNoteEditor`; "Generate Plan" button disabled if > 10,000 |
+| US-013 | Generate plan + quota counter | "Generate Plan" button + `GenerationQuotaCounter`; 10/10 → button locked           |
+| US-014 | Review / edit candidate       | Editable fields in `PlanDayList` when plan is a candidate                          |
+| US-015 | Save plan                     | "Save Plan" button; confirmed plan shown on re-open                                |
+| US-016 | Regenerate + error handling   | "Regenerate" button; destructive toast + retry on error; candidate lost on refresh |
+| US-017 | Plan language from note       | Auto-detected server-side; `plan_language` shown in plan header (read-only)        |
 
-  if (!authStore.user) {
-    await authStore.initialize()
-  }
+---
 
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next({ name: 'login', query: { redirect: to.fullPath } })
-  } else {
-    next()
-  }
-})
+## 13. Component Hierarchy
+
+```
+App
+├── AuthLayout (public routes)
+│   ├── LoginView            → /login
+│   ├── RegisterView         → /register
+│   ├── ForgotPasswordView   → /forgot-password
+│   └── ResetPasswordView    → /reset-password
+├── AppLayout (protected routes)
+│   ├── Sidebar (Navigation Menu + user section)
+│   ├── DashboardView        → /
+│   │   ├── UserProfilePanel
+│   │   │   ├── [Section A] flag pill buttons × 4 (+ Textarea for dietary)
+│   │   │   └── [Section B] pill groups (what/speed/type/budget)
+│   │   ├── TripCard × N
+│   │   └── TripListPagination
+│   ├── TripView             → /trips/:id
+│   │   ├── TripNoteEditor (Textarea + char counter)
+│   │   ├── TripPreferences (per-trip overrides + read-only profile flags)
+│   │   └── PlanViewer
+│   │       ├── GenerationQuotaCounter (Progress bar)
+│   │       ├── [Generate / Regenerate button]
+│   │       ├── PlanDayList (Accordion × days)
+│   │       │   └── ActivityItem × N (editable in candidate mode)
+│   │       └── [Save Plan / Discard buttons]
+│   └── NotFoundView         → /*
+└── Toaster (global toast outlet)
 ```
 
-### 13.2 Future JWT Implementation
+---
 
-**Planned for later phase:**
+## 14. shadcn-vue Component Usage
 
-- Session tokens in HTTP-only cookies
-- JWT in `Authorization: Bearer <token>` header for API requests
-- Custom middleware for additional security checks
-- Token refresh logic handled by Supabase client
+### Core Components
 
-## 14. Implementation Checklist
+| Component                                     | Used for                                                    |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| `Card / CardHeader / CardTitle / CardContent` | Profile panel, trip cards, plan day items                   |
+| `Button`                                      | All actions; variants: default, outline, ghost, destructive |
+| `Badge`                                       | Trip status, category tags, time-of-day labels              |
+| `Alert / AlertTitle / AlertDescription`       | Unsaved plan warning, saved plan confirmation, error states |
+| `Dialog / DialogContent / DialogFooter`       | Delete trip confirmation, account deletion                  |
+| `Toast / Toaster`                             | All transient notifications                                 |
+| `Accordion / AccordionItem`                   | Plan day expansion in PlanDayList                           |
+| `Textarea`                                    | Note editor, dietary description                            |
+| `Input`                                       | Trip title, destination, account deletion confirmation      |
+| `Progress`                                    | Quota counter visualization                                 |
+| `Skeleton`                                    | Loading placeholders (profile panel, trip list)             |
+| `Separator`                                   | Visual dividers in panels                                   |
 
-### Phase 1: Foundation
+### Form Components
 
-- [ ] Set up Vue 3 + Vite + TypeScript project
-- [ ] Install and configure shadcn-vue
-- [ ] Configure Tailwind CSS with custom theme
-- [ ] Set up Vue Router with route guards
-- [ ] Set up Pinia stores (Auth, Profile, Trip, Plan)
-- [ ] Configure custom Supabase client
+| Component | Used for                                 |
+| --------- | ---------------------------------------- |
+| `Label`   | Form field labels in auth forms          |
+| `Input`   | Email, password, trip title, destination |
 
-### Phase 2: Layouts and Navigation
+---
 
-- [ ] Create AuthLayout component
-- [ ] Create AppLayout component
-- [ ] Implement Sidebar with Navigation Menu
-- [ ] Add responsive sidebar toggle for mobile
-- [ ] Implement skip to main content link
+## 15. Security Considerations
 
-### Phase 3: Authentication Views
+| Concern                     | Mitigation in UI                                                               |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| Route access without auth   | `router.beforeEach` guard redirects to `/login`                                |
+| AI API key exposure         | Key lives only in Edge Function environment; never sent to browser             |
+| Cross-user data access      | RLS enforced at DB level; UI shows only data returned by the authenticated API |
+| Accidental account deletion | Requires typing "DELETE MY ACCOUNT" confirmation string                        |
+| Unsaved plan data loss      | `onBeforeRouteLeave` guard warns before navigation                             |
+| Password reset enumeration  | `ForgotPasswordView` shows success message regardless of email existence       |
 
-- [ ] Build LandingView
-- [ ] Build LoginView with form validation
-- [ ] Build RegisterView with form validation
-- [ ] Implement auth state management
-- [ ] Add error handling for auth operations
+---
 
-### Phase 4: Dashboard
+## 16. Summary
 
-- [ ] Build DashboardView
-- [ ] Implement ProfileCompletenessBanner
-- [ ] Create TripCard component with status badges
-- [ ] Add pagination controls
-- [ ] Implement trip list fetching and display
+This UI architecture provides a complete, production-ready foundation for MyAIGuide MVP:
 
-### Phase 5: Profile Management
-
-- [ ] Build ProfileView
-- [ ] Create ProfileForm with boolean toggles
-- [ ] Implement PreferenceSelector components
-- [ ] Add profile completeness logic
-- [ ] Implement profile update with optimistic UI
-
-### Phase 6: Trip Management
-
-- [ ] Build TripCreateView
-- [ ] Build TripDetailView with responsive layout
-- [ ] Create TripNoteEditor with character counter
-- [ ] Implement TripPreferences with inherited value indicators
-- [ ] Add trip CRUD operations
-
-### Phase 7: Plan Generation
-
-- [ ] Create PlanViewer component
-- [ ] Implement GenerationQuotaCounter
-- [ ] Add plan generation logic with loading states
-- [ ] Create PlanDayList with Accordion
-- [ ] Implement plan candidate vs saved plan distinction
-- [ ] Add navigation guards for unsaved changes
-
-### Phase 8: Error Handling and Polish
-
-- [ ] Implement toast notification system
-- [ ] Add error handling for all API calls
-- [ ] Implement optimistic updates
-- [ ] Add loading skeletons
-- [ ] Test all user journeys
-
-### Phase 9: Accessibility Audit
-
-- [ ] Verify WCAG AA color contrast
-- [ ] Test keyboard navigation
-- [ ] Add ARIA labels where needed
-- [ ] Test with screen readers
-- [ ] Verify focus management
-
-### Phase 10: Performance Optimization
-
-- [ ] Implement code splitting
-- [ ] Optimize bundle size
-- [ ] Add caching strategies
-- [ ] Test on various devices and browsers
-
-## 15. Summary
-
-This UI architecture provides a complete, production-ready foundation for MyAIGuide MVP with:
-
-✅ **Modern Tech Stack** - Vue 3.5, TypeScript, Vite, shadcn-vue, Tailwind CSS
-✅ **Accessible Design** - WCAG AA compliant with proper contrast, ARIA, keyboard navigation
-✅ **Responsive Layout** - Mobile-first with Tailwind responsive variants
-✅ **Sidebar Navigation** - shadcn-vue Navigation Menu component
-✅ **State Management** - Pinia stores for auth, profile, trips, and plans
-✅ **Custom Supabase Integration** - Using `@/db/supabase.client.ts`
-✅ **Error Handling** - Toast notifications with retry mechanisms
-✅ **Optimistic Updates** - Better perceived performance
-✅ **Navigation Guards** - Prevent data loss from unsaved changes
-✅ **Performance Optimized** - Code splitting, caching, lazy loading
-
-The architecture is designed to scale with future enhancements while maintaining clean, maintainable code aligned with
-Vue 3 best practices and MyAIGuide product requirements.
+✅ **Modern Tech Stack** – Vue 3.5, TypeScript 5, Vite 7, shadcn-vue, Tailwind CSS 3
+✅ **Correct Route Hierarchy** – dashboard at `/`, no `/profile` route, all auth routes present
+✅ **Profile in Dashboard** – `UserProfilePanel` embedded per PRD §3.2 / US-005
+✅ **Accurate Note Validation** – max 10,000 characters, no minimum length
+✅ **Dietary Preferences Edge Case** – deferred save pattern satisfies DB CHECK constraint
+✅ **Accessible Design** – WCAG AA contrast, ARIA labels, keyboard navigation, screen reader support
+✅ **Responsive Layout** – mobile-first with split panel at lg (1024px)
+✅ **State Management** – Pinia stores for auth, profile, trips, and plans (candidate ephemeral)
+✅ **Error Handling** – toast notifications, inline alerts, retry mechanisms
+✅ **User Story Coverage** – all 17 user stories mapped to concrete UI elements

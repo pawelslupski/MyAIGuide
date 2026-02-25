@@ -147,7 +147,7 @@ ID: US-005
 Opis: Jako użytkownik chcę ustawić informacje o dzieciach, diecie, ograniczeniach mobilności i zwierzętach.  
 Kryteria akceptacji:
 
-- Nie ma dedykowanego ekran profilu, profil globalny jest umieszczony w górnej części strony głównej (dashboard),
+- Nie ma dedykowanego ekranu profilu, profil globalny jest umieszczony w górnej części strony głównej (dashboard),
   ponad listą posiadanych wycieczek i zawiera przełączniki opisane odpowiednimi etykietami oraz ikonami
 - Zmiany zapisują się i wpływają na kolejne generowane plany.
 
