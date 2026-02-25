@@ -1,7 +1,7 @@
-import type { Tables, TablesUpdate } from './db/database.types'
+import type { Tables } from './db/database.types'
 
 // ============================================================================
-// PREFERENCE TYPES (Validation Enums)
+// PREFERENCE DOMAIN TYPES
 // ============================================================================
 
 export type WhatPreference = 'nature' | 'culture_museums' | 'beach_relax' | 'city_break' | 'foodie'
@@ -13,30 +13,17 @@ export type BudgetPreference = 'budget' | 'moderate' | 'luxury'
 // TRIP STATUS
 // ============================================================================
 
+/** Derived from DB fields: note_body presence + plan_json presence. Never stored in the DB. */
 export type TripStatus = 'CREATED' | 'DRAFT' | 'CONFIRMED'
-
-// ============================================================================
-// DASHBOARD VIEW MODELS
-// ============================================================================
-
-/**
- * View model for a trip card on the dashboard.
- * Derived from raw Supabase query result after computing status and truncating the note.
- */
-export interface DashboardTripViewModel {
-  id: number
-  title: string
-  status: TripStatus
-  notePreview: string
-  updatedAt: string
-}
 
 // ============================================================================
 // PLAN JSON STRUCTURE
 // ============================================================================
 
+export type TimeOfDay = 'morning' | 'afternoon' | 'evening'
+
 export interface Activity {
-  timeOfDay: string
+  timeOfDay: TimeOfDay
   locationName: string
   description: string
   categoryTag: WhatPreference
@@ -56,63 +43,87 @@ export interface PlanJson {
 // ============================================================================
 
 /**
- * Profile DTO returned by GET /api/profiles/me
- * Directly maps to the profiles table Row
+ * Profile DTO returned by GET /api/profiles/me.
+ * Extends the raw DB row, narrowing the preference fields from `string` to
+ * their respective enum union types for type-safe consumption on the client.
  */
-export type ProfileDTO = Tables<'profiles'>
+export interface ProfileDTO extends Omit<
+  Tables<'profiles'>,
+  'default_what' | 'default_speed' | 'default_type' | 'default_budget'
+> {
+  default_what: WhatPreference[]
+  default_speed: SpeedPreference
+  default_type: TypePreference
+  default_budget: BudgetPreference
+}
 
 /**
- * Command model for PUT /api/profiles/me
- * Contains only user-editable preference fields
+ * Command model for PATCH /api/profiles/me.
+ * All fields optional (partial update). Preference fields are typed with
+ * domain enums rather than plain strings to enforce valid values at the call site.
  */
-export type UpdateProfileCommand = Pick<
-  TablesUpdate<'profiles'>,
-  | 'has_kids'
-  | 'has_pets'
-  | 'has_mobility_issues'
-  | 'has_dietary_preferences'
-  | 'dietary_preferences_description'
-  | 'default_what'
-  | 'default_speed'
-  | 'default_type'
-  | 'default_budget'
->
+export interface UpdateProfileCommand {
+  has_kids?: boolean
+  has_pets?: boolean
+  has_mobility_issues?: boolean
+  has_dietary_preferences?: boolean
+  /** Required (non-empty) when has_dietary_preferences is true; null otherwise. */
+  dietary_preferences_description?: string | null
+  default_what?: WhatPreference[]
+  default_speed?: SpeedPreference
+  default_type?: TypePreference
+  default_budget?: BudgetPreference
+}
 
 // ============================================================================
 // TRIP DTOs
 // ============================================================================
 
 /**
- * Trip list item DTO returned in GET /api/trips response
- * Contains subset of trip fields plus computed status
- * Note: user_id is included per API spec but may be redundant since user is authenticated
+ * Trip list item DTO returned in GET /api/trips response array.
+ * Carries just the fields needed for the dashboard card plus computed status.
  */
 export interface TripListItemDTO extends Pick<
   Tables<'trips'>,
-  'id' | 'user_id' | 'title' | 'created_at' | 'updated_at'
+  | 'id'
+  | 'user_id'
+  | 'title'
+  | 'destination'
+  | 'num_days'
+  | 'num_people'
+  | 'created_at'
+  | 'updated_at'
 > {
   status: TripStatus
 }
 
 /**
- * Full trip DTO returned by GET /api/trips/{tripId}
- * Contains all trip fields with typed plan_json and computed status
- * Note: user_id is included per API spec but may be redundant since user is authenticated
+ * Full trip DTO returned by GET /api/trips/{tripId}.
+ * Narrows string preference columns to domain enum types and replaces the
+ * generic `Json` plan_json with the structured PlanJson type.
  */
-export interface TripDTO extends Omit<Tables<'trips'>, 'plan_json'> {
+export interface TripDTO extends Omit<
+  Tables<'trips'>,
+  'plan_json' | 'what' | 'speed' | 'type' | 'budget'
+> {
+  what: WhatPreference[]
+  speed: SpeedPreference | null
+  type: TypePreference | null
+  budget: BudgetPreference | null
   plan_json: PlanJson | null
   status: TripStatus
 }
 
 /**
- * Command model for POST /api/trips
- * Contains fields required/allowed for trip creation
+ * Command model for POST /api/trips.
+ * Preference fields are optional – omitted values are copied from the user's
+ * profile defaults server-side.
  */
 export interface CreateTripCommand {
   title: string
   destination?: string | null
   note_body?: string | null
-  what?: WhatPreference[] | null
+  what?: WhatPreference[]
   speed?: SpeedPreference | null
   type?: TypePreference | null
   budget?: BudgetPreference | null
@@ -121,14 +132,15 @@ export interface CreateTripCommand {
 }
 
 /**
- * Command model for PUT /api/trips/{tripId}
- * All fields optional for partial updates
+ * Command model for PATCH /api/trips/{tripId}.
+ * All fields optional (partial update). Does not include plan_json – use
+ * SavePlanCommand for that.
  */
 export interface UpdateTripCommand {
   title?: string
   destination?: string | null
   note_body?: string | null
-  what?: WhatPreference[] | null
+  what?: WhatPreference[]
   speed?: SpeedPreference | null
   type?: TypePreference | null
   budget?: BudgetPreference | null
@@ -137,8 +149,8 @@ export interface UpdateTripCommand {
 }
 
 /**
- * Command model for PUT /api/trips/{tripId}/plan
- * Saves a plan to the database
+ * Command model for PUT /api/trips/{tripId}/plan.
+ * Persists the in-memory plan candidate to the database.
  */
 export interface SavePlanCommand {
   plan_json: PlanJson
@@ -156,10 +168,7 @@ export interface PaginationDTO {
   limit: number
 }
 
-/**
- * Response DTO for GET /api/trips
- * Contains paginated list of trips
- */
+/** Response DTO for GET /api/trips */
 export interface TripsListDTO {
   trips: TripListItemDTO[]
   pagination: PaginationDTO
@@ -169,10 +178,7 @@ export interface TripsListDTO {
 // PLAN GENERATION DTOs
 // ============================================================================
 
-/**
- * Response DTO for GET /api/users/me/generation-quota
- * Contains quota information for plan generation
- */
+/** Response DTO for GET /api/users/me/generation-quota */
 export interface GenerationQuotaDTO {
   used: number
   limit: number
@@ -181,29 +187,54 @@ export interface GenerationQuotaDTO {
 }
 
 /**
- * Response DTO for POST /api/trips/{tripId}/generate-plan
- * Contains generated plan (not yet saved to database)
+ * Response DTO for POST /api/trips/{tripId}/generate-plan.
+ * The plan is returned to the client but NOT yet persisted in the database.
+ * The client stores it in Pinia state until the user explicitly saves it.
  */
 export interface GeneratedPlanDTO {
   plan: PlanJson
   language: string
   model_used: string
   generated_at: string
+  /** Updated quota snapshot so the client can refresh the counter without an extra request. */
+  quota: GenerationQuotaDTO
 }
 
 /**
- * Plan generation history item DTO
- * Returned in GET /api/trips/{tripId}/generations response
- * Directly maps to plan_generations table Row
+ * Single generation history record.
+ * Directly maps to the plan_generations table Row.
  */
 export type PlanGenerationHistoryItemDTO = Tables<'plan_generations'>
 
-/**
- * Response DTO for GET /api/trips/{tripId}/generations
- * Contains list of generation attempts for a trip
- */
+/** Response DTO for GET /api/trips/{tripId}/generations */
 export interface PlanGenerationHistoryDTO {
   generations: PlanGenerationHistoryItemDTO[]
+}
+
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
+
+/** Command model for DELETE /api/users/me */
+export interface DeleteAccountCommand {
+  /** Must equal "DELETE MY ACCOUNT" to confirm intentional deletion. */
+  confirmation: string
+}
+
+// ============================================================================
+// DASHBOARD VIEW MODEL (UI layer)
+// ============================================================================
+
+/**
+ * View model for a trip card on the dashboard.
+ * Derived from TripListItemDTO after computing status and truncating the note preview.
+ */
+export interface DashboardTripViewModel {
+  id: number
+  title: string
+  status: TripStatus
+  notePreview: string
+  updatedAt: string
 }
 
 // ============================================================================
@@ -211,16 +242,8 @@ export interface PlanGenerationHistoryDTO {
 // ============================================================================
 
 /**
- * NAMING CONVENTIONS:
- * - DTOs (API responses): Use snake_case for JSON fields (Supabase convention)
- * - TypeScript types: Use camelCase for properties
- * - Supabase client handles automatic conversion between conventions
- */
-
-/**
- * Trip preferences DTO
- * Extracted from trip or profile defaults
- * Used internally to pass preferences between service layers
+ * Snapshot of resolved trip preferences used between service layers.
+ * Reflects per-trip values after profile defaults have been applied.
  */
 export interface TripPreferencesDto {
   what: WhatPreference[]
@@ -231,43 +254,10 @@ export interface TripPreferencesDto {
   num_people: number | null
 }
 
-/**
- * Command model for plan generation service
- * Used internally to pass data between layers
- */
-export interface GeneratePlanCommand {
-  userId: string
-  tripId: number
-  noteBody: string
-  userProfile: {
-    hasKids: boolean
-    hasPets: boolean
-    hasMobilityIssues: boolean
-    hasDietaryPreferences: boolean
-  }
-  tripPreferences: TripPreferencesDto
-}
-
-/**
- * Quota check result
- * Returned by quota validation service
- */
-export interface QuotaCheckResult {
-  allowed: boolean
-  used: number
-  limit: number
-  resetAt: string // ISO 8601 timestamp
-}
-
-/**
- * Plan generation status
- * Used in plan_generations table
- */
+/** Status values stored in the plan_generations table. */
 export type PlanGenerationStatus = 'success' | 'api_error' | 'validation_error'
 
-/**
- * Parameters for recording generation attempt
- */
+/** Parameters for recording a generation attempt in plan_generations. */
 export interface RecordGenerationParams {
   userId: string
   tripId: number
@@ -276,42 +266,68 @@ export interface RecordGenerationParams {
   errorMessage?: string
 }
 
-// ============================================================================
-// AI SERVICE TYPES
-// ============================================================================
+/**
+ * Quota check result returned by the rate-limiting service.
+ * `allowed` is false when the user has reached the 10/24h limit.
+ */
+export interface QuotaCheckResult {
+  allowed: boolean
+  used: number
+  limit: number
+  resetAt: string
+}
 
 /**
- * AI service input parameters
- * Used to call OpenRouter.ai via Supabase Edge Function
+ * Internal command model used by the plan generation Edge Function.
+ * Aggregates all context needed to build the AI prompt.
  */
-export interface AIPlanParams {
-  language: string
+export interface GeneratePlanCommand {
+  userId: string
+  tripId: number
+  /** destination is validated non-null before this command is constructed. */
+  destination: string
   noteBody: string
   userProfile: {
     hasKids: boolean
     hasPets: boolean
     hasMobilityIssues: boolean
     hasDietaryPreferences: boolean
+    /** Non-null when hasDietaryPreferences is true; included verbatim in the prompt. */
+    dietaryPreferencesDescription: string | null
   }
   tripPreferences: TripPreferencesDto
 }
 
-/**
- * AI service response
- * Returned from OpenRouter.ai via Supabase Edge Function
- */
+// ============================================================================
+// AI SERVICE TYPES
+// ============================================================================
+
+/** Input parameters passed to the OpenRouter.ai call. */
+export interface AIPlanParams {
+  language: string
+  noteBody: string
+  destination: string
+  userProfile: {
+    hasKids: boolean
+    hasPets: boolean
+    hasMobilityIssues: boolean
+    hasDietaryPreferences: boolean
+    dietaryPreferencesDescription: string | null
+  }
+  tripPreferences: TripPreferencesDto
+}
+
+/** Parsed response from the OpenRouter.ai API. */
 export interface AIServiceResponse {
   plan: PlanJson
   model_used: string
 }
 
 // ============================================================================
-// ERROR RESPONSE TYPES
+// ERROR RESPONSE TYPE
 // ============================================================================
 
-/**
- * Standard error response structure used across all API endpoints
- */
+/** Standard error response structure used across all API endpoints. */
 export interface ErrorResponse {
   error: {
     code: string
