@@ -1,10 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { GeneratedPlanDTO, PlanJson, ErrorResponse } from '@/types'
+import type { GeneratedPlanDTO, PlanJson, ErrorResponse, AIServiceResponse } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
 import { useTripStore } from './trip.store'
 import { useProfileStore } from './profile.store'
-import { detectLanguage, callAIService } from '@/lib/services/generation.service'
+import {
+  detectLanguage,
+  callAIService,
+  checkGenerationQuota,
+  recordGenerationAttempt
+} from '@/lib/services/generation.service'
 import { savePlanToTrip as savePlanService } from '@/lib/services/trip.service'
 
 /**
@@ -27,12 +32,23 @@ export const usePlanStore = defineStore('plan', () => {
    * Generate plan for trip
    * Calls OpenRouter API via Supabase Edge Function
    */
-  async function generatePlan(_tripId: number): Promise<void> {
+  async function generatePlan(tripId: number): Promise<void> {
     isGenerating.value = true
     generationError.value = null
     saveError.value = null
 
     try {
+      // Authenticate user — required before any DB query
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) {
+        const err: any = new Error('Authentication required')
+        err.code = 'UNAUTHORIZED'
+        throw err
+      }
+      const userId = user.id
+
       // Get trip data
       const tripStore = useTripStore()
 
@@ -42,9 +58,33 @@ export const usePlanStore = defineStore('plan', () => {
 
       const trip = tripStore.currentTrip
 
+      // Guard: destination must be set before generating a plan
+      if (!trip.destination || trip.destination.trim() === '') {
+        const err: any = new Error('destination must be set before generating a plan')
+        err.code = 'VALIDATION_ERROR'
+        err.details = { field: 'destination' }
+        throw err
+      }
+
       // Validate note body (optional but must not exceed max length if provided)
       if (trip.note_body && trip.note_body.length > 10000) {
-        throw new Error('Trip notes must not exceed 10000 characters')
+        const err: any = new Error('Trip notes must not exceed 10000 characters')
+        err.code = 'VALIDATION_ERROR'
+        err.details = { field: 'note_body' }
+        throw err
+      }
+
+      // Enforce rate limit before invoking AI (10 generations / 24h)
+      const quotaCheck = await checkGenerationQuota(userId)
+      if (!quotaCheck.allowed) {
+        const err: any = new Error('You have reached the limit of 10 plan generations in 24 hours')
+        err.code = 'QUOTA_EXCEEDED'
+        err.details = {
+          used: quotaCheck.used,
+          limit: quotaCheck.limit,
+          reset_at: quotaCheck.resetAt
+        }
+        throw err
       }
 
       // Detect language from note (default to 'en' if no note)
@@ -69,22 +109,51 @@ export const usePlanStore = defineStore('plan', () => {
         hasKids: profileStore.profile?.has_kids ?? false,
         hasPets: profileStore.profile?.has_pets ?? false,
         hasMobilityIssues: profileStore.profile?.has_mobility_issues ?? false,
-        hasDietaryPreferences: profileStore.profile?.has_dietary_preferences ?? false
+        hasDietaryPreferences: profileStore.profile?.has_dietary_preferences ?? false,
+        dietaryPreferencesDescription: profileStore.profile?.dietary_preferences_description ?? null
       }
 
-      const response = await callAIService({
-        language,
-        noteBody: trip.note_body ?? '',
-        userProfile,
-        tripPreferences
-      })
+      // Call AI service and record attempt outcome
+      let response: AIServiceResponse
+      try {
+        response = await callAIService({
+          language,
+          noteBody: trip.note_body ?? '',
+          destination: trip.destination,
+          userProfile,
+          tripPreferences
+        })
+        await recordGenerationAttempt({
+          userId,
+          tripId,
+          status: 'success',
+          modelName: response.model_used
+        })
+      } catch (aiError) {
+        await recordGenerationAttempt({
+          userId,
+          tripId,
+          status: 'api_error',
+          errorMessage: aiError instanceof Error ? aiError.message : 'Unknown error'
+        })
+        throw aiError
+      }
+
+      // Fetch updated quota snapshot so the client can refresh the counter without an extra request
+      const updatedQuota = await checkGenerationQuota(userId)
 
       // Store candidate in memory (not saved to database yet)
       planCandidate.value = {
         plan: response.plan,
         language,
         model_used: response.model_used,
-        generated_at: new Date().toISOString()
+        generated_at: new Date().toISOString(),
+        quota: {
+          used: updatedQuota.used,
+          limit: updatedQuota.limit,
+          remaining: updatedQuota.limit - updatedQuota.used,
+          reset_at: updatedQuota.resetAt
+        }
       }
     } catch (err: any) {
       generationError.value = {

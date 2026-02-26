@@ -38,25 +38,29 @@ async function initializeView() {
   isInitializing.value = true
 
   try {
-    const tripId = parseInt(route.params.id as string, 10)
+    const rawId = route.params.id as string
+
+    // Guard: skip fetch if the same trip is already loaded (e.g. soft re-mount)
+    const tripFetchPromise =
+      !tripStore.currentTrip || String(tripStore.currentTrip.id) !== rawId
+        ? tripStore.fetchTrip(rawId)
+        : Promise.resolve()
 
     // Fetch all required data in parallel
-    await Promise.all([
-      tripStore.fetchTrip(tripId),
-      profileStore.fetchProfile(),
-      quotaStore.fetchQuota()
-    ])
+    await Promise.all([tripFetchPromise, profileStore.fetchProfile(), quotaStore.fetchQuota()])
   } catch (error: any) {
     console.error('Failed to initialize view:', error)
 
-    // Handle specific errors
-    if (error.message?.includes('not found') || error.code === 'PGRST116') {
+    // Handle specific errors by code (set by createNotFoundError / createInvalidTripIdError)
+    if (error.code === 'NOT_FOUND' || error.code === 'INVALID_TRIP_ID') {
       toast({
         title: 'Trip not found',
         description: 'The trip you are looking for does not exist.',
         variant: 'destructive'
       })
       router.push('/')
+    } else if (error.code === 'UNAUTHORIZED') {
+      router.push('/login')
     } else {
       toast({
         title: 'Error loading trip',

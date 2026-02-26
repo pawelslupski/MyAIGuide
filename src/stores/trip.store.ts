@@ -12,25 +12,24 @@ import { supabaseClient } from '@/db/supabase.client'
 import {
   getTripById,
   updateTrip,
-  createTrip as createTripService
+  createTrip as createTripService,
+  getTrips
 } from '@/lib/services/trip.service'
+import { getTripsQuerySchema } from '@/lib/validation/trip.schemas'
+import {
+  createUnauthorizedError,
+  createInvalidTripIdError,
+  createValidationError
+} from '@/lib/errors/api.error'
 
-// Module-level helper — derives trip status from raw DB fields
-function deriveTripStatus(noteBody: string | null, planJson: object | null): TripStatus {
-  if (planJson !== null) return 'CONFIRMED'
-  if (noteBody !== null && noteBody.trim() !== '') return 'DRAFT'
-  return 'CREATED'
-}
-
-// Raw shape returned by the Supabase trips query before transformation
-interface TripListRaw {
-  id: number
-  user_id: string
-  title: string
-  note_body: string | null
-  plan_json: object | null
-  created_at: string
-  updated_at: string
+/**
+ * Validate and coerce a raw tripId value (from URL params or caller) to a positive integer.
+ * Throws INVALID_TRIP_ID (400) if the value is not a safe positive integer.
+ */
+function validateTripId(tripIdRaw: string | number): number {
+  const id = typeof tripIdRaw === 'string' ? parseInt(tripIdRaw, 10) : tripIdRaw
+  if (!Number.isInteger(id) || id <= 0) throw createInvalidTripIdError(String(tripIdRaw))
+  return id
 }
 
 /**
@@ -65,19 +64,21 @@ export const useTripStore = defineStore('trip', () => {
 
   /**
    * Fetch trip by ID
-   * Validates ownership and derives status
+   * Validates tripId (must be a positive integer), then validates ownership and derives status.
    */
-  async function fetchTrip(tripId: number): Promise<void> {
+  async function fetchTrip(tripId: string | number): Promise<void> {
     isLoading.value = true
     error.value = null
 
     try {
+      const validatedId = validateTripId(tripId)
+
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user) throw createUnauthorizedError()
 
-      currentTrip.value = await getTripById(tripId, user.id)
+      currentTrip.value = await getTripById(validatedId, user.id)
     } catch (err: any) {
       error.value = {
         error: {
@@ -225,9 +226,11 @@ export const useTripStore = defineStore('trip', () => {
   }
 
   /**
-   * Fetch paginated trips list for the dashboard
+   * Fetch paginated trips list for the dashboard.
+   * Validates query params with Zod, delegates to getTrips service,
+   * and maps TripListItemDTO[] → DashboardTripViewModel[] for UI consumption.
    */
-  async function fetchTrips(page = 1, limit = 20): Promise<void> {
+  async function fetchTrips(page = 1, limit = 20, status?: TripStatus): Promise<void> {
     isLoadingTrips.value = true
     tripsError.value = null
 
@@ -235,44 +238,33 @@ export const useTripStore = defineStore('trip', () => {
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user) {
+        tripsError.value = createUnauthorizedError().toResponse()
+        return
+      }
 
-      const from = (page - 1) * limit
-      const to = from + limit - 1
+      // Validate and apply defaults via Zod
+      const queryResult = getTripsQuerySchema.safeParse({ page, limit, status })
+      if (!queryResult.success) {
+        const details = Object.fromEntries(
+          queryResult.error.issues.map((i) => [i.path.join('.'), i.message])
+        )
+        tripsError.value = createValidationError('Invalid query parameters', details).toResponse()
+        return
+      }
 
-      const {
-        data,
-        error: fetchError,
-        count
-      } = await supabaseClient
-        .from('trips')
-        .select('id, user_id, title, note_body, plan_json, created_at, updated_at', {
-          count: 'exact'
-        })
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .range(from, to)
+      const result = await getTrips(user.id, queryResult.data)
 
-      if (fetchError) throw fetchError
-
-      const rows = (data ?? []) as TripListRaw[]
-      trips.value = rows.map((row) => ({
-        id: row.id,
-        title: row.title,
-        status: deriveTripStatus(row.note_body, row.plan_json),
-        notePreview: row.note_body
-          ? row.note_body.slice(0, 100) + (row.note_body.length > 100 ? '…' : '')
-          : '',
-        updatedAt: row.updated_at
+      // Map TripListItemDTO → DashboardTripViewModel for UI consumption
+      trips.value = result.trips.map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        notePreview: '',
+        updatedAt: item.updated_at
       }))
 
-      const total = count ?? 0
-      tripsPagination.value = {
-        current_page: page,
-        total_pages: Math.max(1, Math.ceil(total / limit)),
-        total_count: total,
-        limit
-      }
+      tripsPagination.value = result.pagination
     } catch (err: any) {
       tripsError.value = {
         error: {

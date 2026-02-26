@@ -174,6 +174,13 @@ export interface TripsListDTO {
   pagination: PaginationDTO
 }
 
+/** Query parameters for GET /api/trips (after Zod validation and defaults applied). */
+export interface GetTripsQuery {
+  page: number
+  limit: number
+  status?: TripStatus
+}
+
 // ============================================================================
 // PLAN GENERATION DTOs
 // ============================================================================

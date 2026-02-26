@@ -1,5 +1,13 @@
 import { supabaseClient } from '@/db/supabase.client'
-import type { TripDTO, TripStatus, PlanJson, CreateTripCommand } from '@/types'
+import type {
+  TripDTO,
+  TripStatus,
+  PlanJson,
+  CreateTripCommand,
+  TripsListDTO,
+  TripListItemDTO,
+  GetTripsQuery
+} from '@/types'
 import {
   createNotFoundError,
   createForbiddenError,
@@ -104,6 +112,73 @@ export async function getTripById(tripId: number, userId: string): Promise<TripD
     ...trip,
     plan_json: trip.plan_json as PlanJson | null,
     status
+  }
+}
+
+/**
+ * Fetch paginated trips for a user with optional status filter.
+ *
+ * - Selects only columns needed for TripListItemDTO (+ note_body and plan_json for status derivation)
+ * - Translates `status` filter to DB-level note_body / plan_json conditions
+ * - Strips note_body and plan_json from returned DTOs
+ * - Returns TripsListDTO with computed status on every item
+ *
+ * @param userId - Authenticated user ID (UUID)
+ * @param query  - Validated query params: page, limit, optional status
+ */
+export async function getTrips(userId: string, query: GetTripsQuery): Promise<TripsListDTO> {
+  const { page, limit, status } = query
+  const from = (page - 1) * limit
+  const to = from + limit - 1
+
+  // Build base query — fetch note_body and plan_json for status derivation (stripped before return)
+  let q = supabaseClient
+    .from('trips')
+    .select(
+      'id, user_id, title, destination, num_days, num_people, note_body, plan_json, created_at, updated_at',
+      { count: 'exact' }
+    )
+    .eq('user_id', userId) // defense-in-depth on top of RLS
+    .order('updated_at', { ascending: false })
+    .range(from, to)
+
+  // Translate status filter to DB column conditions
+  if (status === 'CONFIRMED') {
+    q = q.not('plan_json', 'is', null)
+  } else if (status === 'DRAFT') {
+    q = q.is('plan_json', null).not('note_body', 'is', null).neq('note_body', '')
+  } else if (status === 'CREATED') {
+    q = q.is('plan_json', null).or('note_body.is.null,note_body.eq.')
+  }
+
+  const { data, error: fetchError, count } = await q
+
+  if (fetchError) {
+    throw createInternalError(`Failed to fetch trips: ${fetchError.message}`)
+  }
+
+  const rows = data ?? []
+  const trips: TripListItemDTO[] = rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    title: row.title,
+    destination: row.destination,
+    num_days: row.num_days,
+    num_people: row.num_people,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    status: deriveTripStatus(row.note_body, row.plan_json)
+  }))
+
+  const total = count ?? 0
+  return {
+    trips,
+    pagination: {
+      current_page: page,
+      total_pages: Math.max(1, Math.ceil(total / limit)),
+      total_count: total,
+      limit
+    }
   }
 }
 

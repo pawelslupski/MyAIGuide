@@ -26,6 +26,7 @@ export async function checkGenerationQuota(userId: string): Promise<QuotaCheckRe
     .from('plan_generations')
     .select('created_at')
     .eq('user_id', userId)
+    .in('status', ['success', 'api_error'])
     .gte('created_at', new Date(Date.now() - QUOTA_WINDOW_HOURS * 60 * 60 * 1000).toISOString())
     .order('created_at', { ascending: true })
 
@@ -79,7 +80,12 @@ export function detectLanguage(text: string): string {
  * Combines note body, user profile flags, and trip preferences
  * Includes instructions for logical ordering and exhaustive descriptions
  */
-export function buildAIPrompt(noteBody: string, userProfile: any, tripPreferences: any): string {
+export function buildAIPrompt(
+  noteBody: string,
+  userProfile: any,
+  tripPreferences: any,
+  destination?: string
+): string {
   const profileFlags = []
   if (userProfile.hasKids) profileFlags.push('traveling with kids')
   if (userProfile.hasPets) profileFlags.push('traveling with pets')
@@ -90,6 +96,8 @@ export function buildAIPrompt(noteBody: string, userProfile: any, tripPreference
 
   const prompt = `
 Generate a travel plan based on the following information:
+
+Destination: ${destination ?? 'not specified'}
 
 Trip Notes:
 ${noteBody.trim() || 'No notes provided — use the preferences below as the primary source of guidance.'}
@@ -168,7 +176,12 @@ export async function recordGenerationAttempt(params: RecordGenerationParams): P
 export async function callAIService(params: AIPlanParams): Promise<AIServiceResponse> {
   console.log('[callAIService] Calling OpenRouter API via Edge Function')
 
-  const prompt = buildAIPrompt(params.noteBody, params.userProfile, params.tripPreferences)
+  const prompt = buildAIPrompt(
+    params.noteBody,
+    params.userProfile,
+    params.tripPreferences,
+    params.destination
+  )
 
   const { data, error } = await supabaseClient.functions.invoke('generate-plan', {
     body: { prompt, language: params.language }
