@@ -26,6 +26,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast/use-toast'
 import { useProfileStore } from '@/stores/profile.store'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
@@ -33,29 +34,65 @@ import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference 
 const profileStore = useProfileStore()
 const { toast } = useToast()
 
-const isUpdating = ref(false)
+const isSaving = ref(false)
 
-// Dietary preferences local state for the edge case
-const localDietaryEnabled = ref(false)
-const dietaryTextarea = ref('')
+// Local draft – all edits stay here until the user explicitly saves
+const local = ref({
+  has_kids: false,
+  has_pets: false,
+  has_mobility_issues: false,
+  has_dietary_preferences: false,
+  dietary_preferences_description: '',
+  default_what: [] as WhatPreference[],
+  default_speed: null as SpeedPreference | null,
+  default_type: null as TypePreference | null,
+  default_budget: null as BudgetPreference | null
+})
 
-// Sync localDietaryEnabled from store when profile loads
 const profile = computed(() => profileStore.profile)
+const isInitialised = ref(false)
 
-const isDietaryInitialised = ref(false)
+function initLocal(p: NonNullable<typeof profile.value>) {
+  local.value = {
+    has_kids: p.has_kids ?? false,
+    has_pets: p.has_pets ?? false,
+    has_mobility_issues: p.has_mobility_issues ?? false,
+    has_dietary_preferences: p.has_dietary_preferences ?? false,
+    dietary_preferences_description: p.dietary_preferences_description ?? '',
+    default_what: [...(p.default_what ?? [])],
+    default_speed: p.default_speed ?? null,
+    default_type: p.default_type ?? null,
+    default_budget: p.default_budget ?? null
+  }
+}
 
-// Sync localDietaryEnabled from store once profile is available
+// Initialise local draft once the profile arrives from the store
 watch(
   profile,
   (p) => {
-    if (p && !isDietaryInitialised.value) {
-      localDietaryEnabled.value = p.has_dietary_preferences ?? false
-      dietaryTextarea.value = p.dietary_preferences_description ?? ''
-      isDietaryInitialised.value = true
+    if (p && !isInitialised.value) {
+      initLocal(p)
+      isInitialised.value = true
     }
   },
   { immediate: true }
 )
+
+const isDirty = computed(() => {
+  const p = profile.value
+  if (!p) return false
+  return (
+    local.value.has_kids !== (p.has_kids ?? false) ||
+    local.value.has_pets !== (p.has_pets ?? false) ||
+    local.value.has_mobility_issues !== (p.has_mobility_issues ?? false) ||
+    local.value.has_dietary_preferences !== (p.has_dietary_preferences ?? false) ||
+    local.value.dietary_preferences_description !== (p.dietary_preferences_description ?? '') ||
+    JSON.stringify(local.value.default_what) !== JSON.stringify(p.default_what ?? []) ||
+    local.value.default_speed !== (p.default_speed ?? null) ||
+    local.value.default_type !== (p.default_type ?? null) ||
+    local.value.default_budget !== (p.default_budget ?? null)
+  )
+})
 
 // ── Traveler flag toggles ──────────────────────────────────────────────────
 
@@ -67,94 +104,18 @@ const flags = [
   { key: 'has_mobility_issues' as BoolFlag, label: 'Mobility considerations', icon: Accessibility }
 ]
 
-async function toggleFlag(key: BoolFlag) {
-  if (!profile.value || isUpdating.value) return
-  const newValue = !profile.value[key]
-  isUpdating.value = true
-  try {
-    await profileStore.updateProfile({ [key]: newValue })
-  } catch {
-    toast({
-      title: 'Save failed',
-      description: 'Could not update profile. Please try again.',
-      variant: 'destructive',
-      duration: 5000
-    })
-  } finally {
-    isUpdating.value = false
-  }
+function toggleFlag(key: BoolFlag) {
+  local.value[key] = !local.value[key]
 }
 
 // ── Dietary preferences ───────────────────────────────────────────────────
 
 function onDietaryToggle() {
-  if (!profile.value || isUpdating.value) return
-
-  if (profile.value.has_dietary_preferences) {
-    // Turn OFF: save immediately
-    void saveDietaryOff()
+  if (local.value.has_dietary_preferences) {
+    local.value.has_dietary_preferences = false
+    local.value.dietary_preferences_description = ''
   } else {
-    // Turn ON: optimistically show textarea, wait for description
-    localDietaryEnabled.value = true
-    dietaryTextarea.value = ''
-  }
-}
-
-async function saveDietaryOff() {
-  isUpdating.value = true
-  try {
-    await profileStore.updateProfile({
-      has_dietary_preferences: false,
-      dietary_preferences_description: null
-    })
-    localDietaryEnabled.value = false
-    dietaryTextarea.value = ''
-  } catch {
-    toast({
-      title: 'Save failed',
-      description: 'Could not update profile. Please try again.',
-      variant: 'destructive',
-      duration: 5000
-    })
-    // Revert pill to ON and restore the saved description so the textarea is not empty
-    localDietaryEnabled.value = true
-    dietaryTextarea.value = profile.value?.dietary_preferences_description ?? ''
-  } finally {
-    isUpdating.value = false
-  }
-}
-
-async function onDietaryBlur() {
-  if (!localDietaryEnabled.value) return
-  const desc = dietaryTextarea.value.trim()
-  if (!desc) {
-    toast({
-      title: 'Description required',
-      description: 'Please describe your dietary preferences before saving.',
-      variant: 'destructive',
-      duration: 5000
-    })
-    localDietaryEnabled.value = false
-    dietaryTextarea.value = ''
-    return
-  }
-  isUpdating.value = true
-  try {
-    await profileStore.updateProfile({
-      has_dietary_preferences: true,
-      dietary_preferences_description: desc
-    })
-  } catch {
-    toast({
-      title: 'Save failed',
-      description: 'Could not update profile. Please try again.',
-      variant: 'destructive',
-      duration: 5000
-    })
-    localDietaryEnabled.value = false
-    dietaryTextarea.value = ''
-  } finally {
-    isUpdating.value = false
+    local.value.has_dietary_preferences = true
   }
 }
 
@@ -168,23 +129,11 @@ const whatOptions: { value: WhatPreference; label: string; icon: any }[] = [
   { value: 'foodie', label: 'Foodie', icon: UtensilsCrossed }
 ]
 
-async function toggleWhat(value: WhatPreference) {
-  if (!profile.value || isUpdating.value) return
-  const current = profile.value.default_what ?? []
-  const updated = current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
-  isUpdating.value = true
-  try {
-    await profileStore.updateProfile({ default_what: updated })
-  } catch {
-    toast({
-      title: 'Save failed',
-      description: 'Could not update profile. Please try again.',
-      variant: 'destructive',
-      duration: 5000
-    })
-  } finally {
-    isUpdating.value = false
-  }
+function toggleWhat(value: WhatPreference) {
+  const current = local.value.default_what
+  local.value.default_what = current.includes(value)
+    ? current.filter((v) => v !== value)
+    : [...current, value]
 }
 
 // ── Speed / Type / Budget (single-select) ─────────────────────────────────
@@ -207,45 +156,47 @@ const budgetOptions: { value: BudgetPreference; label: string; icon: any }[] = [
   { value: 'luxury', label: 'Luxury', icon: Gem }
 ]
 
-async function selectSpeed(value: SpeedPreference) {
-  if (!profile.value || isUpdating.value || profile.value.default_speed === value) return
-  isUpdating.value = true
-  try {
-    await profileStore.updateProfile({ default_speed: value })
-  } catch {
-    toast({
-      title: 'Save failed',
-      description: 'Could not update profile. Please try again.',
-      variant: 'destructive',
-      duration: 5000
-    })
-  } finally {
-    isUpdating.value = false
-  }
+function selectSpeed(value: SpeedPreference) {
+  local.value.default_speed = value
 }
 
-async function selectType(value: TypePreference) {
-  if (!profile.value || isUpdating.value || profile.value.default_type === value) return
-  isUpdating.value = true
-  try {
-    await profileStore.updateProfile({ default_type: value })
-  } catch {
-    toast({
-      title: 'Save failed',
-      description: 'Could not update profile. Please try again.',
-      variant: 'destructive',
-      duration: 5000
-    })
-  } finally {
-    isUpdating.value = false
-  }
+function selectType(value: TypePreference) {
+  local.value.default_type = value
 }
 
-async function selectBudget(value: BudgetPreference) {
-  if (!profile.value || isUpdating.value || profile.value.default_budget === value) return
-  isUpdating.value = true
+function selectBudget(value: BudgetPreference) {
+  local.value.default_budget = value
+}
+
+// ── Save / Reset ──────────────────────────────────────────────────────────
+
+function resetProfile() {
+  if (profile.value) initLocal(profile.value)
+}
+
+async function saveProfile() {
+  if (local.value.has_dietary_preferences && !local.value.dietary_preferences_description.trim()) {
+    toast({
+      title: 'Description required',
+      description: 'Please describe your dietary preferences before saving.',
+      variant: 'destructive',
+      duration: 5000
+    })
+    return
+  }
+  isSaving.value = true
   try {
-    await profileStore.updateProfile({ default_budget: value })
+    await profileStore.updateProfile({
+      ...local.value,
+      dietary_preferences_description: local.value.has_dietary_preferences
+        ? local.value.dietary_preferences_description.trim()
+        : null
+    })
+    toast({
+      title: 'Profile saved',
+      description: 'Your travel profile has been updated.',
+      duration: 3000
+    })
   } catch {
     toast({
       title: 'Save failed',
@@ -254,15 +205,23 @@ async function selectBudget(value: BudgetPreference) {
       duration: 5000
     })
   } finally {
-    isUpdating.value = false
+    isSaving.value = false
   }
 }
 </script>
 
 <template>
   <Card>
-    <CardHeader>
+    <CardHeader class="flex flex-row items-center justify-between pb-4">
       <CardTitle>Your Travel Profile</CardTitle>
+      <div v-if="profile" class="flex gap-2">
+        <Button variant="outline" size="sm" :disabled="!isDirty || isSaving" @click="resetProfile">
+          Reset
+        </Button>
+        <Button size="sm" :disabled="!isDirty || isSaving" @click="saveProfile">
+          {{ isSaving ? 'Saving…' : 'Save' }}
+        </Button>
+      </div>
     </CardHeader>
     <CardContent>
       <!-- Loading skeleton -->
@@ -297,12 +256,12 @@ async function selectBudget(value: BudgetPreference) {
             <button
               v-for="flag in flags"
               :key="flag.key"
-              :disabled="isUpdating"
+              :disabled="isSaving"
               :class="[
                 'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 'disabled:cursor-not-allowed disabled:opacity-50',
-                profile[flag.key]
+                local[flag.key]
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
               ]"
@@ -314,12 +273,12 @@ async function selectBudget(value: BudgetPreference) {
 
             <!-- Dietary preferences pill -->
             <button
-              :disabled="isUpdating"
+              :disabled="isSaving"
               :class="[
                 'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 'disabled:cursor-not-allowed disabled:opacity-50',
-                profile.has_dietary_preferences || localDietaryEnabled
+                local.has_dietary_preferences
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
               ]"
@@ -331,13 +290,12 @@ async function selectBudget(value: BudgetPreference) {
           </div>
 
           <!-- Dietary description textarea -->
-          <div v-if="profile.has_dietary_preferences || localDietaryEnabled" class="mt-3">
+          <div v-if="local.has_dietary_preferences" class="mt-3">
             <Textarea
-              v-model="dietaryTextarea"
-              :disabled="isUpdating"
+              v-model="local.dietary_preferences_description"
+              :disabled="isSaving"
               placeholder="Describe your dietary preferences (e.g. vegetarian, gluten-free, nut allergy)…"
               class="min-h-[80px] resize-none"
-              @blur="onDietaryBlur"
             />
           </div>
         </div>
@@ -357,12 +315,12 @@ async function selectBudget(value: BudgetPreference) {
               <button
                 v-for="opt in whatOptions"
                 :key="opt.value"
-                :disabled="isUpdating"
+                :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  (profile.default_what ?? []).includes(opt.value)
+                  local.default_what.includes(opt.value)
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"
@@ -383,12 +341,12 @@ async function selectBudget(value: BudgetPreference) {
               <button
                 v-for="opt in speedOptions"
                 :key="opt.value"
-                :disabled="isUpdating"
+                :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  profile.default_speed === opt.value
+                  local.default_speed === opt.value
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"
@@ -409,12 +367,12 @@ async function selectBudget(value: BudgetPreference) {
               <button
                 v-for="opt in typeOptions"
                 :key="opt.value"
-                :disabled="isUpdating"
+                :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  profile.default_type === opt.value
+                  local.default_type === opt.value
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"
@@ -435,12 +393,12 @@ async function selectBudget(value: BudgetPreference) {
               <button
                 v-for="opt in budgetOptions"
                 :key="opt.value"
-                :disabled="isUpdating"
+                :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  profile.default_budget === opt.value
+                  local.default_budget === opt.value
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"
