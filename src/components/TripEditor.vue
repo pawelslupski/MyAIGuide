@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -17,12 +16,6 @@ import type {
   BudgetPreference
 } from '@/types'
 
-/**
- * TripEditor Component
- * Integrated trip editing interface with title, note, and preferences
- * Implements debounced auto-save for note and immediate save for preferences
- */
-
 interface Props {
   trip: TripDTO
   defaultPreferences?: TripPreferencesDto
@@ -31,20 +24,39 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  'update:title': [title: string]
-  'update:destination': [destination: string]
-  'update:note': [note: string]
-  'update:preferences': [preferences: TripPreferencesDto]
+  'update:fields': [
+    fields: {
+      title: string
+      destination: string | null
+      note_body: string | null
+      what: WhatPreference[]
+      speed: SpeedPreference | null
+      type: TypePreference | null
+      budget: BudgetPreference | null
+      num_days: number | null
+      num_people: number | null
+    }
+  ]
 }>()
 
 // Local state for immediate UI updates
+// For preference fields, fall back to profile defaults when the trip has no value
 const localTitle = ref(props.trip.title)
 const localDestination = ref(props.trip.destination ?? '')
 const localNote = ref(props.trip.note_body ?? '')
-const localWhat = ref<WhatPreference[]>((props.trip.what ?? []) as WhatPreference[])
-const localSpeed = ref<SpeedPreference | null>(props.trip.speed as SpeedPreference | null)
-const localType = ref<TypePreference | null>(props.trip.type as TypePreference | null)
-const localBudget = ref<BudgetPreference | null>(props.trip.budget as BudgetPreference | null)
+const localWhat = ref<WhatPreference[]>(
+  ((props.trip.what?.length ? props.trip.what : props.defaultPreferences?.what) ??
+    []) as WhatPreference[]
+)
+const localSpeed = ref<SpeedPreference | null>(
+  (props.trip.speed ?? props.defaultPreferences?.speed ?? null) as SpeedPreference | null
+)
+const localType = ref<TypePreference | null>(
+  (props.trip.type ?? props.defaultPreferences?.type ?? null) as TypePreference | null
+)
+const localBudget = ref<BudgetPreference | null>(
+  (props.trip.budget ?? props.defaultPreferences?.budget ?? null) as BudgetPreference | null
+)
 const localNumDays = ref<number | null>(props.trip.num_days ?? null)
 const localNumPeople = ref<number | null>(props.trip.num_people ?? null)
 
@@ -99,33 +111,12 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
   { value: 'luxury', label: 'Luxury', description: 'Premium experiences' }
 ]
 
-// Debounced auto-save for note (2 seconds)
-const debouncedNoteSave = useDebounceFn(() => {
-  emit('update:note', localNote.value)
-}, 2000)
-
-// Watch for note changes
-watch(localNote, () => {
-  debouncedNoteSave()
-})
-
-// Immediate save for title
-function handleTitleBlur() {
-  if (localTitle.value !== props.trip.title) {
-    emit('update:title', localTitle.value)
-  }
-}
-
-// Immediate save for destination
-function handleDestinationBlur() {
-  if (localDestination.value !== (props.trip.destination ?? '')) {
-    emit('update:destination', localDestination.value)
-  }
-}
-
-// Immediate save for preferences
-function handlePreferencesChange() {
-  emit('update:preferences', {
+// Emit current local state to parent whenever anything changes
+function emitFields() {
+  emit('update:fields', {
+    title: localTitle.value,
+    destination: localDestination.value.trim() || null,
+    note_body: localNote.value.trim() || null,
     what: localWhat.value,
     speed: localSpeed.value,
     type: localType.value,
@@ -135,6 +126,27 @@ function handlePreferencesChange() {
   })
 }
 
+watch(
+  [
+    localTitle,
+    localDestination,
+    localNote,
+    localWhat,
+    localSpeed,
+    localType,
+    localBudget,
+    localNumDays,
+    localNumPeople
+  ],
+  emitFields,
+  { deep: true }
+)
+
+// Emit initial state to parent so pendingFields reflects profile-prepopulated values from the start
+onMounted(() => {
+  emitFields()
+})
+
 // Toggle what preference (multi-select)
 function toggleWhat(value: WhatPreference) {
   const index = localWhat.value.indexOf(value)
@@ -143,39 +155,57 @@ function toggleWhat(value: WhatPreference) {
   } else {
     localWhat.value = [...localWhat.value, value]
   }
-  handlePreferencesChange()
 }
 
-// Check if preference is inherited from profile
+// Check if the current (local) preference value still matches the profile default.
+// Compares local state so the badge disappears immediately when the user changes the selection.
 function isInherited(field: 'speed' | 'type' | 'budget'): boolean {
   if (!props.defaultPreferences) return false
-  return props.trip[field] === props.defaultPreferences[field]
+  const profileValue = props.defaultPreferences[field]
+  if (!profileValue) return false
+  const localValue =
+    field === 'speed' ? localSpeed.value : field === 'type' ? localType.value : localBudget.value
+  return localValue === profileValue
 }
+
+// True when the current what selection matches the profile default (order-independent).
+const isWhatInherited = computed(() => {
+  const profileWhat = props.defaultPreferences?.what
+  if (!profileWhat?.length) return false
+  if (localWhat.value.length !== profileWhat.length) return false
+  const sorted = (arr: WhatPreference[]) => [...arr].sort().join(',')
+  return sorted(localWhat.value) === sorted(profileWhat)
+})
 
 // Handlers for number inputs (convert NaN from empty field → null)
 function handleNumDaysChange(e: any) {
   const val = e.target.valueAsNumber
   localNumDays.value = Number.isNaN(val) ? null : val
-  handlePreferencesChange()
 }
 
 function handleNumPeopleChange(e: any) {
   const val = e.target.valueAsNumber
   localNumPeople.value = Number.isNaN(val) ? null : val
-  handlePreferencesChange()
 }
 
-// Sync props changes to local state
+// Sync local state when the saved trip changes externally (e.g. after successful save)
 watch(
   () => props.trip,
   (newTrip) => {
     localTitle.value = newTrip.title
     localDestination.value = newTrip.destination ?? ''
     localNote.value = newTrip.note_body ?? ''
-    localWhat.value = (newTrip.what ?? []) as WhatPreference[]
-    localSpeed.value = newTrip.speed as SpeedPreference | null
-    localType.value = newTrip.type as TypePreference | null
-    localBudget.value = newTrip.budget as BudgetPreference | null
+    localWhat.value = ((newTrip.what?.length ? newTrip.what : props.defaultPreferences?.what) ??
+      []) as WhatPreference[]
+    localSpeed.value = (newTrip.speed ??
+      props.defaultPreferences?.speed ??
+      null) as SpeedPreference | null
+    localType.value = (newTrip.type ??
+      props.defaultPreferences?.type ??
+      null) as TypePreference | null
+    localBudget.value = (newTrip.budget ??
+      props.defaultPreferences?.budget ??
+      null) as BudgetPreference | null
     localNumDays.value = newTrip.num_days ?? null
     localNumPeople.value = newTrip.num_people ?? null
   },
@@ -189,13 +219,7 @@ watch(
     <div class="space-y-2">
       <Label for="trip-title">Trip Title</Label>
       <div class="flex items-center gap-2">
-        <Input
-          id="trip-title"
-          v-model="localTitle"
-          placeholder="Enter trip title"
-          class="flex-1"
-          @blur="handleTitleBlur"
-        />
+        <Input id="trip-title" v-model="localTitle" placeholder="Enter trip title" class="flex-1" />
         <Badge
           :variant="
             trip.status === 'CONFIRMED'
@@ -218,7 +242,6 @@ watch(
         v-model="localDestination"
         placeholder="e.g. Paris, France"
         maxlength="50"
-        @blur="handleDestinationBlur"
       />
     </div>
 
@@ -263,7 +286,10 @@ watch(
 
         <!-- What Preferences (Multi-select) -->
         <div class="space-y-3">
-          <Label>What interests you?</Label>
+          <div class="flex items-center gap-2">
+            <Label>What interests you?</Label>
+            <Badge v-if="isWhatInherited" variant="outline" class="text-xs"> From profile </Badge>
+          </div>
           <div class="space-y-2">
             <div
               v-for="option in whatOptions"
@@ -290,7 +316,7 @@ watch(
               From profile
             </Badge>
           </div>
-          <RadioGroup v-model="localSpeed" @update:model-value="handlePreferencesChange">
+          <RadioGroup v-model="localSpeed">
             <div
               v-for="option in speedOptions"
               :key="option.value"
@@ -315,7 +341,7 @@ watch(
               From profile
             </Badge>
           </div>
-          <RadioGroup v-model="localType" @update:model-value="handlePreferencesChange">
+          <RadioGroup v-model="localType">
             <div
               v-for="option in typeOptions"
               :key="option.value"
@@ -340,7 +366,7 @@ watch(
               From profile
             </Badge>
           </div>
-          <RadioGroup v-model="localBudget" @update:model-value="handlePreferencesChange">
+          <RadioGroup v-model="localBudget">
             <div
               v-for="option in budgetOptions"
               :key="option.value"
@@ -387,4 +413,3 @@ watch(
     </Card>
   </div>
 </template>
->

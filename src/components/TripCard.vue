@@ -36,7 +36,7 @@ const STATUS_BADGE: Record<TripStatus, BadgeConfig> = {
   CREATED: { variant: 'secondary', label: 'New' },
   DRAFT: {
     variant: 'outline',
-    class: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-transparent',
+    class: 'bg-primary/20 text-primary border-transparent',
     label: 'In Progress'
   },
   CONFIRMED: {

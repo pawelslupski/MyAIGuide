@@ -12,7 +12,8 @@ import {
   getTripById,
   updateTrip,
   createTrip as createTripService,
-  deriveTripStatus
+  deriveTripStatus,
+  type TripUpdateFields
 } from '@/lib/services/trip.service'
 import { createUnauthorizedError, createInvalidTripIdError } from '@/lib/errors/api.error'
 
@@ -247,7 +248,7 @@ export const useTripStore = defineStore('trip', () => {
       } = await supabaseClient
         .from('trips')
         .select(
-          'id, user_id, title, destination, num_days, num_people, note_body, plan_json, created_at, updated_at',
+          'id, user_id, title, destination, num_days, num_people, what, speed, type, budget, note_body, plan_json, created_at, updated_at',
           { count: 'exact' }
         )
         .eq('user_id', user.id)
@@ -265,7 +266,7 @@ export const useTripStore = defineStore('trip', () => {
       trips.value = rows.map((row) => ({
         id: row.id,
         title: row.title,
-        status: deriveTripStatus(row.note_body, row.plan_json),
+        status: deriveTripStatus(row),
         notePreview: row.note_body
           ? row.note_body.slice(0, 100) + (row.note_body.length > 100 ? '…' : '')
           : '',
@@ -334,6 +335,26 @@ export const useTripStore = defineStore('trip', () => {
   }
 
   /**
+   * Save all editable trip fields at once (title, destination, note, preferences).
+   * Used by the explicit Save button in TripView.
+   */
+  async function saveAllFields(tripId: number, fields: TripUpdateFields): Promise<void> {
+    if (!currentTrip.value) return
+    isSaving.value = true
+    try {
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      const updated = await updateTrip(tripId, user.id, fields)
+      currentTrip.value = updated
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  /**
    * Clear current trip
    */
   function clearTrip(): void {
@@ -363,6 +384,7 @@ export const useTripStore = defineStore('trip', () => {
     updateTripDestination,
     updateTripNote,
     updateTripPreferences,
+    saveAllFields,
     createTrip,
     clearTrip,
     fetchTrips,

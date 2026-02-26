@@ -47,30 +47,49 @@ export async function createTrip(
 }
 
 /**
- * Derive trip status based on note_body and plan_json presence
+ * Fields used to derive trip status. Only plan_json is required;
+ * the rest are optional so callers can pass a raw DB row directly.
+ */
+export interface TripStatusFields {
+  plan_json: unknown
+  note_body?: string | null
+  destination?: string | null
+  what?: string[] | null
+  speed?: string | null
+  type?: string | null
+  budget?: string | null
+  num_days?: number | null
+  num_people?: number | null
+}
+
+/**
+ * Derive trip status from a row's fields.
  *
  * Status logic:
- * - CREATED: note_body IS NULL AND plan_json IS NULL
- * - DRAFT: note_body IS NOT NULL AND plan_json IS NULL
- * - CONFIRMED: plan_json IS NOT NULL
+ * - CONFIRMED: plan_json IS NOT NULL (AI plan saved)
+ * - DRAFT:     plan_json IS NULL AND any meaningful field is set
+ *              (destination, note, interests, speed, type, budget, days, people)
+ * - CREATED:   plan_json IS NULL AND no meaningful fields set yet
  *
- * @param noteBody - Trip note content (can be null)
- * @param planJson - Saved plan data (can be null)
+ * @param row - Object containing the relevant trip fields
  * @returns TripStatus enum value
  */
-export function deriveTripStatus(noteBody: string | null, planJson: unknown): TripStatus {
-  // CONFIRMED: plan exists (regardless of note)
-  if (planJson !== null) {
+export function deriveTripStatus(row: TripStatusFields): TripStatus {
+  if (row.plan_json !== null && row.plan_json !== undefined) {
     return 'CONFIRMED'
   }
 
-  // DRAFT: note exists but no plan
-  if (noteBody !== null && noteBody.length > 0) {
-    return 'DRAFT'
-  }
+  const hasMeaningfulData =
+    (row.note_body != null && row.note_body.length > 0) ||
+    (row.destination != null && row.destination.length > 0) ||
+    (row.what != null && row.what.length > 0) ||
+    row.speed != null ||
+    row.type != null ||
+    row.budget != null ||
+    row.num_days != null ||
+    row.num_people != null
 
-  // CREATED: no note and no plan
-  return 'CREATED'
+  return hasMeaningfulData ? 'DRAFT' : 'CREATED'
 }
 
 /**
@@ -106,7 +125,7 @@ export async function getTripById(tripId: number, userId: string): Promise<TripD
     throw createForbiddenError()
   }
 
-  const status = deriveTripStatus(trip.note_body, trip.plan_json)
+  const status = deriveTripStatus(trip)
 
   return {
     ...trip,
@@ -135,7 +154,7 @@ export async function getTrips(userId: string, query: GetTripsQuery): Promise<Tr
   let q = supabaseClient
     .from('trips')
     .select(
-      'id, user_id, title, destination, num_days, num_people, note_body, plan_json, created_at, updated_at',
+      'id, user_id, title, destination, num_days, num_people, what, speed, type, budget, note_body, plan_json, created_at, updated_at',
       { count: 'exact' }
     )
     .eq('user_id', userId) // defense-in-depth on top of RLS
@@ -146,9 +165,21 @@ export async function getTrips(userId: string, query: GetTripsQuery): Promise<Tr
   if (status === 'CONFIRMED') {
     q = q.not('plan_json', 'is', null)
   } else if (status === 'DRAFT') {
-    q = q.is('plan_json', null).not('note_body', 'is', null).neq('note_body', '')
+    q = q
+      .is('plan_json', null)
+      .or(
+        'destination.not.is.null,note_body.not.is.null,speed.not.is.null,type.not.is.null,budget.not.is.null,num_days.not.is.null,num_people.not.is.null'
+      )
   } else if (status === 'CREATED') {
-    q = q.is('plan_json', null).or('note_body.is.null,note_body.eq.')
+    q = q
+      .is('plan_json', null)
+      .is('destination', null)
+      .is('speed', null)
+      .is('type', null)
+      .is('budget', null)
+      .is('num_days', null)
+      .is('num_people', null)
+      .or('note_body.is.null,note_body.eq.')
   }
 
   const { data, error: fetchError, count } = await q
@@ -167,7 +198,7 @@ export async function getTrips(userId: string, query: GetTripsQuery): Promise<Tr
     num_people: row.num_people,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    status: deriveTripStatus(row.note_body, row.plan_json)
+    status: deriveTripStatus(row)
   }))
 
   const total = count ?? 0
@@ -198,7 +229,7 @@ export interface TripUpdateFields {
   title?: string
   destination?: string | null
   note_body?: string | null
-  what?: string[] | null
+  what?: string[]
   speed?: string | null
   type?: string | null
   budget?: string | null
@@ -223,7 +254,7 @@ export async function updateTrip(
     throw createInternalError(`Failed to update trip: ${error?.message || 'Unknown error'}`)
   }
 
-  const status = deriveTripStatus(updatedTrip.note_body, updatedTrip.plan_json)
+  const status = deriveTripStatus(updatedTrip)
 
   return {
     ...updatedTrip,
@@ -307,7 +338,7 @@ export async function savePlanToTrip(
   }
 
   // 5. Derive status (should be CONFIRMED since plan_json is now NOT NULL)
-  const status = deriveTripStatus(updatedTrip.note_body, updatedTrip.plan_json)
+  const status = deriveTripStatus(updatedTrip)
 
   // 6. Return typed DTO
   return {

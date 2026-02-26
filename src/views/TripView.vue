@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useTripStore } from '@/stores/trip.store'
 import { usePlanStore } from '@/stores/plan.store'
@@ -9,7 +9,8 @@ import { useToast } from '@/components/ui/toast/use-toast'
 import TripEditor from '@/components/TripEditor.vue'
 import PlanPanel from '@/components/PlanPanel.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
-import type { TripPreferencesDto } from '@/types'
+import { Button } from '@/components/ui/button'
+import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
 
 /**
  * TripDetailView
@@ -29,6 +30,62 @@ const quotaStore = useQuotaStore()
 
 // Local state
 const isInitializing = ref(true)
+
+// Pending (unsaved) edit fields tracked from TripEditor
+type PendingFields = {
+  title: string
+  destination: string | null
+  note_body: string | null
+  what: WhatPreference[]
+  speed: SpeedPreference | null
+  type: TypePreference | null
+  budget: BudgetPreference | null
+  num_days: number | null
+  num_people: number | null
+}
+const pendingFields = ref<PendingFields | null>(null)
+
+// Initialise pendingFields once the trip is loaded
+watch(
+  () => tripStore.currentTrip,
+  (trip) => {
+    if (trip && !pendingFields.value) {
+      pendingFields.value = {
+        title: trip.title,
+        destination: trip.destination ?? null,
+        note_body: trip.note_body ?? null,
+        what: [...(trip.what ?? [])] as WhatPreference[],
+        speed: trip.speed as SpeedPreference | null,
+        type: trip.type as TypePreference | null,
+        budget: trip.budget as BudgetPreference | null,
+        num_days: trip.num_days ?? null,
+        num_people: trip.num_people ?? null
+      }
+    }
+  },
+  { immediate: true }
+)
+
+function handleFieldsChange(fields: PendingFields) {
+  pendingFields.value = fields
+}
+
+const isDirty = computed(() => {
+  const t = tripStore.currentTrip
+  const p = pendingFields.value
+  if (!t || !p) return false
+  return (
+    p.title !== t.title ||
+    p.destination !== (t.destination ?? null) ||
+    p.note_body !== (t.note_body ?? null) ||
+    JSON.stringify(p.what) !== JSON.stringify(t.what ?? []) ||
+    p.speed !== (t.speed ?? null) ||
+    p.type !== (t.type ?? null) ||
+    p.budget !== (t.budget ?? null) ||
+    p.num_days !== (t.num_days ?? null) ||
+    p.num_people !== (t.num_people ?? null)
+  )
+})
 
 /**
  * Initialize view data
@@ -74,12 +131,13 @@ async function initializeView() {
 }
 
 /**
- * Navigation guard - warn about unsaved plan candidate
+ * Navigation guard - warn about unsaved trip edits or unsaved plan candidate
  */
 onBeforeRouteLeave((_to, _from, next) => {
-  if (planStore.hasCandidate) {
+  const hasUnsaved = isDirty.value || planStore.hasCandidate
+  if (hasUnsaved) {
     const confirmed = window.confirm(
-      'You have an unsaved plan. Are you sure you want to leave? Your changes will be lost.'
+      'You have unsaved changes. Are you sure you want to leave? Your changes will be lost.'
     )
     if (confirmed) {
       planStore.discardCandidate()
@@ -112,63 +170,34 @@ onMounted(() => {
 })
 
 /**
- * Handle trip title update
+ * Save all pending trip edits at once
  */
-async function handleTitleUpdate(title: string) {
+async function handleSaveAll() {
+  if (!pendingFields.value || !isDirty.value) return
   try {
     const tripId = parseInt(route.params.id as string, 10)
-    await tripStore.updateTripTitle(tripId, title)
-  } catch (error: any) {
+    await tripStore.saveAllFields(tripId, pendingFields.value)
+    // Sync pendingFields to the freshly saved state so isDirty resets immediately
+    const t = tripStore.currentTrip!
+    pendingFields.value = {
+      title: t.title,
+      destination: t.destination ?? null,
+      note_body: t.note_body ?? null,
+      what: [...(t.what ?? [])] as WhatPreference[],
+      speed: t.speed as SpeedPreference | null,
+      type: t.type as TypePreference | null,
+      budget: t.budget as BudgetPreference | null,
+      num_days: t.num_days ?? null,
+      num_people: t.num_people ?? null
+    }
     toast({
-      title: 'Failed to update title',
-      description: error.message || 'An error occurred',
-      variant: 'destructive'
+      title: 'Trip saved',
+      description: 'Your changes have been saved.',
+      duration: 3000
     })
-  }
-}
-
-/**
- * Handle trip destination update
- */
-async function handleDestinationUpdate(destination: string) {
-  try {
-    const tripId = parseInt(route.params.id as string, 10)
-    await tripStore.updateTripDestination(tripId, destination)
   } catch (error: any) {
     toast({
-      title: 'Failed to update destination',
-      description: error.message || 'An error occurred',
-      variant: 'destructive'
-    })
-  }
-}
-
-/**
- * Handle trip note update
- */
-async function handleNoteUpdate(note: string) {
-  try {
-    const tripId = parseInt(route.params.id as string, 10)
-    await tripStore.updateTripNote(tripId, note)
-  } catch (error: any) {
-    toast({
-      title: 'Failed to save note',
-      description: error.message || 'An error occurred',
-      variant: 'destructive'
-    })
-  }
-}
-
-/**
- * Handle trip preferences update
- */
-async function handlePreferencesUpdate(preferences: TripPreferencesDto) {
-  try {
-    const tripId = parseInt(route.params.id as string, 10)
-    await tripStore.updateTripPreferences(tripId, preferences)
-  } catch (error: any) {
-    toast({
-      title: 'Failed to update preferences',
+      title: 'Failed to save trip',
       description: error.message || 'An error occurred',
       variant: 'destructive'
     })
@@ -199,7 +228,12 @@ async function handlePreferencesUpdate(preferences: TripPreferencesDto) {
               Status: {{ tripStore.currentTrip.status }}
             </p>
           </div>
-          <ThemeToggle />
+          <div class="flex items-center gap-2">
+            <Button size="sm" :disabled="!isDirty || tripStore.isSaving" @click="handleSaveAll">
+              {{ tripStore.isSaving ? 'Saving…' : 'Save' }}
+            </Button>
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
@@ -210,10 +244,7 @@ async function handlePreferencesUpdate(preferences: TripPreferencesDto) {
           <TripEditor
             :trip="tripStore.currentTrip"
             :default-preferences="profileStore.defaultPreferences"
-            @update:title="handleTitleUpdate"
-            @update:destination="handleDestinationUpdate"
-            @update:note="handleNoteUpdate"
-            @update:preferences="handlePreferencesUpdate"
+            @update:fields="handleFieldsChange"
           />
         </div>
 

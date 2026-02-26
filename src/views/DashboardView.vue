@@ -109,7 +109,11 @@ onMounted(async () => {
     <!-- Page header -->
     <div class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">My Trips</h1>
-      <Button :disabled="tripStore.isCreatingTrip" @click="createAndNavigate">
+      <Button
+        v-if="tripStore.trips.length > 0"
+        :disabled="tripStore.isCreatingTrip"
+        @click="createAndNavigate"
+      >
         <Plus class="mr-2 h-4 w-4" />
         {{ tripStore.isCreatingTrip ? 'Creating…' : 'New Trip' }}
       </Button>
@@ -139,7 +143,7 @@ onMounted(async () => {
     <!-- Empty state -->
     <div
       v-else-if="tripStore.trips.length === 0"
-      class="flex min-h-[300px] flex-col items-center justify-center gap-4 text-center"
+      class="flex flex-col items-center gap-4 pt-6 text-center"
     >
       <p class="text-muted-foreground">You don't have any trips yet.</p>
       <Button :disabled="tripStore.isCreatingTrip" @click="createAndNavigate">
