@@ -13,8 +13,8 @@ export const ProfileDTOSchema = z.object({
   default_speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable(),
   default_type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable(),
   default_budget: z.enum(['budget', 'moderate', 'luxury']).nullable(),
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime()
+  created_at: z.string().datetime({ offset: true }),
+  updated_at: z.string().datetime({ offset: true })
 })
 
 export function validateProfileDTO(data: unknown) {

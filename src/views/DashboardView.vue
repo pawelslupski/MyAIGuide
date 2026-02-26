@@ -45,12 +45,17 @@ async function confirmDelete() {
   isDeleting.value = true
   try {
     await tripStore.deleteTripById(tripIdToDelete.value)
-    toast({ title: 'Trip deleted', description: 'The trip has been permanently removed.' })
+    toast({
+      title: 'Trip deleted',
+      description: 'The trip has been permanently removed.',
+      duration: 3000
+    })
   } catch {
     toast({
       title: 'Error',
       description: 'Failed to delete trip. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
   } finally {
     isDeleting.value = false
@@ -64,7 +69,12 @@ async function createAndNavigate() {
     const id = await tripStore.createTrip()
     router.push({ name: 'trip-detail', params: { id } })
   } catch {
-    toast({ title: 'Error', description: 'Failed to create trip.', variant: 'destructive' })
+    toast({
+      title: 'Error',
+      description: 'Failed to create trip.',
+      variant: 'destructive',
+      duration: 5000
+    })
   }
 }
 
@@ -77,7 +87,17 @@ async function retryFetch() {
 }
 
 onMounted(async () => {
-  await Promise.all([profileStore.fetchProfile().catch(() => {}), tripStore.fetchTrips(1)])
+  await Promise.all([
+    profileStore.fetchProfile().catch(() => {
+      toast({
+        title: 'Profile unavailable',
+        description: 'Could not load your profile. Please refresh.',
+        variant: 'destructive',
+        duration: 5000
+      })
+    }),
+    tripStore.fetchTrips(1)
+  ])
 })
 </script>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import {
+  AlertCircle,
   Baby,
   PawPrint,
   Accessibility,
@@ -21,8 +22,10 @@ import {
   Gem
 } from 'lucide-vue-next'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/components/ui/toast/use-toast'
 import { useProfileStore } from '@/stores/profile.store'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
@@ -74,7 +77,8 @@ async function toggleFlag(key: BoolFlag) {
     toast({
       title: 'Save failed',
       description: 'Could not update profile. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
   } finally {
     isUpdating.value = false
@@ -109,9 +113,12 @@ async function saveDietaryOff() {
     toast({
       title: 'Save failed',
       description: 'Could not update profile. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
+    // Revert pill to ON and restore the saved description so the textarea is not empty
     localDietaryEnabled.value = true
+    dietaryTextarea.value = profile.value?.dietary_preferences_description ?? ''
   } finally {
     isUpdating.value = false
   }
@@ -124,7 +131,8 @@ async function onDietaryBlur() {
     toast({
       title: 'Description required',
       description: 'Please describe your dietary preferences before saving.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
     localDietaryEnabled.value = false
     dietaryTextarea.value = ''
@@ -140,7 +148,8 @@ async function onDietaryBlur() {
     toast({
       title: 'Save failed',
       description: 'Could not update profile. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
     localDietaryEnabled.value = false
     dietaryTextarea.value = ''
@@ -170,7 +179,8 @@ async function toggleWhat(value: WhatPreference) {
     toast({
       title: 'Save failed',
       description: 'Could not update profile. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
   } finally {
     isUpdating.value = false
@@ -206,7 +216,8 @@ async function selectSpeed(value: SpeedPreference) {
     toast({
       title: 'Save failed',
       description: 'Could not update profile. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
   } finally {
     isUpdating.value = false
@@ -222,7 +233,8 @@ async function selectType(value: TypePreference) {
     toast({
       title: 'Save failed',
       description: 'Could not update profile. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
   } finally {
     isUpdating.value = false
@@ -238,7 +250,8 @@ async function selectBudget(value: BudgetPreference) {
     toast({
       title: 'Save failed',
       description: 'Could not update profile. Please try again.',
-      variant: 'destructive'
+      variant: 'destructive',
+      duration: 5000
     })
   } finally {
     isUpdating.value = false
@@ -264,6 +277,15 @@ async function selectBudget(value: BudgetPreference) {
             <Skeleton v-for="n in 5" :key="n" class="h-9 w-28 rounded-full" />
           </div>
         </div>
+      </template>
+
+      <!-- Profile error state -->
+      <template v-else-if="profileStore.error">
+        <Alert variant="destructive">
+          <AlertCircle class="h-4 w-4" />
+          <AlertTitle>Could not load profile</AlertTitle>
+          <AlertDescription>{{ profileStore.error.error.message }}</AlertDescription>
+        </Alert>
       </template>
 
       <template v-else-if="profile">
@@ -319,6 +341,8 @@ async function selectBudget(value: BudgetPreference) {
             />
           </div>
         </div>
+
+        <Separator class="my-6" />
 
         <!-- Section B: Default travel style -->
         <div class="space-y-5">
