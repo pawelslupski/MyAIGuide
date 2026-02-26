@@ -2,15 +2,13 @@
 
 ## 1. Overview
 
-DashboardView is the protected home screen of MyAIGuide. It is the first page a logged-in user sees and serves as the central hub for trip management. The view displays:
+`DashboardView` is the protected home screen of MyAIGuide (route `/`). It is the first page a logged-in user lands on after authentication and serves as the central hub of the application. The view is composed of two major sections stacked vertically:
 
-- A **profile completeness banner** (conditional — shown when the user profile is incomplete and the banner has not been dismissed)
-- A **responsive grid of trip cards** sorted by `updated_at` descending, each showing title, status badge, note preview, and last-modified date
-- A **"Create New Trip" button** that navigates to the trip creation form
-- **Pagination controls** when the list exceeds 20 trips
-- An **empty state** when the user has no trips yet
+1. **`UserProfilePanel`** — A "Your Travel Profile" card permanently embedded at the top of the page. It lets the user view and update their global traveler flags (kids, pets, mobility, dietary) and default travel-style preferences (interests, pace, trip type, budget). Changes auto-save on every interaction. This panel is the _only_ place in the app where the profile is edited — there is no dedicated `/profile` route.
 
-The view addresses user stories US-002 (login/dashboard access), US-007 (profile completeness indicator), US-008 (create trip CTA), US-009 (delete trip), and US-010 (trip list browsing).
+2. **Trip list area** — A responsive grid of `TripCard` components sorted by `updated_at` descending. Includes a "New Trip" button (inline creation — calls `tripStore.createTrip()` and immediately navigates to `/trips/:id`), loading skeletons, an empty state, an error state with retry, and pagination controls.
+
+**User stories addressed:** US-002 (dashboard access), US-005 (global profile flags), US-006 (default travel preferences), US-008 (create trip), US-009 (delete trip from list), US-010 (trip list).
 
 ---
 
@@ -18,27 +16,33 @@ The view addresses user stories US-002 (login/dashboard access), US-007 (profile
 
 - **Path:** `/`
 - **Route name:** `dashboard`
-- **Guard:** `meta: { requiresAuth: true }` — already configured in `src/router/index.ts`
-- **No additional routing changes needed** for this view itself; however, the following routes must exist for dashboard navigation to work:
-  - `{ path: '/profile', name: 'profile', meta: { requiresAuth: true } }` — target of "Complete Profile" CTA
-  - `{ path: '/trips/new', name: 'trip-create', meta: { requiresAuth: true } }` — target of "Create New Trip" button
-  - `{ path: '/trips/:id', name: 'trip-detail', meta: { requiresAuth: true } }` — target of card click (already in router)
+- **Guard:** `meta: { requiresAuth: true }` — configured in `src/router/index.ts`
+- Unauthenticated access redirects to `/login?redirect=/`
+- No additional routes are needed; trip detail is at `/trips/:id` (already present)
+- There is **no** `/profile` route and **no** `/trips/new` route — both actions happen on this view
 
 ---
 
 ## 3. Component Structure
 
 ```
-DashboardView.vue                         ← view orchestrator
-└── AppLayout                             ← existing layout wrapper
-    ├── ProfileCompletenessBanner.vue     ← conditional, reads profileStore
-    ├── <header row>                      ← page title + "Create New Trip" Button
-    ├── <loading state>                   ← Skeleton cards (while isLoadingTrips)
-    ├── <error state>                     ← Alert + Retry button (on tripsError)
-    ├── <empty state>                     ← message + CTA (when trips.length === 0)
-    ├── <grid>                            ← responsive CSS grid
-    │   └── TripCard.vue × N             ← one per trip
-    └── TripListPagination.vue            ← shown when total_pages > 1
+DashboardView.vue                     ← view orchestrator
+├── UserProfilePanel.vue              ← profile card at top, always visible
+│   ├── [Section A] TravelerFlagPill × 4
+│   │   └── [dietary only] Textarea (conditional)
+│   └── [Section B] PreferencePillGroup × 4
+│       ├── WhatPillGroup (multi-select)
+│       ├── SpeedPillGroup (single-select)
+│       ├── TypePillGroup (single-select)
+│       └── BudgetPillGroup (single-select)
+├── <trip list header>                ← "My Trips" h2 + "New Trip" Button
+├── <loading state>                   ← Skeleton cards (while isLoadingTrips)
+├── <error state>                     ← Alert + Retry button (on tripsError)
+├── <empty state>                     ← message + "Create your first trip" CTA
+├── <grid>                            ← responsive CSS grid
+│   └── TripCard.vue × N
+├── TripListPagination.vue            ← shown when total_pages > 1
+└── <delete Dialog>                   ← one Dialog instance, controlled by local state
 ```
 
 ---
@@ -47,101 +51,139 @@ DashboardView.vue                         ← view orchestrator
 
 ### `DashboardView.vue`
 
-**Description:** The view orchestrator. Initialises data on mount, manages local UI state (current page, delete dialog), and composes child components into the layout.
+**Description:** The view orchestrator. Initialises data on mount in parallel, manages local UI state for the delete dialog, composes all child components, and wires events from child components to store actions.
 
 **Main elements:**
 
 - `AppLayout` wrapper with `<main>` slot
-- `ProfileCompletenessBanner` (conditional)
-- Page header: `<h1>` "My Trips" + `<Button>` "Create New Trip" (navigates to `trip-create`)
-- Responsive grid `div.grid.grid-cols-1.sm:grid-cols-2.lg:grid-cols-3.gap-4.md:gap-6`
-- Skeleton placeholder cards (3 per visible row) while `isLoadingTrips === true`
-- Error state: `Alert` (destructive) + "Retry" `Button` when `tripsError !== null`
-- Empty state div with message and "Create your first trip" CTA when `trips.length === 0 && !isLoadingTrips`
-- `TripCard` for each item in `trips`
-- `TripListPagination` below the grid
-- `Dialog` (delete confirmation) rendered once, controlled by `showDeleteDialog` / `deletingTripId`
+- `UserProfilePanel` (always rendered when authenticated)
+- Trip list section:
+  - `<h2>` "My Trips" + `<Button>` "New Trip" (`Plus` icon)
+  - Skeleton cards (6 placeholders in the same grid) while `isLoadingTrips`
+  - `Alert` (destructive) + "Retry" Button when `tripsError !== null`
+  - Empty-state `<div>` with copy + "Create your first trip" Button when `trips.length === 0 && !isLoadingTrips && !tripsError`
+  - `div.grid.grid-cols-1.sm:grid-cols-2.lg:grid-cols-3.gap-4.md:gap-6`
+  - `TripCard` for each item in `tripStore.trips`
+  - `TripListPagination` below the grid
+  - `Dialog` (delete confirmation) — a single instance, controlled by `showDeleteDialog` / `deletingTripId`
 
 **Handled interactions:**
 
-- On mount: `profileStore.fetchProfile()` + `tripStore.fetchTrips(1)` in parallel
-- "Create New Trip" click → `router.push({ name: 'trip-create' })`
-- Receiving `@delete` from `TripCard` → sets `deletingTripId`, opens Dialog
-- Dialog "Confirm" → `tripStore.deleteTrip(deletingTripId)` → refresh list → close dialog
-- Dialog "Cancel" → close dialog
+- `onMounted`: `Promise.all([profileStore.fetchProfile(), tripStore.fetchTrips(1)])` with individual error handling per promise
+- "New Trip" button click → `tripStore.createTrip()` (POST /api/trips with a generated default title) → on success navigate to `/trips/:id` (new trip id)
+- Receiving `@delete` emit from `TripCard` → store `deletingTripId`, open Dialog
+- Dialog "Confirm Delete" → `tripStore.deleteTripById(deletingTripId)` → show success toast → refresh list → close Dialog
+- Dialog "Cancel" / Dialog close → reset `deletingTripId`, close Dialog
 - `@page-change` from `TripListPagination` → update `currentPage`, call `tripStore.fetchTrips(newPage)`
-- "Retry" click on error → `tripStore.fetchTrips(currentPage)`
+- "Retry" click in error state → `tripStore.fetchTrips(currentPage)`
 
-**Handled validation:** None — validation is delegated to child components and the store.
+**Handled validation:** None — delegated to child components and stores.
 
 **Types used:**
 
-- `DashboardTripViewModel` (new, see section 5)
-- `PaginationDTO` (from `@/types`)
+- `DashboardTripViewModel` (from `src/types.ts`)
+- `PaginationDTO` (from `src/types.ts`)
 
-**Props:** None (it is a route-level view)
+**Props:** None (route-level view)
 
 ---
 
-### `ProfileCompletenessBanner.vue`
+### `UserProfilePanel.vue`
 
-**Description:** An informational alert displayed at the top of the page when the user's profile is incomplete. Dismissible — dismissal is persisted in `localStorage` so the banner does not reappear within the same browser session, but reappears on a new session if the profile is still incomplete.
+**Description:** A card titled "Your Travel Profile" permanently embedded at the top of the dashboard. Divided into two sections:
+
+- **Section A – About you:** four pill-toggle buttons for traveler flags, plus a conditional Textarea for dietary preferences description.
+- **Section B – Default travel style:** four preference groups (Interests, Pace, Trip type, Budget) rendered as pill selectors.
+
+All changes auto-save via `profileStore.updateProfile()` on each interaction. While a save is in flight, `isUpdating` disables all controls to prevent race conditions. A skeleton replaces the card while `profileStore.isLoading && !profileStore.profile`.
 
 **Main elements:**
 
-- `Alert` (shadcn-vue, info/default variant)
-- `AlertTitle` "Complete your profile"
-- `AlertDescription` "Set your travel preferences to get personalised trip plans."
-- `Button` "Complete Profile" (default variant) → navigates to `{ name: 'profile' }`
-- `Button` "Dismiss" (ghost variant, size sm) → emits `@dismiss`
+- `Card` + `CardHeader` (`CardTitle` "Your Travel Profile") + `CardContent`
+- `Separator` between Section A and Section B
+- **Section A** — "About you" sub-heading + four pill `Button` components (toggle variant):
+  - `has_kids` / "Traveling with kids" / `Baby` icon
+  - `has_pets` / "Traveling with pets" / `PawPrint` icon
+  - `has_mobility_issues` / "Mobility considerations" / `Accessibility` icon
+  - `has_dietary_preferences` / "Dietary preferences" / `Utensils` icon
+  - Conditional `Textarea` (shown when `has_dietary_preferences` is `true` or pending-on):
+    - placeholder "Describe your dietary preferences (required)"
+    - `v-model` bound to `dietaryDescriptionDraft` local ref
+    - `@blur` triggers the deferred-save logic
+- **Section B** — four sub-groups, each labelled:
+  - **Interests (What?)** — multi-select pill row; options: Nature (`TreePine`), Culture/Museums (`Landmark`), Beach/Relax (`Waves`), City Break (`Building2`), Foodie (`UtensilsCrossed`)
+  - **Pace (How fast?)** — single-select pill row: Slow & Chill (`Snail`), Balanced (`Scale`), Intensive (`Zap`)
+  - **Trip type** — single-select pill row: Base (`MapPin`), Base + Day Trips (`Map`), Road Trip (`Car`)
+  - **Budget** — single-select pill row: Budget (`PiggyBank`), Moderate (`Wallet`), Luxury (`Gem`)
+- `Skeleton` placeholder (matching card layout) while `profileStore.isLoading && !profileStore.profile`
 
 **Handled interactions:**
 
-- "Complete Profile" click → `router.push({ name: 'profile' })`
-- "Dismiss" click → emits `@dismiss` (parent sets `bannerDismissed = true` and writes to localStorage)
+- `has_kids` / `has_pets` / `has_mobility_issues` toggle → call `profileStore.updateProfile({ <flag>: !currentValue })` immediately
+- `has_dietary_preferences` toggle **OFF → ON**:
+  - Show Textarea optimistically; set `dietaryPending = true`; do **not** save yet
+- `has_dietary_preferences` Textarea `@blur`:
+  - Empty description → show destructive toast "Dietary description is required", revert pill to OFF, clear `dietaryPending`
+  - Non-empty description → call `profileStore.updateProfile({ has_dietary_preferences: true, dietary_preferences_description: description.trim() })`
+- `has_dietary_preferences` toggle **ON → OFF** → call `profileStore.updateProfile({ has_dietary_preferences: false, dietary_preferences_description: null })` immediately
+- Interests pill click → toggle value in `default_what` array → call `profileStore.updateProfile({ default_what: newArray })`
+- Pace / Trip type / Budget pill click → call `profileStore.updateProfile({ default_<field>: newValue })`
 
 **Handled validation:**
 
-- Component is only rendered when `v-if="!profileStore.isComplete && !bannerDismissed"` — condition evaluated in parent
+- `has_dietary_preferences = true` requires non-empty `dietary_preferences_description` (after trim) — enforced on `@blur` of Textarea (revert + toast if empty)
+- All controls disabled when `isUpdating` (save in flight)
+- Skeleton shown while `profileStore.isLoading && !profileStore.profile`
 
-**Types used:** none beyond `ProfileDTO` (via `profileStore`)
+**Types used:**
+
+- `ProfileDTO` (from `src/types.ts`) — read from `profileStore.profile`
+- `UpdateProfileCommand` (from `src/types.ts`) — passed to `profileStore.updateProfile()`
+- `WhatPreference`, `SpeedPreference`, `TypePreference`, `BudgetPreference` (from `src/types.ts`)
 
 **Props:** None (reads directly from `profileStore`)
 
-**Events emitted:** `dismiss` — no payload
+**Local state:**
+
+```typescript
+const dietaryDescriptionDraft = ref<string>('') // textarea v-model
+const dietaryPending = ref<boolean>(false) // pill shown ON but not yet saved
+const isUpdating = ref<boolean>(false) // save in flight — disables all controls
+```
 
 ---
 
 ### `TripCard.vue`
 
-**Description:** Displays a single trip as a clickable card. Navigates to the trip detail view on click. Includes a delete icon button that triggers the parent's delete confirmation flow.
+**Description:** Displays a single trip as a clickable card. Click navigates to `/trips/:id`. Includes a delete icon button that opens the parent's delete confirmation Dialog.
 
 **Main elements:**
 
 - `Card` (shadcn-vue) — full card is clickable, `cursor-pointer`, `hover:shadow-md` transition
-- `CardHeader`: trip `title` (CardTitle) + `Badge` for status
-- `CardContent`: truncated note preview (up to 100 chars), relative "Updated" date
-- Delete icon `Button` (ghost, size icon, `Trash2` lucide icon) in the top-right corner — stops click propagation to avoid navigating while deleting
+- `CardHeader`: `CardTitle` (trip title) + `Badge` (status)
+- `CardContent`:
+  - Truncated note preview (up to 100 chars, `…` if truncated, empty string if no note)
+  - Relative "Updated X ago" timestamp
+- Delete `Button` (ghost, size icon, `Trash2` icon, `aria-label="Delete trip"`) in top-right corner — `@click.stop` to prevent card navigation
 
-**Status badge variants:**
-| Status | Badge variant / classes | Label |
-|-------------|-------------------------------|------------|
-| `CREATED` | `secondary` (gray) | New |
-| `DRAFT` | custom `bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200` | In Progress |
-| `CONFIRMED` | custom `bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200` | Planned |
+**Status badge styling:**
+
+| Status      | Variant / classes                                                          | Label       |
+| ----------- | -------------------------------------------------------------------------- | ----------- |
+| `CREATED`   | `secondary` (gray)                                                         | New         |
+| `DRAFT`     | custom `bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200` | In Progress |
+| `CONFIRMED` | custom `bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200` | Planned     |
 
 **Handled interactions:**
 
-- Card click → `router.push({ name: 'trip-detail', params: { id: trip.id } })`
-- Delete button click (stop propagation) → `emit('delete', trip.id)`
+- Card `@click` → `router.push({ name: 'trip-detail', params: { id: trip.id } })`
+- Delete `Button` `@click.stop` → `emit('delete', trip.id)`
 
-**Handled validation:**
-
-- `notePreview` is already truncated — no further validation needed in this component
+**Handled validation:** None — `notePreview` is pre-truncated by the store.
 
 **Types used:**
 
-- `DashboardTripViewModel` (prop)
+- `DashboardTripViewModel`
 
 **Props:**
 
@@ -157,21 +199,21 @@ defineProps<{
 
 ### `TripListPagination.vue`
 
-**Description:** Simple previous/next pagination control rendered below the trip grid. Only rendered when `pagination.total_pages > 1`.
+**Description:** Simple previous / next pagination rendered below the trip grid. Only rendered when `total_pages > 1`.
 
 **Main elements:**
 
-- Flex row with `Button` "Previous" (outline), page counter text "Page X of Y", `Button` "Next" (outline)
+- Flex row: "Previous" `Button` (outline) + page counter `"Page X of Y"` text + "Next" `Button` (outline)
 
 **Handled interactions:**
 
-- "Previous" click → `emit('page-change', props.pagination.current_page - 1)` (disabled on page 1)
-- "Next" click → `emit('page-change', props.pagination.current_page + 1)` (disabled on last page)
+- "Previous" `@click` → `emit('page-change', pagination.current_page - 1)` (disabled on page 1)
+- "Next" `@click` → `emit('page-change', pagination.current_page + 1)` (disabled on last page)
 
 **Handled validation:**
 
-- Previous button: `disabled` when `current_page === 1` or `isLoading`
-- Next button: `disabled` when `current_page === total_pages` or `isLoading`
+- "Previous" disabled when `current_page === 1` or `isLoading`
+- "Next" disabled when `current_page === total_pages` or `isLoading`
 
 **Types used:**
 
@@ -194,204 +236,220 @@ defineProps<{
 
 ### Existing types consumed (from `src/types.ts`)
 
-| Type              | Usage                                          |
-| ----------------- | ---------------------------------------------- |
-| `TripStatus`      | status derivation and badge rendering          |
-| `PaginationDTO`   | pagination state and `TripListPagination` prop |
-| `TripListItemDTO` | base shape for raw API data                    |
-| `ErrorResponse`   | store error state                              |
+| Type                     | Usage                                                         |
+| ------------------------ | ------------------------------------------------------------- |
+| `ProfileDTO`             | Read from `profileStore.profile` in `UserProfilePanel`        |
+| `UpdateProfileCommand`   | Passed to `profileStore.updateProfile()` on every pill change |
+| `WhatPreference`         | Pill option values for Interests section                      |
+| `SpeedPreference`        | Pill option values for Pace section                           |
+| `TypePreference`         | Pill option values for Trip type section                      |
+| `BudgetPreference`       | Pill option values for Budget section                         |
+| `TripStatus`             | Status badge rendering in `TripCard`                          |
+| `TripListItemDTO`        | Raw API shape before transformation to ViewModel              |
+| `DashboardTripViewModel` | Prop type for `TripCard`; held in `tripStore.trips`           |
+| `PaginationDTO`          | Pagination state and `TripListPagination` prop                |
+| `ErrorResponse`          | Store error state type                                        |
 
-### New ViewModel type (define in `src/views/DashboardView.vue` or `src/types.ts`)
+### `DashboardTripViewModel` (already in `src/types.ts`)
 
 ```typescript
-/**
- * View model for a trip card on the dashboard.
- * Derived from raw Supabase query result after computing status and truncating the note.
- */
-interface DashboardTripViewModel {
+export interface DashboardTripViewModel {
   id: number // trip primary key
   title: string // trip title (max 255 chars)
   status: TripStatus // derived: 'CREATED' | 'DRAFT' | 'CONFIRMED'
   notePreview: string // first 100 chars of note_body, empty string if null
-  updatedAt: string // ISO 8601 timestamp (used for display)
+  updatedAt: string // ISO 8601 timestamp for relative display
 }
 ```
 
-### Internal raw query type (local to store action — not exported)
-
-```typescript
-// Shape returned by Supabase .select() before transformation
-interface TripListRaw {
-  id: number
-  user_id: string
-  title: string
-  note_body: string | null
-  plan_json: object | null // only null-check needed for status derivation
-  created_at: string
-  updated_at: string
-}
-```
-
-### Status derivation helper (define inside `trip.store.ts` as a module-level function)
-
-```typescript
-function deriveTripStatus(noteBody: string | null, planJson: object | null): TripStatus {
-  if (planJson !== null) return 'CONFIRMED'
-  if (noteBody !== null && noteBody.trim() !== '') return 'DRAFT'
-  return 'CREATED'
-}
-```
+> `notePreview` is populated from `note_body`, which is fetched internally in the Supabase query but stripped from `TripListItemDTO`. The mapping happens in the store layer (`trip.store.ts`) when building `DashboardTripViewModel`.
 
 ---
 
 ## 6. State Management
 
-### Pinia stores used
+### Pinia stores consumed
 
-**`profileStore` (`src/stores/profile.store.ts`)** — existing, no changes needed:
+**`profileStore` (`src/stores/profile.store.ts`)**
 
-- `profileStore.fetchProfile()` — called on dashboard mount
-- `profileStore.isComplete` — computed boolean used to show/hide banner
-- `profileStore.isLoading` — used to defer banner render until profile is loaded
+| Member                   | Type                                         | Used for                                               |
+| ------------------------ | -------------------------------------------- | ------------------------------------------------------ |
+| `profile`                | `ProfileDTO \| null`                         | Read by `UserProfilePanel` to populate pill states     |
+| `isLoading`              | `boolean`                                    | Show Skeleton in `UserProfilePanel`                    |
+| `error`                  | `ErrorResponse \| null`                      | Toast on profile fetch failure                         |
+| `fetchProfile()`         | `() => Promise<void>`                        | Called on `DashboardView.onMounted`                    |
+| `updateProfile(updates)` | `(u: UpdateProfileCommand) => Promise<void>` | Called on every pill interaction in `UserProfilePanel` |
 
-**`trip.store.ts` (`src/stores/trip.store.ts`)** — **must be extended** with the following additions (current implementation only manages `currentTrip`):
+**`tripStore` (`src/stores/trip.store.ts`)**
 
-```typescript
-// New state refs to add
-const trips = ref<DashboardTripViewModel[]>([])
-const tripsPagination = ref<PaginationDTO>({
-  current_page: 1,
-  total_pages: 1,
-  total_count: 0,
-  limit: 20
-})
-const isLoadingTrips = ref(false)
-const tripsError = ref<ErrorResponse | null>(null)
-
-// New actions to add
-async function fetchTrips(page = 1, limit = 20): Promise<void>
-async function deleteTripById(tripId: number): Promise<void>
-```
-
-`fetchTrips` implementation outline:
-
-1. Get authenticated user from `supabaseClient.auth.getUser()`
-2. Compute `from/to` range from `(page - 1) * limit` / `from + limit - 1`
-3. Query `supabaseClient.from('trips').select('id, user_id, title, note_body, plan_json, created_at, updated_at', { count: 'exact' }).eq('user_id', user.id).order('updated_at', { ascending: false }).range(from, to)`
-4. Map raw rows to `DashboardTripViewModel` using `deriveTripStatus` and note truncation
-5. Set `trips.value` and `tripsPagination.value`
-
-`deleteTripById` implementation outline:
-
-1. Get authenticated user
-2. `supabaseClient.from('trips').delete().eq('id', tripId).eq('user_id', user.id)`
-3. Remove deleted trip from `trips.value` (filter in-place)
+| Member               | Type                               | Used for                                              |
+| -------------------- | ---------------------------------- | ----------------------------------------------------- |
+| `trips`              | `DashboardTripViewModel[]`         | Rendered as `TripCard` list                           |
+| `tripsPagination`    | `PaginationDTO`                    | Passed to `TripListPagination`                        |
+| `isLoadingTrips`     | `boolean`                          | Show skeleton cards                                   |
+| `isCreatingTrip`     | `boolean`                          | Disable "New Trip" button while creation is in-flight |
+| `tripsError`         | `ErrorResponse \| null`            | Show inline error state                               |
+| `fetchTrips(page?)`  | `(page?: number) => Promise<void>` | Called on mount and page change                       |
+| `createTrip()`       | `() => Promise<number>`            | Creates a new trip, returns its id for navigation     |
+| `deleteTripById(id)` | `(id: number) => Promise<void>`    | Called after user confirms delete Dialog              |
 
 ### Local state in `DashboardView.vue`
 
 ```typescript
-const currentPage = ref(1)
-const showDeleteDialog = ref(false)
+const currentPage = ref<number>(1)
+const showDeleteDialog = ref<boolean>(false)
 const deletingTripId = ref<number | null>(null)
-const isDeleting = ref(false)
-
-// Initialised from localStorage on component creation
-const bannerDismissed = ref(localStorage.getItem('myaiguide-dashboard-banner-dismissed') === 'true')
+const isDeleting = ref<boolean>(false)
 ```
 
-### localStorage
+### Local state in `UserProfilePanel.vue`
 
-| Key                                    | Value    | Purpose                              |
-| -------------------------------------- | -------- | ------------------------------------ |
-| `myaiguide-dashboard-banner-dismissed` | `'true'` | Suppress profile completeness banner |
+```typescript
+const dietaryDescriptionDraft = ref<string>('') // textarea v-model
+const dietaryPending = ref<boolean>(false) // optimistic ON state before save
+const isUpdating = ref<boolean>(false) // save in flight — disables all controls
+```
 
 ---
 
 ## 7. API Integration
 
-All database operations use the custom Supabase client at `@/db/supabase.client.ts` — no custom Edge Functions are required for the dashboard.
+All operations on the dashboard use the Supabase JS client directly — no Edge Functions are required.
+
+### Fetch profile
+
+**Action:** `profileStore.fetchProfile()` — called on `DashboardView.onMounted` in parallel with trip fetch.
+
+**Supabase query:**
+
+```typescript
+supabaseClient.from('profiles').select('*').eq('user_id', authenticatedUserId).single()
+```
+
+**Response type:** `ProfileDTO` (validated with `ProfileDTOSchema`)
+
+---
+
+### Update profile
+
+**Action:** `profileStore.updateProfile(updates: UpdateProfileCommand)` — called on every UserProfilePanel pill interaction.
+
+**Supabase query:**
+
+```typescript
+supabaseClient
+  .from('profiles')
+  .update(updates)
+  .eq('user_id', authenticatedUserId)
+  .select('*')
+  .single()
+```
+
+**Request type:** `UpdateProfileCommand` (partial — only changed fields sent)
+
+**Response type:** Updated `ProfileDTO`
+
+**Critical constraint:** When sending `{ has_dietary_preferences: true }`, `dietary_preferences_description` must be a non-empty string in the same payload. The DB has a CHECK constraint enforcing this. The UI defers the save until the Textarea has a valid description.
+
+---
 
 ### Fetch trips list
 
-**Called from:** `tripStore.fetchTrips(page)` action, triggered on mount and page change.
+**Action:** `tripStore.fetchTrips(page)` — called on mount and on pagination change.
 
-**Request (Supabase client):**
+**Supabase query (internal — includes `note_body` for preview mapping):**
 
 ```typescript
 supabaseClient
   .from('trips')
-  .select('id, user_id, title, note_body, plan_json, created_at, updated_at', { count: 'exact' })
+  .select(
+    'id, user_id, title, destination, num_days, num_people, note_body, plan_json, created_at, updated_at',
+    { count: 'exact' }
+  )
   .eq('user_id', authenticatedUserId)
   .order('updated_at', { ascending: false })
   .range(from, to)
 ```
 
-**Response:** Array of `TripListRaw` rows + `count: number | null`.
+**Response shape:** Array of raw rows + `count` (Supabase PostgREST)
 
-**Transformation:** Each row is mapped to `DashboardTripViewModel`:
+**Transformation to `DashboardTripViewModel`:**
 
-- `status` → `deriveTripStatus(row.note_body, row.plan_json)`
-- `notePreview` → `row.note_body ? row.note_body.slice(0, 100) + (row.note_body.length > 100 ? '…' : '') : ''`
-- `updatedAt` → `row.updated_at`
-
-**Pagination metadata built from:** `count` and `page`/`limit` params.
+- `status` = `deriveTripStatus(row.note_body, row.plan_json)` (from `trip.service.ts`)
+- `notePreview` = `row.note_body ? row.note_body.slice(0, 100) + (row.note_body.length > 100 ? '…' : '') : ''`
+- `note_body` and `plan_json` are **not** included in the final ViewModel
 
 ---
 
-### Fetch profile
+### Create new trip
 
-**Called from:** `profileStore.fetchProfile()`, triggered in parallel with trip fetch on mount.
+**Action:** `tripStore.createTrip()` — called on "New Trip" button click.
 
-Uses existing implementation in `profile.store.ts` — queries `profiles` table filtered by `user_id`.
+**Supabase query:**
+
+```typescript
+supabaseClient
+  .from('trips')
+  .insert({ title: 'New Trip', user_id: authenticatedUserId })
+  .select('id')
+  .single()
+```
+
+Preference fields are omitted — the server/trigger copies defaults from the user's profile. Returns the new trip `id` for immediate navigation to `/trips/:id`.
 
 ---
 
 ### Delete trip
 
-**Called from:** `tripStore.deleteTripById(id)`, triggered after user confirms the delete dialog.
+**Action:** `tripStore.deleteTripById(id)` — called after user confirms the delete Dialog.
 
-**Request (Supabase client):**
+**Supabase query:**
 
 ```typescript
 supabaseClient.from('trips').delete().eq('id', tripId).eq('user_id', authenticatedUserId)
 ```
 
-**Response:** No data; error indicates failure.
-
-**Post-delete:** Remove the trip from `trips.value` by filtering, decrement `tripsPagination.total_count` by 1.
+**Post-delete:** Filter deleted trip from `trips.value` in-place; decrement `tripsPagination.total_count` by 1.
 
 ---
 
 ## 8. User Interactions
 
-| Interaction               | Trigger                        | Outcome                                                                                  |
-| ------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
-| Page load                 | `onMounted`                    | Parallel fetch of profile and trips (page 1); loading skeletons shown                    |
-| Click trip card           | `@click` on `Card`             | Navigate to `/trips/:id`                                                                 |
-| Click "Create New Trip"   | `@click` on header button      | Navigate to `/trips/new`                                                                 |
-| Click "Complete Profile"  | `@click` in banner             | Navigate to `/profile`                                                                   |
-| Click "Dismiss" in banner | `@dismiss` event               | Set `bannerDismissed = true`, write localStorage key                                     |
-| Click delete icon on card | `@delete` from `TripCard`      | Store `deletingTripId`, open delete `Dialog`                                             |
-| Confirm delete in dialog  | `@click` confirm button        | Call `deleteTripById`, show success toast, close dialog; on error show destructive toast |
-| Cancel delete in dialog   | `@click` cancel / dialog close | Reset `deletingTripId`, close dialog                                                     |
-| Click Previous / Next     | `@page-change` from pagination | Update `currentPage`, call `fetchTrips(newPage)`                                         |
-| Click Retry on error      | `@click` on error state button | Call `fetchTrips(currentPage)` again                                                     |
+| Interaction                              | Trigger                                  | Outcome                                                                                                                  |
+| ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Page load                                | `onMounted`                              | Parallel fetch of profile and trips (page 1); skeletons shown in both sections                                           |
+| Profile traveler flag toggle (simple)    | Pill `@click` in Section A               | `profileStore.updateProfile({ <flag>: newValue })` immediately; controls disabled while saving                           |
+| Dietary preference toggle OFF → ON       | `has_dietary_preferences` pill click     | Textarea appears; `dietaryPending = true`; save deferred until valid description entered                                 |
+| Dietary preference Textarea blur (valid) | Textarea `@blur`                         | `profileStore.updateProfile({ has_dietary_preferences: true, dietary_preferences_description: text })`                   |
+| Dietary preference Textarea blur (empty) | Textarea `@blur`                         | Destructive toast "Dietary description is required"; pill reverts to OFF                                                 |
+| Dietary preference toggle ON → OFF       | `has_dietary_preferences` pill click     | `profileStore.updateProfile({ has_dietary_preferences: false, dietary_preferences_description: null })` immediately      |
+| Travel style preference change           | Pill click in Section B                  | `profileStore.updateProfile({ default_<field>: newValue })` immediately                                                  |
+| Click "New Trip" button                  | `@click` on header button                | `tripStore.createTrip()` → on success `router.push({ name: 'trip-detail', params: { id } })`; button shows loading state |
+| Click trip card                          | `@click` on `TripCard`                   | `router.push({ name: 'trip-detail', params: { id: trip.id } })`                                                          |
+| Click delete icon on card                | `@delete` from `TripCard`                | Store `deletingTripId`, open delete Dialog                                                                               |
+| Confirm delete in Dialog                 | Dialog confirm button click              | `tripStore.deleteTripById(id)` → success toast → list updated → Dialog closed                                            |
+| Cancel delete in Dialog                  | Dialog cancel / Escape / overlay click   | `deletingTripId = null`, Dialog closed                                                                                   |
+| Pagination "Previous" / "Next"           | `@page-change` from `TripListPagination` | `currentPage = newPage`, `tripStore.fetchTrips(newPage)`                                                                 |
+| Retry on trips error                     | "Try again" button click                 | `tripStore.fetchTrips(currentPage)`                                                                                      |
 
 ---
 
 ## 9. Conditions and Validation
 
-| Condition                                              | Component                   | Effect                                                         |
-| ------------------------------------------------------ | --------------------------- | -------------------------------------------------------------- |
-| `!profileStore.isComplete && !bannerDismissed`         | `ProfileCompletenessBanner` | Banner is rendered                                             |
-| `profileStore.isLoading`                               | `DashboardView`             | Banner render deferred (show nothing instead of false flash)   |
-| `tripStore.isLoadingTrips`                             | `DashboardView`             | Show skeleton cards (6 placeholders), hide grid and pagination |
-| `tripStore.tripsError !== null`                        | `DashboardView`             | Show error Alert with "Retry" button                           |
-| `trips.length === 0 && !isLoadingTrips && !tripsError` | `DashboardView`             | Show empty-state message + "Create first trip" CTA             |
-| `pagination.total_pages > 1`                           | `TripListPagination`        | Pagination rendered                                            |
-| `pagination.current_page === 1`                        | `TripListPagination`        | "Previous" button disabled                                     |
-| `pagination.current_page === total_pages`              | `TripListPagination`        | "Next" button disabled                                         |
-| `isDeleting === true`                                  | Delete dialog buttons       | Both buttons disabled to prevent double-submit                 |
+| Condition                                              | Component                    | Effect                                                     |
+| ------------------------------------------------------ | ---------------------------- | ---------------------------------------------------------- |
+| `profileStore.isLoading && !profileStore.profile`      | `UserProfilePanel`           | Skeleton replaces the entire panel                         |
+| `isUpdating === true`                                  | `UserProfilePanel`           | All pill buttons and Textarea disabled                     |
+| `dietaryPending === true`                              | `UserProfilePanel` Section A | Textarea visible; dietary pill visually ON; save deferred  |
+| `has_dietary_preferences === true` + empty description | `UserProfilePanel` Section A | On Textarea blur → destructive toast + revert pill to OFF  |
+| `tripStore.isLoadingTrips`                             | `DashboardView`              | Skeleton cards grid shown; real grid and pagination hidden |
+| `tripStore.tripsError !== null`                        | `DashboardView`              | Inline error Alert with "Try again" button shown           |
+| `trips.length === 0 && !isLoadingTrips && !tripsError` | `DashboardView`              | Empty state message + "Create your first trip" CTA shown   |
+| `pagination.total_pages > 1`                           | `TripListPagination`         | Pagination component rendered                              |
+| `pagination.current_page === 1`                        | `TripListPagination`         | "Previous" button disabled                                 |
+| `pagination.current_page === total_pages`              | `TripListPagination`         | "Next" button disabled                                     |
+| `tripStore.isCreatingTrip === true`                    | `DashboardView`              | "New Trip" button shows loading spinner, disabled          |
+| `isDeleting === true`                                  | Delete Dialog buttons        | Both Dialog buttons disabled to prevent double-submit      |
 
 ---
 
@@ -399,28 +457,54 @@ supabaseClient.from('trips').delete().eq('id', tripId).eq('user_id', authenticat
 
 ### Profile fetch error
 
-- Catch error in `DashboardView.onMounted`
-- Show a `useToast()` warning toast: "Could not load profile preferences"
-- Proceed without showing the banner (fail-open: missing profile is not a blocking error)
+- Error caught in `DashboardView.onMounted` (individual catch for the profile promise)
+- Destructive toast: "Could not load your profile. Please refresh."
+- `UserProfilePanel` shows an error state (Alert inside the card) instead of crashing
+
+### Profile update error
+
+- `isUpdating` set back to `false` in the `finally` block
+- Destructive toast: "Failed to save profile. Please try again."
+- UI reverts the optimistic change — all pill state is derived from `profileStore.profile`, which was not updated on failure
+
+### Dietary preferences deferred-save edge case
+
+- If blur fires with empty text: toast "Dietary description is required" + revert pill + clear `dietaryPending`
+- If `profileStore.updateProfile` fails after a valid blur: destructive toast "Failed to save dietary preferences" + `has_dietary_preferences` reverts to previous stored value
 
 ### Trips fetch error
 
-- `tripsError` is set in the store
-- `DashboardView` renders an error state: `Alert` (destructive) with message "Failed to load trips" and a "Try again" `Button`
-- Clicking "Try again" calls `fetchTrips(currentPage)` and clears `tripsError`
+- `tripStore.tripsError` is set in the store
+- Inline error state renders: `Alert` (destructive), message "Failed to load your trips", "Try again" Button
+- "Try again" calls `fetchTrips(currentPage)` and resets `tripsError`
+
+### Create trip error
+
+- Toast (destructive): "Failed to create trip. Please try again."
+- No navigation; `isCreatingTrip` resets to `false`
 
 ### Delete trip error
 
-- Show destructive toast: "Failed to delete trip. Please try again."
-- Do **not** remove the trip from the list (no optimistic delete — consistent with the potential for partial failures)
-- Close the dialog regardless of outcome
+- Toast (destructive): "Failed to delete trip. Please try again."
+- Trip remains in the list (no optimistic deletion)
+- Dialog closes regardless
 
-### Toast notifications (uses existing `use-toast.ts`)
+### Toast notifications
 
 ```typescript
 import { useToast } from '@/components/ui/toast/use-toast'
 const { toast } = useToast()
 ```
+
+| Scenario                          | Variant     | Duration |
+| --------------------------------- | ----------- | -------- |
+| Profile fetch failure             | destructive | 5 s      |
+| Profile update failure            | destructive | 5 s      |
+| Dietary description empty on blur | destructive | 5 s      |
+| Trips fetch failure (also inline) | destructive | 5 s      |
+| Create trip failure               | destructive | 5 s      |
+| Delete trip success               | default     | 3 s      |
+| Delete trip failure               | destructive | 5 s      |
 
 ---
 
@@ -430,67 +514,80 @@ const { toast } = useToast()
 
    ```bash
    npx shadcn-vue@latest add skeleton
-   npx shadcn-vue@latest add alert-dialog
+   npx shadcn-vue@latest add dialog
+   npx shadcn-vue@latest add separator
    ```
 
-   _Alternatively, use the existing `Dialog` component for the delete confirmation and CSS-based skeleton placeholders._
+2. **Verify `src/stores/profile.store.ts`** exposes:
+   - `profile: Ref<ProfileDTO | null>`
+   - `isLoading: Ref<boolean>`
+   - `error: Ref<ErrorResponse | null>`
+   - `fetchProfile(): Promise<void>`
+   - `updateProfile(updates: UpdateProfileCommand): Promise<void>`
 
-2. **Add missing routes to `src/router/index.ts`:**
+   `updateProfile` must set `isLoading` (or a separate `isUpdating` ref) and handle errors by reverting state and rethrowing.
 
-   ```typescript
-   { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresAuth: true } },
-   { path: '/trips/new', name: 'trip-create', component: () => import('@/views/TripCreateView.vue'), meta: { requiresAuth: true } },
-   ```
+3. **Verify `src/stores/trip.store.ts`** exposes:
+   - `trips: Ref<DashboardTripViewModel[]>`
+   - `tripsPagination: Ref<PaginationDTO>`
+   - `isLoadingTrips: Ref<boolean>`
+   - `isCreatingTrip: Ref<boolean>`
+   - `tripsError: Ref<ErrorResponse | null>`
+   - `fetchTrips(page?: number): Promise<void>` — select includes `note_body` internally for `notePreview` mapping
+   - `createTrip(): Promise<number>` — returns new trip `id`
+   - `deleteTripById(id: number): Promise<void>`
 
-3. **Extend `src/stores/trip.store.ts`** with:
-   - `trips`, `tripsPagination`, `isLoadingTrips`, `tripsError` state refs
-   - `fetchTrips(page, limit)` action with Supabase query + `DashboardTripViewModel` transformation
-   - `deleteTripById(tripId)` action
-   - Export new refs and actions from the store return object
+4. **Create `src/components/UserProfilePanel.vue`:**
+   - Uses `Card`, `CardHeader`, `CardTitle`, `CardContent`, `Separator`, `Button`, `Textarea`, `Skeleton`
+   - Icons from `lucide-vue-next`: `Baby`, `PawPrint`, `Accessibility`, `Utensils`, `TreePine`, `Landmark`, `Waves`, `Building2`, `UtensilsCrossed`, `Snail`, `Scale`, `Zap`, `MapPin`, `Map`, `Car`, `PiggyBank`, `Wallet`, `Gem`
+   - Local state: `dietaryDescriptionDraft`, `dietaryPending`, `isUpdating`
+   - Section A: four pill Buttons; dietary Textarea with `@blur` deferred-save logic
+   - Section B: four preference groups; each pill calls `profileStore.updateProfile()` on click
+   - All controls bound to `profileStore.profile` for their active/inactive state
 
-4. **Add `deriveTripStatus` helper** as a module-level function in `trip.store.ts`:
-
-   ```typescript
-   function deriveTripStatus(noteBody: string | null, planJson: object | null): TripStatus { … }
-   ```
-
-5. **Create `src/components/ProfileCompletenessBanner.vue`:**
-   - Uses `Alert`, `AlertTitle`, `AlertDescription`, `Button`
-   - Reads `profileStore.isComplete` internally
-   - Emits `dismiss` event
-
-6. **Create `src/components/TripCard.vue`:**
+5. **Create `src/components/TripCard.vue`:**
    - Uses `Card`, `CardHeader`, `CardContent`, `CardTitle`, `Badge`, `Button`
    - `Trash2` icon from `lucide-vue-next`
    - Accepts `DashboardTripViewModel` prop
-   - Emits `delete(id: number)`
-   - Status badge logic as a computed or inline function
+   - Emits `delete(id: number)` on delete button `@click.stop`
+   - Status badge computed from `trip.status` with correct class mapping
+   - Relative date using a utility or `Intl.RelativeTimeFormat`
 
-7. **Create `src/components/TripListPagination.vue`:**
+6. **Create `src/components/TripListPagination.vue`:**
    - Uses `Button`
-   - Accepts `PaginationDTO` + `isLoading` props
+   - Props: `pagination: PaginationDTO`, `isLoading: boolean`
    - Emits `page-change(page: number)`
+   - "Previous" / "Next" buttons with correct disabled conditions
 
-8. **Implement `src/views/DashboardView.vue`:**
-   - `<script setup>` with `profileStore`, `tripStore`, `router`
-   - `onMounted`: parallel `Promise.all([profileStore.fetchProfile(), tripStore.fetchTrips(1)])` with individual error handling
-   - Local state: `currentPage`, `bannerDismissed`, `showDeleteDialog`, `deletingTripId`, `isDeleting`
-   - Template sections (in order): banner → header → loading/error/empty/grid states → pagination → delete dialog
-   - Delete dialog: use `Dialog` / `DialogContent` / `DialogHeader` / `DialogFooter` with Confirm + Cancel buttons
+7. **Implement `src/views/DashboardView.vue`:**
+   - `<script setup>` with `profileStore`, `tripStore`, `router`, `useToast`
+   - `onMounted`: `Promise.all` with individual `.catch` for profile and trips
+   - Local state: `currentPage`, `showDeleteDialog`, `deletingTripId`, `isDeleting`
+   - Template sections (in order): `UserProfilePanel` → trip list header → loading/error/empty/grid → `TripListPagination` → delete `Dialog`
+   - Delete Dialog: `Dialog`, `DialogContent`, `DialogHeader`, `DialogFooter`; Confirm button (destructive) + Cancel button; both disabled when `isDeleting`
 
-9. **Verify Toaster is mounted** in `App.vue` or the layout — the `Toaster` component from `@/components/ui/toast/Toaster.vue` must be included once in the app tree.
+8. **Verify `Toaster` is mounted** in `App.vue` or `AppLayout.vue` — needed for all toast notifications.
+
+9. **Verify router** has the `trip-detail` named route at `/trips/:id` with `meta: { requiresAuth: true }`.
 
 10. **Manual test checklist:**
-    - [ ] Empty state renders when user has no trips
-    - [ ] Trip cards display correct title, status badge, note preview, date
-    - [ ] Status badge colours: CREATED = gray, DRAFT = amber, CONFIRMED = green
+    - [ ] `UserProfilePanel` Skeleton shown while profile is loading
+    - [ ] All four traveler flag pills reflect `profileStore.profile` values
+    - [ ] Toggling a simple flag (kids/pets/mobility) calls `updateProfile` and updates the pill
+    - [ ] Dietary: toggle ON → Textarea appears; submit valid text → both saved together
+    - [ ] Dietary: blur with empty text → toast + pill reverts to OFF
+    - [ ] Dietary: toggle ON → OFF → saves `{ has_dietary_preferences: false, dietary_preferences_description: null }`
+    - [ ] All Section B (what/speed/type/budget) pills call `updateProfile` on click
+    - [ ] Controls are disabled while a save is in flight
+    - [ ] Trip list Skeleton shown while loading
+    - [ ] Empty state shown when no trips
+    - [ ] Trip cards show correct title, badge (CREATED=gray, DRAFT=amber, CONFIRMED=green), note preview, relative date
     - [ ] Clicking a card navigates to `/trips/:id`
-    - [ ] "Create New Trip" navigates to `/trips/new`
-    - [ ] Delete icon opens confirmation dialog; confirming deletes and refreshes list
-    - [ ] Pagination controls work and disable correctly on first/last pages
-    - [ ] Profile completeness banner shows when profile is incomplete
-    - [ ] Dismissing banner hides it; it does not reappear in the same session
-    - [ ] Error state appears on trips fetch failure with working retry
-    - [ ] Skeleton cards render during loading
-    - [ ] Responsive grid: 1 column on mobile, 2 on tablet (sm), 3 on desktop (lg)
-    - [ ] Dark mode: all badge variants readable, banner contrast meets WCAG AA
+    - [ ] "New Trip" creates a trip and navigates to `/trips/:id`
+    - [ ] Delete icon opens Dialog; confirm deletes and removes from list
+    - [ ] Cancel/Escape closes Dialog without deleting
+    - [ ] Pagination controls appear only when `total_pages > 1`
+    - [ ] Pagination Previous/Next disable correctly on first/last page
+    - [ ] Error state appears on trips fetch failure; "Try again" retries
+    - [ ] Responsive grid: 1 column (mobile), 2 columns (sm), 3 columns (lg)
+    - [ ] Dark mode: all badges and pill states meet WCAG AA contrast
