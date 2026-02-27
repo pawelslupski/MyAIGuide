@@ -90,21 +90,31 @@ export const usePlanStore = defineStore('plan', () => {
       // Detect language from note (default to 'en' if no note)
       const language = detectLanguage(trip.note_body ?? '')
 
-      // Build trip preferences with proper typing
-      const tripPreferences = {
-        what: (trip.what ?? []) as import('@/types').WhatPreference[],
-        speed: trip.speed as import('@/types').SpeedPreference | null,
-        type: trip.type as import('@/types').TypePreference | null,
-        budget: trip.budget as import('@/types').BudgetPreference | null,
-        num_days: trip.num_days ?? null,
-        num_people: trip.num_people ?? null
-      }
-
-      // Fetch user profile for personalization flags
+      // Fetch user profile for personalization flags and preference fallbacks
       const profileStore = useProfileStore()
       if (!profileStore.profile) {
         await profileStore.fetchProfile()
       }
+
+      // Build trip preferences — fall back to profile defaults when the trip fields are null
+      // (mirrors the same fallback logic used in TripEditor.vue for display)
+      const tripPreferences = {
+        what: (trip.what?.length
+          ? trip.what
+          : (profileStore.profile?.default_what ?? [])) as import('@/types').WhatPreference[],
+        speed: (trip.speed ?? profileStore.profile?.default_speed ?? null) as
+          | import('@/types').SpeedPreference
+          | null,
+        type: (trip.type ?? profileStore.profile?.default_type ?? null) as
+          | import('@/types').TypePreference
+          | null,
+        budget: (trip.budget ?? profileStore.profile?.default_budget ?? null) as
+          | import('@/types').BudgetPreference
+          | null,
+        num_days: trip.num_days ?? null,
+        num_people: trip.num_people ?? null
+      }
+
       const userProfile = {
         hasKids: profileStore.profile?.has_kids ?? false,
         hasPets: profileStore.profile?.has_pets ?? false,
