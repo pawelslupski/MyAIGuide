@@ -188,6 +188,27 @@ function handleNumPeopleChange(e: any) {
   localNumPeople.value = Number.isNaN(val) ? null : val
 }
 
+// Apply profile defaults when defaultPreferences arrives or changes (e.g. profile loaded after mount)
+watch(
+  () => props.defaultPreferences,
+  (newDefaults) => {
+    if (!newDefaults) return
+    if (!props.trip.what?.length) {
+      localWhat.value = [...(newDefaults.what ?? [])] as WhatPreference[]
+    }
+    if (!props.trip.speed) {
+      localSpeed.value = (newDefaults.speed ?? null) as SpeedPreference | null
+    }
+    if (!props.trip.type) {
+      localType.value = (newDefaults.type ?? null) as TypePreference | null
+    }
+    if (!props.trip.budget) {
+      localBudget.value = (newDefaults.budget ?? null) as BudgetPreference | null
+    }
+  },
+  { deep: true }
+)
+
 // Sync local state when the saved trip changes externally (e.g. after successful save)
 watch(
   () => props.trip,
@@ -298,8 +319,8 @@ watch(
             >
               <Checkbox
                 :id="`what-${option.value}`"
-                :checked="localWhat.includes(option.value)"
-                @update:checked="toggleWhat(option.value)"
+                :model-value="localWhat.includes(option.value)"
+                @update:model-value="toggleWhat(option.value)"
               />
               <Label :for="`what-${option.value}`" class="cursor-pointer text-sm font-normal">
                 {{ option.label }}
