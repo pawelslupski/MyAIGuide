@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useDebounceFn } from '@vueuse/core'
 import { useTripStore } from '@/stores/trip.store'
 import { usePlanStore } from '@/stores/plan.store'
 import { useProfileStore } from '@/stores/profile.store'
@@ -9,7 +10,6 @@ import { useToast } from '@/components/ui/toast/use-toast'
 import TripEditor from '@/components/TripEditor.vue'
 import PlanPanel from '@/components/PlanPanel.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
-import { Button } from '@/components/ui/button'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
 
 /**
@@ -157,6 +157,7 @@ watch(
   () => route.params.id,
   (newId, oldId) => {
     if (newId !== oldId) {
+      debouncedSave.cancel()
       tripStore.clearTrip()
       planStore.discardCandidate()
       initializeView()
@@ -170,14 +171,14 @@ onMounted(() => {
 })
 
 /**
- * Save all pending trip edits at once
+ * Core save – persists all pending fields and syncs local state.
+ * Called directly (on note blur) or via the debounced wrapper.
  */
-async function handleSaveAll() {
+async function performSave() {
   if (!pendingFields.value || !isDirty.value) return
   try {
     const tripId = parseInt(route.params.id as string, 10)
     await tripStore.saveAllFields(tripId, pendingFields.value)
-    // Sync pendingFields to the freshly saved state so isDirty resets immediately
     const t = tripStore.currentTrip!
     pendingFields.value = {
       title: t.title,
@@ -190,11 +191,6 @@ async function handleSaveAll() {
       num_days: t.num_days ?? null,
       num_people: t.num_people ?? null
     }
-    toast({
-      title: 'Trip saved',
-      description: 'Your changes have been saved.',
-      duration: 3000
-    })
   } catch (error: any) {
     toast({
       title: 'Failed to save trip',
@@ -202,6 +198,40 @@ async function handleSaveAll() {
       variant: 'destructive'
     })
   }
+}
+
+/**
+ * Debounced auto-save for every field except note_body.
+ * Fires 800 ms after the last change so rapid typing doesn't flood the API.
+ */
+const debouncedSave = useDebounceFn(performSave, 800)
+
+// Trigger debounced save whenever any non-note field changes.
+watch(
+  () => [
+    pendingFields.value?.title,
+    pendingFields.value?.destination,
+    JSON.stringify(pendingFields.value?.what),
+    pendingFields.value?.speed,
+    pendingFields.value?.type,
+    pendingFields.value?.budget,
+    pendingFields.value?.num_days,
+    pendingFields.value?.num_people
+  ],
+  () => {
+    if (!pendingFields.value || !isDirty.value) return
+    debouncedSave()
+  }
+)
+
+/**
+ * Called when the note textarea is blurred.
+ * Cancels any pending debounced save to avoid a double request,
+ * then immediately persists everything including the note.
+ */
+async function handleNoteBlur() {
+  debouncedSave.cancel()
+  await performSave()
 }
 </script>
 
@@ -229,9 +259,7 @@ async function handleSaveAll() {
             </p>
           </div>
           <div class="flex items-center gap-2">
-            <Button size="sm" :disabled="!isDirty || tripStore.isSaving" @click="handleSaveAll">
-              {{ tripStore.isSaving ? 'Saving…' : 'Save' }}
-            </Button>
+            <span v-if="tripStore.isSaving" class="text-xs text-muted-foreground">Saving…</span>
             <ThemeToggle />
           </div>
         </div>
@@ -245,6 +273,7 @@ async function handleSaveAll() {
             :trip="tripStore.currentTrip"
             :default-preferences="profileStore.defaultPreferences"
             @update:fields="handleFieldsChange"
+            @blur:note="handleNoteBlur"
           />
         </div>
 

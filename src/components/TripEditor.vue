@@ -37,6 +37,7 @@ const emit = defineEmits<{
       num_people: number | null
     }
   ]
+  'blur:note': []
 }>()
 
 // Local state for immediate UI updates
@@ -420,6 +421,7 @@ watch(
           placeholder="Write your trip notes here... (optional)"
           class="min-h-[200px] resize-y"
           :maxlength="MAX_NOTE_LENGTH"
+          @blur="emit('blur:note')"
         />
         <div class="flex items-center justify-between text-sm">
           <span v-if="noteValidationMessage" :class="noteValidationClass">
