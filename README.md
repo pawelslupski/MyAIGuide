@@ -60,6 +60,8 @@ Key capabilities:
 | Serverless functions | Supabase Edge Functions (Deno 2)                     |
 | AI integration       | OpenRouter.ai (claude-sonnet-4-6 by default)         |
 | Code quality         | ESLint 9, Prettier 3, Husky + lint-staged            |
+| Unit testing         | Vitest 4, @vue/test-utils, @pinia/testing, msw       |
+| E2E testing          | Playwright 1.58 (Chromium), @axe-core/playwright     |
 | CI/CD                | GitHub Actions                                       |
 | Hosting              | DigitalOcean (Docker)                                |
 
@@ -136,14 +138,20 @@ The app will be available at **http://localhost:5173**.
 
 ## Available Scripts
 
-| Script             | Description                                                |
-| ------------------ | ---------------------------------------------------------- |
-| `npm run dev`      | Start the Vite development server on port 5173             |
-| `npm run build`    | Type-check with `vue-tsc`, then produce a production build |
-| `npm run preview`  | Serve the production build locally for preview             |
-| `npm run lint`     | Run ESLint with zero-warning policy                        |
-| `npm run lint:fix` | Run ESLint and auto-fix all fixable issues                 |
-| `npm run format`   | Format all files with Prettier                             |
+| Script                  | Description                                                |
+| ----------------------- | ---------------------------------------------------------- |
+| `npm run dev`           | Start the Vite development server on port 5173             |
+| `npm run build`         | Type-check with `vue-tsc`, then produce a production build |
+| `npm run preview`       | Serve the production build locally for preview             |
+| `npm run lint`          | Run ESLint with zero-warning policy                        |
+| `npm run lint:fix`      | Run ESLint and auto-fix all fixable issues                 |
+| `npm run format`        | Format all files with Prettier                             |
+| `npm test`              | Run Vitest in interactive watch mode                       |
+| `npm run test:unit`     | Run unit tests once (CI mode)                              |
+| `npm run test:watch`    | Run unit tests in watch mode                               |
+| `npm run test:coverage` | Run unit tests and generate a coverage report              |
+| `npm run test:e2e`      | Run Playwright E2E tests (headless Chromium)               |
+| `npm run test:e2e:ui`   | Open Playwright UI mode for interactive E2E debugging      |
 
 > Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on staged `.ts` and `.vue` files.
 
