@@ -174,11 +174,14 @@ Kryteria akceptacji:
 
 ### US-009 Edycja i usuwanie notatki
 
-ID: US-009  
-Opis: Jako użytkownik chcę edytować i usuwać notatki.  
+ID: US-009
+Opis: Jako użytkownik chcę edytować i usuwać notatki.
 Kryteria akceptacji:
 
 - Możliwość zmiany nazwy wycieczki, preferencji i treści notatki; data modyfikacji jest aktualizowana.
+- Zmiany nazwy, celu, preferencji (Co?, Jak szybko?, Jaki typ?, Budżet, liczba dni, liczba osób) zapisują się
+  automatycznie po 800 ms od ostatniej zmiany (debounced auto-save) – brak osobnego przycisku „Zapisz".
+- Treść notatki zapisuje się automatycznie przy opuszczeniu pola tekstowego (blur), nie przy każdym znaku.
 - Usunięcie wycieczki usuwa ją z listy wraz z ewentualnym planem po potwierdzeniu.
 
 ### US-010 Przegląd listy wycieczek
@@ -192,17 +195,19 @@ Kryteria akceptacji:
 
 ### US-011 Preferencje per wycieczka
 
-ID: US-011  
-Opis: Jako użytkownik chcę ustawić preferencje stylu podróży dla konkretnej wycieczki.  
+ID: US-011
+Opis: Jako użytkownik chcę ustawić preferencje stylu podróży dla konkretnej wycieczki.
 Kryteria akceptacji:
 
 - W widoku wycieczki można wybrać wartości pól Cel _wymagany_, Ile osób, Liczba dni, Co?, Jak szybko?, Jaki typ?, Budżet
   etc.;
-- Cześć pól z profilu głównego jest tylko do odczytu jak np. informacje o dzieciach, diecie, mobilności i zwierzętach,
-- ponieważ są to dane niezmienne na poziomie wycieczki
-- Część domyślnych wartości pochodzi domyślnie z profilu globalnego, lecz możemy na poziomie wycieczek niektóre
-  nadpisywać
-- Zapisane preferencje są wykorzystywane przy kolejnych generacjach planu danej wycieczki
+- Część pól z profilu głównego jest tylko do odczytu jak np. informacje o dzieciach, diecie, mobilności i zwierzętach,
+  ponieważ są to dane niezmienne na poziomie wycieczki.
+- Wartości pól Co?, Jak szybko?, Jaki typ?, Budżet domyślnie wypełniane są z profilu globalnego (`default_what`,
+  `default_speed`, `default_type`, `default_budget`). Gdy pole wycieczki jest puste, profil jest stosowany
+  automatycznie i oznaczany etykietą „From profile".
+- Każda zmiana preferencji triggeruje auto-save (debounced 800 ms) – brak osobnego przycisku „Zapisz".
+- Zapisane preferencje są wykorzystywane przy kolejnych generacjach planu danej wycieczki.
 
 ### US-012 Walidacja treści notatki
 

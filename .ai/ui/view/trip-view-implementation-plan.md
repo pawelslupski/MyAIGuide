@@ -19,6 +19,7 @@ TripDetailView is the core view of MyAIGuide application, serving as the primary
 - Generation quota visualization (X/10 used)
 - Plan candidate system (temporary, lost on refresh)
 - Inherited preference indicators (from global profile)
+- **Auto-save** – no explicit Save button; changes persist automatically (see §4.1 for details)
 - Optimistic UI updates with error handling
 
 ## 2. View Routing
@@ -112,8 +113,11 @@ TripDetailView.vue (Main Container)
 
 **Handled Interactions:**
 
-- Route parameter change (fetch new trip)
-- Save trip updates (debounced)
+- Route parameter change (fetch new trip, cancel pending debounced save)
+- **Auto-save non-note fields** – `useDebounceFn(performSave, 800)` triggered by a `watch` on
+  `[title, destination, what, speed, type, budget, num_days, num_people]` in `pendingFields`
+- **Auto-save note** – `handleNoteBlur()` called on `@blur:note` event from `TripEditor`;
+  cancels the debounced save first to avoid double request
 - Generate plan action
 - Save plan action
 - Discard plan candidate action
@@ -150,6 +154,7 @@ TripDetailView.vue (Main Container)
 - `usePlanStore()` - Plan candidate management
 - `useProfileStore()` - User profile data
 - `useQuotaStore()` - Generation quota tracking
+- `useDebounceFn` (`@vueuse/core`) - Debounced auto-save (800 ms)
 
 **Lifecycle Hooks:**
 
@@ -200,14 +205,16 @@ TripDetailView.vue (Main Container)
 
 ---
 
-### 4.3 TripNoteEditor.vue
+### 4.3 TripNoteEditor.vue / TripEditor.vue (note section)
 
 **Description:** Textarea for trip note content with character counter and validation feedback.
+The note does **not** auto-save on every keystroke – instead the `Textarea` emits a `blur` event
+that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView`.
 
 **Main Elements:**
 
-- `<Textarea>` (shadcn-vue) - Note input (1000-10000 chars)
-- `<CharacterCounter>` - Real-time character count with validation
+- `<Textarea>` (shadcn-vue) – Note input; `@blur="emit('blur:note')"` wired inside `TripEditor`
+- `<CharacterCounter>` – Real-time character count with validation
 
 **Props:**
 
@@ -223,6 +230,7 @@ TripDetailView.vue (Main Container)
 ```typescript
 {
   'update:modelValue': (value: string) => void
+  'blur:note': () => void  // triggers auto-save in TripView
 }
 ```
 
@@ -315,6 +323,10 @@ TripDetailView.vue (Main Container)
 - Display inherited indicator when trip value matches profile default
 - Allow override of inherited values
 - Visual distinction for inherited vs. custom values
+- **Profile default prepopulation:** `TripEditor` initialises local state from
+  `props.defaultPreferences` when the trip field is empty (`ref()` init + a `watch` on
+  `props.defaultPreferences` with `{ deep: true }` as a safety net for late-arriving profile data).
+  The "From profile" `<Badge>` appears when the current local value equals the profile default.
 
 ---
 
@@ -324,7 +336,10 @@ TripDetailView.vue (Main Container)
 
 **Main Elements:**
 
-- `<Checkbox>` (shadcn-vue) - For each WhatPreference option
+- `<Checkbox>` (shadcn-vue / reka-ui) – For each WhatPreference option.
+  **Important:** reka-ui `CheckboxRoot` uses `modelValue` (not `checked`) as the controlled
+  reactive prop. Use `:model-value="localWhat.includes(option.value)"` and
+  `@update:model-value="toggleWhat(option.value)"`. Using `:checked` is silently ignored.
 - `<Label>` - Descriptive labels with icons
 
 **Props:**
