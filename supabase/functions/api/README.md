@@ -73,19 +73,37 @@ The API will be available at: `http://localhost:54321/functions/v1/api`
 
 ## Testing
 
-### Test GET /api/trips/:id
+### Testy jednostkowe – Deno test runner
+
+Testy Edge Function pisane są w natywnym środowisku Deno i uruchamiane komendą:
 
 ```bash
-# Mock mode (returns hardcoded data)
-curl http://localhost:54321/functions/v1/api/trips/1
-
-# Real database mode
-curl http://localhost:54321/functions/v1/api/trips/1
+deno test --allow-env --allow-net supabase/functions/api/
 ```
 
-### Test POST /api/generations
+Pokrycie testów jednostkowych:
+- Routing endpointów (`/api/trips/:id`, `/api/generations`)
+- Obsługa błędów: `400` (nieprawidłowe ID), `404` (nie znaleziono), `500` (błąd wewnętrzny)
+- CORS preflight (`OPTIONS`)
+
+### Testy E2E – Playwright (manualne curl / integracja)
+
+Pełne przepływy przez API testowane są w ramach testów E2E Playwright z użyciem route interception:
+
+```typescript
+// Mock endpointu generacji w testach E2E
+await page.route('**/functions/v1/api/generations', route =>
+  route.fulfill({ status: 200, json: mockGenerationResponse })
+)
+```
+
+Manualne wywołania do weryfikacji podczas developmentu:
 
 ```bash
+# GET /api/trips/:id
+curl http://localhost:54321/functions/v1/api/trips/1
+
+# POST /api/generations
 curl -X POST http://localhost:54321/functions/v1/api/generations \
   -H "Content-Type: application/json" \
   -d '{"tripId": 1, "userId": "00000000-0000-0000-0000-000000000001"}'
