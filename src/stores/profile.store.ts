@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ProfileDTO, ErrorResponse, TripPreferencesDto } from '@/types'
+import type { ProfileDTO, ErrorResponse, TripPreferencesDto, UpdateProfileCommand } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
-import { createUnauthorizedError, toApiError } from '@/lib/errors/api.error'
+import { createUnauthorizedError, createValidationError, toApiError } from '@/lib/errors/api.error'
 import { getProfile, updateProfile as updateProfileService } from '@/lib/services/profile.service'
+import { validateUpdateProfileCommand } from '@/lib/validation/profile.schemas'
+import { ZodError } from 'zod'
 
 /**
  * Profile Store
@@ -52,11 +54,10 @@ export const useProfileStore = defineStore('profile', () => {
 
   /**
    * Update user profile
-   * Updates profile preferences
+   * Validates command via Zod (including cross-field dietary rule), then persists updates.
    */
-  async function updateProfile(updates: Partial<ProfileDTO>): Promise<void> {
-    if (!profile.value) return
-
+  async function updateProfile(command: UpdateProfileCommand): Promise<void> {
+    isLoading.value = true
     error.value = null
 
     try {
@@ -65,11 +66,20 @@ export const useProfileStore = defineStore('profile', () => {
       } = await supabaseClient.auth.getUser()
       if (!user) throw createUnauthorizedError()
 
-      profile.value = await updateProfileService(user.id, updates)
+      const validated = validateUpdateProfileCommand(command)
+      profile.value = await updateProfileService(user.id, validated)
     } catch (err: unknown) {
+      if (err instanceof ZodError) {
+        const details = Object.fromEntries(err.issues.map((i) => [i.path.join('.'), i.message]))
+        const apiErr = createValidationError('Invalid profile data', details)
+        error.value = apiErr.toResponse()
+        throw apiErr
+      }
       const apiErr = toApiError(err)
       error.value = apiErr.toResponse()
       throw apiErr
+    } finally {
+      isLoading.value = false
     }
   }
 
