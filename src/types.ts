@@ -208,10 +208,17 @@ export interface GeneratedPlanDTO {
 }
 
 /**
- * Single generation history record.
- * Directly maps to the plan_generations table Row.
+ * Public shape of a plan_generations row returned to the client.
+ * `user_id` is intentionally excluded from the API response per api-plan.md §2.6.
  */
-export type PlanGenerationHistoryItemDTO = Tables<'plan_generations'>
+export interface PlanGenerationHistoryItemDTO {
+  id: number
+  trip_id: number
+  status: 'success' | 'api_error' | 'validation_error'
+  model_name: string | null
+  error_message: string | null
+  created_at: string
+}
 
 /** Response DTO for GET /api/trips/{tripId}/generations */
 export interface PlanGenerationHistoryDTO {

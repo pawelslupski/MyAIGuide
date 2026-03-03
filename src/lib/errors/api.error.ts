@@ -1,3 +1,4 @@
+import { ZodError } from 'zod'
 import type { ErrorResponse } from '@/types'
 
 /**
@@ -86,7 +87,13 @@ export function createQuotaExceededError(used: number, limit: number, resetAt: s
 }
 
 export function createAIApiError(reason?: string): ApiError {
-  return new ApiError(500, 'AI_API_ERROR', 'Failed to generate plan. Please try again.', {
+  return new ApiError(502, 'AI_API_ERROR', 'Failed to generate plan. Please try again.', {
+    ...(reason && { reason })
+  })
+}
+
+export function createAIResponseValidationError(reason?: string): ApiError {
+  return new ApiError(422, 'VALIDATION_ERROR', 'AI response failed structural validation', {
     ...(reason && { reason })
   })
 }
@@ -124,6 +131,15 @@ export function isApiError(error: unknown): error is ApiError {
 export function toApiError(error: unknown): ApiError {
   if (isApiError(error)) {
     return error
+  }
+
+  if (error instanceof ZodError) {
+    const details: Record<string, string> = {}
+    error.issues.forEach((issue) => {
+      const path = issue.path.join('.') || '_'
+      details[path] = issue.message
+    })
+    return createValidationError('Validation failed', details)
   }
 
   if (error instanceof Error) {
