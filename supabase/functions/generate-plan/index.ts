@@ -126,7 +126,7 @@ Deno.serve(async (req: Request) => {
       if (error instanceof Error && error.message.startsWith('AI_API_ERROR:')) {
         const errorMessage = error.message.replace('AI_API_ERROR: ', '')
         return createErrorResponse(
-          500,
+          502,
           'AI_API_ERROR',
           'Failed to generate valid plan. Please try again.',
           { reason: errorMessage }

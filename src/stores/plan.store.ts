@@ -1,6 +1,13 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { GeneratedPlanDTO, PlanJson, ErrorResponse, AIServiceResponse } from '@/types'
+import { ref, computed, readonly } from 'vue'
+import type {
+  GeneratedPlanDTO,
+  GenerationQuotaDTO,
+  PlanJson,
+  ErrorResponse,
+  AIServiceResponse,
+  PlanGenerationHistoryItemDTO
+} from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
 import { useTripStore } from './trip.store'
 import { useProfileStore } from './profile.store'
@@ -8,9 +15,22 @@ import {
   detectLanguage,
   callAIService,
   checkGenerationQuota,
-  recordGenerationAttempt
+  recordGenerationAttempt,
+  getTripGenerations
 } from '@/lib/services/generation.service'
-import { savePlanToTrip as savePlanService } from '@/lib/services/trip.service'
+import { getTripById, savePlanToTrip as savePlanService } from '@/lib/services/trip.service'
+import {
+  createValidationError,
+  createUnauthorizedError,
+  createQuotaExceededError,
+  createAIApiError,
+  createAIResponseValidationError,
+  createInvalidTripIdError,
+  createInternalError,
+  toApiError
+} from '@/lib/errors/api.error'
+import { tripIdSchema } from '@/lib/validation/trip.schemas'
+import { validateAIResponse } from '@/lib/validation/plan.schemas'
 
 /**
  * Plan Store
@@ -23,6 +43,16 @@ export const usePlanStore = defineStore('plan', () => {
   const isSaving = ref(false)
   const generationError = ref<ErrorResponse | null>(null)
   const saveError = ref<ErrorResponse | null>(null)
+
+  // Generation quota state
+  const generationQuota = ref<GenerationQuotaDTO | null>(null)
+  const quotaError = ref<ErrorResponse | null>(null)
+  const isLoadingQuota = ref(false)
+
+  // Generation history state
+  const tripGenerations = ref<PlanGenerationHistoryItemDTO[]>([])
+  const generationsError = ref<ErrorResponse | null>(null)
+  const isLoadingGenerations = ref(false)
 
   // Getters
   const hasCandidate = computed(() => planCandidate.value !== null)
@@ -38,66 +68,70 @@ export const usePlanStore = defineStore('plan', () => {
     saveError.value = null
 
     try {
-      // Authenticate user — required before any DB query
+      // 1. Authenticate user — required before any DB query
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) {
-        const err: any = new Error('Authentication required')
-        err.code = 'UNAUTHORIZED'
-        throw err
-      }
+      if (!user) throw createUnauthorizedError()
       const userId = user.id
 
-      // Get trip data
+      // 2. Validate tripId format (positive integer)
+      const parsedId = tripIdSchema.safeParse(tripId)
+      if (!parsedId.success) {
+        throw createInvalidTripIdError(String(tripId))
+      }
+      const validTripId = parsedId.data
+
+      // 3. Fetch trip from DB — validates existence (404) and ownership (403)
+      const trip = await getTripById(validTripId, userId)
+
+      // Keep the trip store in sync with the fresh DB data
       const tripStore = useTripStore()
+      tripStore.currentTrip = trip
 
-      if (!tripStore.currentTrip) {
-        throw new Error('Trip not found')
-      }
-
-      const trip = tripStore.currentTrip
-
-      // Guard: destination must be set before generating a plan
+      // 4. Guard: destination must be set before generating a plan
       if (!trip.destination || trip.destination.trim() === '') {
-        const err: any = new Error('destination must be set before generating a plan')
-        err.code = 'VALIDATION_ERROR'
-        err.details = { field: 'destination' }
-        throw err
+        await recordGenerationAttempt({
+          userId,
+          tripId: validTripId,
+          status: 'validation_error',
+          errorMessage: 'destination must be set before generating a plan'
+        })
+        throw createValidationError('destination must be set before generating a plan', {
+          field: 'destination'
+        })
       }
 
-      // Validate note body (optional but must not exceed max length if provided)
+      // 5. Guard: note_body must not exceed 10,000 characters
       if (trip.note_body && trip.note_body.length > 10000) {
-        const err: any = new Error('Trip notes must not exceed 10000 characters')
-        err.code = 'VALIDATION_ERROR'
-        err.details = { field: 'note_body' }
-        throw err
+        await recordGenerationAttempt({
+          userId,
+          tripId: validTripId,
+          status: 'validation_error',
+          errorMessage: 'Trip notes must not exceed 10000 characters'
+        })
+        throw createValidationError('Trip notes must not exceed 10000 characters', {
+          field: 'note_body',
+          max_length: 10000
+        })
       }
 
-      // Enforce rate limit before invoking AI (10 generations / 24h)
+      // 6. Enforce rate limit before invoking AI (10 generations / 24h)
       const quotaCheck = await checkGenerationQuota(userId)
       if (!quotaCheck.allowed) {
-        const err: any = new Error('You have reached the limit of 10 plan generations in 24 hours')
-        err.code = 'QUOTA_EXCEEDED'
-        err.details = {
-          used: quotaCheck.used,
-          limit: quotaCheck.limit,
-          reset_at: quotaCheck.resetAt
-        }
-        throw err
+        throw createQuotaExceededError(quotaCheck.used, quotaCheck.limit, quotaCheck.resetAt)
       }
 
-      // Detect language from note (default to 'en' if no note)
+      // 7. Detect language from note (default to 'en' if no note)
       const language = detectLanguage(trip.note_body ?? '')
 
-      // Fetch user profile for personalization flags and preference fallbacks
+      // 8. Fetch user profile for personalization flags and preference fallbacks
       const profileStore = useProfileStore()
       if (!profileStore.profile) {
         await profileStore.fetchProfile()
       }
 
-      // Build trip preferences — fall back to profile defaults when the trip fields are null
-      // (mirrors the same fallback logic used in TripEditor.vue for display)
+      // 9. Build trip preferences — fall back to profile defaults when trip fields are null
       const tripPreferences = {
         what: (trip.what?.length
           ? trip.what
@@ -123,56 +157,65 @@ export const usePlanStore = defineStore('plan', () => {
         dietaryPreferencesDescription: profileStore.profile?.dietary_preferences_description ?? null
       }
 
-      // Call AI service and record attempt outcome
-      let response: AIServiceResponse
+      // 10. Call AI service — record api_error and throw 502 on Edge Function / network failure
+      let rawResponse: AIServiceResponse
       try {
-        response = await callAIService({
+        rawResponse = await callAIService({
           language,
           noteBody: trip.note_body ?? '',
           destination: trip.destination,
           userProfile,
           tripPreferences
         })
-        await recordGenerationAttempt({
-          userId,
-          tripId,
-          status: 'success',
-          modelName: response.model_used
-        })
       } catch (aiError) {
         await recordGenerationAttempt({
           userId,
-          tripId,
+          tripId: validTripId,
           status: 'api_error',
           errorMessage: aiError instanceof Error ? aiError.message : 'Unknown error'
         })
-        throw aiError
+        throw createAIApiError(aiError instanceof Error ? aiError.message : undefined)
       }
 
-      // Fetch updated quota snapshot so the client can refresh the counter without an extra request
-      const updatedQuota = await checkGenerationQuota(userId)
+      // 11. Validate AI response structure with Zod — record validation_error and throw 422
+      try {
+        validateAIResponse(rawResponse)
+      } catch (zodErr) {
+        await recordGenerationAttempt({
+          userId,
+          tripId: validTripId,
+          status: 'validation_error',
+          errorMessage: zodErr instanceof Error ? zodErr.message : 'Invalid AI response structure'
+        })
+        throw createAIResponseValidationError(zodErr instanceof Error ? zodErr.message : undefined)
+      }
 
-      // Store candidate in memory (not saved to database yet)
+      // 12. Record successful generation
+      await recordGenerationAttempt({
+        userId,
+        tripId: validTripId,
+        status: 'success',
+        modelName: rawResponse.model_used
+      })
+
+      // 13. Refresh quota via the dedicated Edge Function so generationQuota store
+      //     state is updated and the UI counter reflects the new usage immediately.
+      await fetchGenerationQuota()
+
+      // 14. Store candidate in memory (not saved to database yet).
+      //     Use the freshly fetched generationQuota snapshot for the embedded quota field.
+      const quota = generationQuota.value ?? { used: 0, limit: 10, remaining: 10, reset_at: new Date(Date.now() + 86400000).toISOString() }
       planCandidate.value = {
-        plan: response.plan,
+        plan: rawResponse.plan,
         language,
-        model_used: response.model_used,
+        model_used: rawResponse.model_used,
         generated_at: new Date().toISOString(),
-        quota: {
-          used: updatedQuota.used,
-          limit: updatedQuota.limit,
-          remaining: updatedQuota.limit - updatedQuota.used,
-          reset_at: updatedQuota.resetAt
-        }
+        quota
       }
-    } catch (err: any) {
-      generationError.value = {
-        error: {
-          code: err.code || 'GENERATION_ERROR',
-          message: err.message || 'Failed to generate plan'
-        }
-      }
-      throw err
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      generationError.value = apiErr.toResponse()
+      throw apiErr
     } finally {
       isGenerating.value = false
     }
@@ -196,7 +239,7 @@ export const usePlanStore = defineStore('plan', () => {
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user) throw createUnauthorizedError()
 
       const updatedTrip = await savePlanService(
         tripId,
@@ -211,14 +254,10 @@ export const usePlanStore = defineStore('plan', () => {
       // Clear candidate after successful save
       planCandidate.value = null
       generationError.value = null
-    } catch (err: any) {
-      saveError.value = {
-        error: {
-          code: err.code || 'SAVE_ERROR',
-          message: err.message || 'Failed to save plan'
-        }
-      }
-      throw err
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      saveError.value = apiErr.toResponse()
+      throw apiErr
     } finally {
       isSaving.value = false
     }
@@ -235,12 +274,76 @@ export const usePlanStore = defineStore('plan', () => {
   }
 
   /**
+   * Fetch the current user's generation quota from the Edge Function.
+   * Stores the result in generationQuota; sets quotaError on failure.
+   */
+  async function fetchGenerationQuota(): Promise<void> {
+    isLoadingQuota.value = true
+    quotaError.value = null
+
+    try {
+      // Guard: require an active session before calling the Edge Function
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw createUnauthorizedError()
+
+      const { data, error } = await supabaseClient.functions.invoke('get-generation-quota')
+      if (error) throw createInternalError(error.message)
+
+      generationQuota.value = data as GenerationQuotaDTO
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      quotaError.value = apiErr.toResponse()
+      throw apiErr
+    } finally {
+      isLoadingQuota.value = false
+    }
+  }
+
+  /**
    * Update plan candidate
    * Allows editing candidate before saving
    */
   function updateCandidatePlan(plan: PlanJson): void {
     if (planCandidate.value) {
       planCandidate.value.plan = plan
+    }
+  }
+
+  /**
+   * Fetch generation attempt history for a trip.
+   * Requires an active session. Validates tripId before calling the service.
+   * Stores the result in tripGenerations; sets generationsError on failure.
+   *
+   * @param tripId - Trip identifier (positive integer)
+   * @param limit  - Max records to return (1–50, default 10)
+   */
+  async function fetchTripGenerations(tripId: number, limit = 10): Promise<void> {
+    isLoadingGenerations.value = true
+    generationsError.value = null
+
+    try {
+      // Guard: require an active session before any DB interaction
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw createUnauthorizedError()
+
+      // Validate tripId is a positive integer
+      const parsedId = tripIdSchema.safeParse(tripId)
+      if (!parsedId.success) {
+        throw createInvalidTripIdError(String(tripId))
+      }
+
+      const result = await getTripGenerations(parsedId.data, user.id, limit)
+      tripGenerations.value = result.generations
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      generationsError.value = apiErr.toResponse()
+      throw apiErr
+    } finally {
+      isLoadingGenerations.value = false
     }
   }
 
@@ -251,6 +354,14 @@ export const usePlanStore = defineStore('plan', () => {
     isSaving,
     generationError,
     saveError,
+    // Quota state
+    generationQuota: readonly(generationQuota),
+    quotaError: readonly(quotaError),
+    isLoadingQuota: readonly(isLoadingQuota),
+    // Generation history state
+    tripGenerations: readonly(tripGenerations),
+    generationsError: readonly(generationsError),
+    isLoadingGenerations: readonly(isLoadingGenerations),
     // Getters
     hasCandidate,
     candidatePlan,
@@ -258,6 +369,8 @@ export const usePlanStore = defineStore('plan', () => {
     generatePlan,
     savePlanToTrip,
     discardCandidate,
-    updateCandidatePlan
+    updateCandidatePlan,
+    fetchGenerationQuota,
+    fetchTripGenerations
   }
 })

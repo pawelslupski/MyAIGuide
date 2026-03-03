@@ -4,9 +4,15 @@ import type {
   RecordGenerationParams,
   AIServiceResponse,
   AIPlanParams,
-  PlanJson
+  PlanJson,
+  PlanGenerationHistoryDTO
 } from '@/types'
 import { validateAIResponse } from '@/lib/validation/plan.schemas'
+import {
+  createNotFoundError,
+  createForbiddenError,
+  createInternalError
+} from '@/lib/errors/api.error'
 
 /**
  * Plan Generation Service
@@ -192,10 +198,50 @@ export async function callAIService(params: AIPlanParams): Promise<AIServiceResp
     throw new Error(`AI service error: ${error.message}`)
   }
 
-  if (!data?.plan) {
-    throw new Error('Invalid response from AI service: missing plan data')
-  }
+  console.log('[callAIService] Successfully received response from Edge Function')
+  return { plan: data?.plan, model_used: data?.model_used }
+}
 
-  console.log('[callAIService] Successfully generated plan')
-  return { plan: data.plan, model_used: data.model_used }
+/**
+ * Retrieve generation attempt history for a trip in reverse-chronological order.
+ *
+ * Two-step approach:
+ *  1. Ownership check — ensures the trip exists and belongs to the given user
+ *     (clear 404 vs 403 distinction per api-plan.md §2.6).
+ *  2. Fetch plan_generations — `user_id` excluded from selected columns per §2.6;
+ *     `.eq('user_id', userId)` added as defense-in-depth alongside RLS.
+ *
+ * @param tripId - Trip identifier (positive integer)
+ * @param userId - Authenticated user ID (UUID) — used for ownership validation
+ * @param limit  - Max records to return (1–50, default 10)
+ * @returns PlanGenerationHistoryDTO
+ * @throws ApiError 404 if trip not found, 403 if not owned by user, 500 on DB error
+ */
+export async function getTripGenerations(
+  tripId: number,
+  userId: string,
+  limit = 10
+): Promise<PlanGenerationHistoryDTO> {
+  // Step 1 — Ownership check
+  const { data: trip, error: tripError } = await supabaseClient
+    .from('trips')
+    .select('id, user_id')
+    .eq('id', tripId)
+    .single()
+
+  if (tripError || !trip) throw createNotFoundError()
+  if (trip.user_id !== userId) throw createForbiddenError()
+
+  // Step 2 — Fetch generation history (exclude user_id per api-plan.md §2.6)
+  const { data, error } = await supabaseClient
+    .from('plan_generations')
+    .select('id, trip_id, status, model_name, error_message, created_at')
+    .eq('trip_id', tripId)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 50))
+
+  if (error) throw createInternalError(`Failed to fetch generations: ${error.message}`)
+
+  return { generations: (data ?? []) as PlanGenerationHistoryDTO['generations'] }
 }
