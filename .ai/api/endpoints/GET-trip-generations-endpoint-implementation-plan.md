@@ -35,9 +35,18 @@ All types in `src/types.ts`.
 ### Item DTO — `PlanGenerationHistoryItemDTO` (already exists)
 
 ```typescript
-/** Directly maps to the plan_generations table Row. */
-export type PlanGenerationHistoryItemDTO = Tables<'plan_generations'>
-// Fields: id, trip_id, user_id, status, model_name, error_message, created_at
+/**
+ * Public shape of a plan_generations row returned to the client.
+ * `user_id` is intentionally excluded from the API response per api-plan.md §2.6.
+ */
+export interface PlanGenerationHistoryItemDTO {
+  id: number
+  trip_id: number
+  status: 'success' | 'api_error' | 'validation_error'
+  model_name: string | null
+  error_message: string | null
+  created_at: string
+}
 ```
 
 ### Response DTO — `PlanGenerationHistoryDTO` (already exists)
@@ -68,7 +77,6 @@ export interface ErrorResponse {
     {
       "id": 789,
       "trip_id": 456,
-      "user_id": "uuid-string",
       "status": "success",
       "model_name": "anthropic/claude-3.5-sonnet",
       "error_message": null,
@@ -77,7 +85,6 @@ export interface ErrorResponse {
     {
       "id": 788,
       "trip_id": 456,
-      "user_id": "uuid-string",
       "status": "api_error",
       "model_name": "openai/gpt-4",
       "error_message": "API timeout after 60 seconds",
@@ -156,7 +163,7 @@ Two-step approach ensures a clear `403` (trip exists but belongs to another user
 
 ### Data Exposure
 
-- `user_id` is included in each row but is the authenticated user's own ID — acceptable.
+- `user_id` is **excluded** from the response per `api-plan.md §2.6` — it is not needed by the client since all records belong to the authenticated user, and omitting it reduces unnecessary data exposure.
 - `error_message` may contain internal error details; this is scoped to the trip owner only.
 
 ---
@@ -220,10 +227,10 @@ export async function getTripGenerations(
   if (tripError || !trip) throw createNotFoundError()
   if (trip.user_id !== userId) throw createForbiddenError()
 
-  // Fetch generation history
+  // Fetch generation history — select explicit columns, excluding user_id per api-plan.md §2.6
   const { data, error } = await supabaseClient
     .from('plan_generations')
-    .select('*')
+    .select('id, trip_id, status, model_name, error_message, created_at')
     .eq('trip_id', tripId)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -293,5 +300,5 @@ return {
 - [ ] Non-existent `tripId` returns `404`
 - [ ] Another user's `tripId` returns `403`
 - [ ] Unauthenticated request returns `401`
-- [ ] Each record includes `id`, `trip_id`, `user_id`, `status`, `model_name`, `error_message`, `created_at`
+- [ ] Each record includes `id`, `trip_id`, `status`, `model_name`, `error_message`, `created_at` — **`user_id` is NOT included** per api-plan.md §2.6
 - [ ] `status` values are `success`, `api_error`, or `validation_error`

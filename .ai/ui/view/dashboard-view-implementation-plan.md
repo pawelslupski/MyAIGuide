@@ -290,7 +290,7 @@ export interface DashboardTripViewModel {
 | `isCreatingTrip`     | `boolean`                          | Disable "New Trip" button while creation is in-flight |
 | `tripsError`         | `ErrorResponse \| null`            | Show inline error state                               |
 | `fetchTrips(page?)`  | `(page?: number) => Promise<void>` | Called on mount and page change                       |
-| `createTrip()`       | `() => Promise<number>`            | Creates a new trip, returns its id for navigation     |
+| `createTrip(command)` | `(command: CreateTripCommand) => Promise<TripDTO>` | Creates a trip with `{ title: 'New Trip' }`, returns full DTO; `trip.id` used for navigation |
 | `deleteTripById(id)` | `(id: number) => Promise<void>`    | Called after user confirms delete Dialog              |
 
 ### Local state in `DashboardView.vue`
@@ -383,19 +383,33 @@ supabaseClient
 
 ### Create new trip
 
-**Action:** `tripStore.createTrip()` — called on "New Trip" button click.
+**Action:** `tripStore.createTrip({ title: 'New Trip' })` — called on "New Trip" button click.
 
-**Supabase query:**
+**Store flow:**
+1. Auth guard: `supabaseClient.auth.getUser()` — throws `401` if no session.
+2. Validates command via `validateCreateTripCommand` (Zod).
+3. Applies profile defaults for omitted preference fields (`what`, `speed`, `type`, `budget`).
+4. Calls `trip.service.ts :: createTrip(resolved, userId)`.
+
+**Supabase query (inside service):**
 
 ```typescript
 supabaseClient
   .from('trips')
-  .insert({ title: 'New Trip', user_id: authenticatedUserId })
-  .select('id')
+  .insert({
+    title: 'New Trip', user_id: authenticatedUserId,
+    destination: null, num_days: null, num_people: null,
+    what: profile.default_what ?? [],
+    speed: profile.default_speed ?? null,
+    type: profile.default_type ?? null,
+    budget: profile.default_budget ?? null,
+    note_body: null
+  })
+  .select('*')
   .single()
 ```
 
-Preference fields are omitted — the server/trigger copies defaults from the user's profile. Returns the new trip `id` for immediate navigation to `/trips/:id`.
+Returns full `TripDTO`. The store prepends a `DashboardTripViewModel` to `trips.value` and the call-site uses `trip.id` for navigation to `/trips/:id`. The user renames the title and fills in details in the trip detail view.
 
 ---
 
@@ -424,7 +438,7 @@ supabaseClient.from('trips').delete().eq('id', tripId).eq('user_id', authenticat
 | Dietary preference Textarea blur (empty) | Textarea `@blur`                         | Destructive toast "Dietary description is required"; pill reverts to OFF                                                 |
 | Dietary preference toggle ON → OFF       | `has_dietary_preferences` pill click     | `profileStore.updateProfile({ has_dietary_preferences: false, dietary_preferences_description: null })` immediately      |
 | Travel style preference change           | Pill click in Section B                  | `profileStore.updateProfile({ default_<field>: newValue })` immediately                                                  |
-| Click "New Trip" button                  | `@click` on header button                | `tripStore.createTrip()` → on success `router.push({ name: 'trip-detail', params: { id } })`; button shows loading state |
+| Click "New Trip" button                  | `@click` on header button                | `tripStore.createTrip({ title: 'New Trip' })` → on success `router.push({ name: 'trip-detail', params: { id: trip.id } })`; button shows loading state |
 | Click trip card                          | `@click` on `TripCard`                   | `router.push({ name: 'trip-detail', params: { id: trip.id } })`                                                          |
 | Click delete icon on card                | `@delete` from `TripCard`                | Store `deletingTripId`, open delete Dialog                                                                               |
 | Confirm delete in Dialog                 | Dialog confirm button click              | `tripStore.deleteTripById(id)` → success toast → list updated → Dialog closed                                            |
@@ -534,7 +548,7 @@ const { toast } = useToast()
    - `isCreatingTrip: Ref<boolean>`
    - `tripsError: Ref<ErrorResponse | null>`
    - `fetchTrips(page?: number): Promise<void>` — select includes `note_body` internally for `notePreview` mapping
-   - `createTrip(): Promise<number>` — returns new trip `id`
+   - `createTrip(command: CreateTripCommand): Promise<TripDTO>` — always called with `{ title: 'New Trip' }`; returns full `TripDTO` (use `trip.id` for navigation)
    - `deleteTripById(id: number): Promise<void>`
 
 4. **Create `src/components/UserProfilePanel.vue`:**

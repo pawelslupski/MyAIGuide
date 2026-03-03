@@ -4,7 +4,7 @@
 
 Returns the current user's plan generation usage for the rolling 24-hour window. Includes how many generations have been used, the maximum allowed, remaining slots, and the timestamp when the next slot will free up.
 
-**Implementation approach:** Standard Supabase JS Client query on `plan_generations` — no Edge Function required (the query is read-only; no server-side API key needed). Core quota logic already lives in `src/lib/services/generation.service.ts` (`checkGenerationQuota`); orchestration (auth, state) lives in `src/stores/plan.store.ts`.
+**Implementation approach:** Implemented as a **Supabase Edge Function** (`get-generation-quota`) — per `api-plan.md §6.2`, this endpoint is classified as requiring an Edge Function due to the rolling 24-hour window count query with complex status filtering. The Edge Function verifies the session server-side, executes the quota query on `plan_generations`, and returns the result. Core quota logic moves from `src/lib/services/generation.service.ts` to the Edge Function; the client-side `checkGenerationQuota` helper is retained for internal use by `generate-plan`. Store orchestration (auth, state) lives in `src/stores/plan.store.ts`.
 
 **Status:** `checkGenerationQuota` in `generation.service.ts` is **already implemented**. The store action, DTO mapping, and dedicated quota state are the main gaps.
 
@@ -95,7 +95,11 @@ planStore.fetchGenerationQuota()          [src/stores/plan.store.ts]
   │     └─ null → set quotaError + return (401)
   │
   ▼
-generation.service.ts :: checkGenerationQuota(userId)
+supabaseClient.functions.invoke('get-generation-quota')
+  │  [supabase/functions/get-generation-quota/index.ts — Edge Function]
+  │
+  ├─► Verify JWT from Authorization header via supabase.auth.getUser()
+  │     └─ invalid → return 401
   │
   ├─► supabase.from('plan_generations')
   │     .select('created_at')
@@ -105,17 +109,17 @@ generation.service.ts :: checkGenerationQuota(userId)
   │     .order('created_at', { ascending: true })
   │
   │   → count rows → compute used, remaining, reset_at
-  │   └─ DB error → throw Error (caught as INTERNAL_ERROR in store)
+  │   └─ DB error → return 500
   │
-  └─► return QuotaCheckResult { allowed, used, limit, resetAt }
+  └─► return 200 GenerationQuotaDTO
         │
         ▼
-  planStore: map to GenerationQuotaDTO
+  planStore: map response to store state
     generationQuota.value = {
       used: result.used,
       limit: result.limit,
-      remaining: result.limit - result.used,
-      reset_at: result.resetAt
+      remaining: result.remaining,
+      reset_at: result.reset_at
     }
 ```
 
@@ -158,13 +162,82 @@ generation.service.ts :: checkGenerationQuota(userId)
 
 ## 9. Implementation Steps
 
-### Step 1 — Add `generationQuota` state to `plan.store.ts`
+### Step 1 — Create `supabase/functions/get-generation-quota/index.ts` (Edge Function)
+
+**File:** `supabase/functions/get-generation-quota/index.ts`
+
+```typescript
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+}
+
+const QUOTA_LIMIT = 10
+const WINDOW_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
+    )
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const cutoff = new Date(Date.now() - WINDOW_MS).toISOString()
+    const { data, error } = await supabase
+      .from('plan_generations')
+      .select('created_at')
+      .eq('user_id', user.id)
+      .in('status', ['success', 'api_error'])
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      return new Response(
+        JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch quota' } }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const rows = data ?? []
+    const used = rows.length
+    const remaining = Math.max(0, QUOTA_LIMIT - used)
+    const resetAt = rows.length > 0
+      ? new Date(new Date(rows[0].created_at).getTime() + WINDOW_MS).toISOString()
+      : new Date(Date.now() + WINDOW_MS).toISOString()
+
+    return new Response(
+      JSON.stringify({ used, limit: QUOTA_LIMIT, remaining, reset_at: resetAt }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  } catch (err) {
+    console.error('[get-generation-quota] Unexpected error:', err)
+    return new Response(
+      JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' } }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+})
+```
+
+### Step 2 — Add `generationQuota` state to `plan.store.ts`
 
 **File:** `src/stores/plan.store.ts`
 
 ```typescript
 import type { GenerationQuotaDTO } from '@/types'
-import { checkGenerationQuota } from '@/lib/services/generation.service'
 
 // Add to store state:
 const generationQuota = ref<GenerationQuotaDTO | null>(null)
@@ -172,9 +245,11 @@ const quotaError = ref<ErrorResponse | null>(null)
 const isLoadingQuota = ref(false)
 ```
 
-### Step 2 — Add `fetchGenerationQuota` action to `plan.store.ts`
+### Step 3 — Add `fetchGenerationQuota` action to `plan.store.ts`
 
 **File:** `src/stores/plan.store.ts`
+
+Call the new Edge Function instead of querying Supabase directly:
 
 ```typescript
 async function fetchGenerationQuota(): Promise<void> {
@@ -187,14 +262,10 @@ async function fetchGenerationQuota(): Promise<void> {
     } = await supabaseClient.auth.getUser()
     if (!user) throw createUnauthorizedError()
 
-    const result = await checkGenerationQuota(user.id)
+    const { data, error } = await supabaseClient.functions.invoke('get-generation-quota')
+    if (error) throw createInternalError(error.message)
 
-    generationQuota.value = {
-      used: result.used,
-      limit: result.limit,
-      remaining: result.limit - result.used,
-      reset_at: result.resetAt
-    }
+    generationQuota.value = data as GenerationQuotaDTO
   } catch (err: unknown) {
     const apiErr = toApiError(err)
     quotaError.value = apiErr.toResponse()
@@ -205,7 +276,7 @@ async function fetchGenerationQuota(): Promise<void> {
 }
 ```
 
-### Step 3 — Expose quota state in store return
+### Step 4 — Expose quota state in store return
 
 **File:** `src/stores/plan.store.ts`
 
@@ -221,7 +292,7 @@ return {
 }
 ```
 
-### Step 4 — Refresh quota after each generation attempt
+### Step 5 — Refresh quota after each generation attempt
 
 **File:** `src/stores/plan.store.ts`
 
@@ -232,25 +303,19 @@ In the `generatePlan` action, after a successful or failed (api_error) AI call, 
 await fetchGenerationQuota()
 ```
 
-This keeps the displayed counter in sync without requiring a separate user action.
-
-### Step 5 — Verify `checkGenerationQuota` in `generation.service.ts` (ALREADY IMPLEMENTED)
+### Step 6 — Retain `checkGenerationQuota` in `generation.service.ts` for internal use
 
 **File:** `src/lib/services/generation.service.ts`
 
-Confirm:
+The existing `checkGenerationQuota` function is still used internally by the `generate-plan` Edge Function for server-side quota enforcement before invoking OpenRouter. It does not need to be removed, but it is no longer the implementation for the `GET /api/users/me/generation-quota` endpoint.
 
-1. Filters by `status IN ('success', 'api_error')` — `validation_error` excluded
-2. Uses rolling 24h window: `.gte('created_at', now - 24h)`
-3. Orders by `created_at ASC` to correctly compute `resetAt` from the oldest entry
-4. Returns `{ allowed, used, limit, resetAt }`
-
-### Step 6 — Manual verification checklist
+### Step 7 — Manual verification checklist
 
 - [ ] Authenticated user with 0 generations returns `{ used: 0, limit: 10, remaining: 10 }`
 - [ ] After 3 successful generations, `used: 3, remaining: 7`
 - [ ] `validation_error` generations do **not** count toward `used`
 - [ ] `reset_at` is the oldest counted generation timestamp + 24h
 - [ ] At 10 generations, `remaining: 0` and subsequent `generate-plan` calls return `429`
-- [ ] Unauthenticated request returns `401`
+- [ ] Unauthenticated request to Edge Function returns `401`
 - [ ] Quota counter updates in the UI after each generation attempt
+- [ ] Service role key is NOT needed for this Edge Function (anon key with RLS is sufficient)

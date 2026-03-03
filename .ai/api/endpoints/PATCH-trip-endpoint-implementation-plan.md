@@ -101,13 +101,20 @@ tripStore.updateTrip(tripId, command: UpdateTripCommand)   [src/stores/trip.stor
 trip.service.ts :: updateTrip(tripId, userId, updates)
   │
   ├─► supabase.from('trips')
+  │     .select('id, user_id')
+  │     .eq('id', tripId)
+  │     .single()
+  │     └─ PGRST116 / null → throw createNotFoundError() (404)
+  │
+  ├─► Explicit ownership check: trip.user_id !== userId
+  │     └─ mismatch → throw createForbiddenError() (403)
+  │
+  ├─► supabase.from('trips')
   │     .update(updates)
   │     .eq('id', tripId)
   │     .eq('user_id', userId)   ← defense-in-depth on top of RLS
   │     .select('*').single()
-  │     └─ PGRST116 / null → throw createNotFoundError() (404)
-  │     └─ RLS rejection  → throw createForbiddenError() (403)
-  │     └─ other error   → throw createInternalError() (500)
+  │     └─ error → throw createInternalError() (500)
   │
   ├─► deriveTripStatus(updated.note_body, updated.plan_json)
   │
@@ -132,7 +139,7 @@ trip.service.ts :: updateTrip(tripId, userId, updates)
 | Application    | `auth.getUser()` guard; `.eq('user_id', userId)` explicit filter in UPDATE |
 | Database (RLS) | `USING (auth.uid() = user_id)` UPDATE policy at PostgreSQL level           |
 
-If a user submits another user's `tripId`, the `.eq('user_id', userId)` filter combined with RLS ensures the row is not found/updated, resulting in a `404`.
+A two-step approach is used: first fetch the trip (returning `404` if not found), then check ownership (returning `403` if not the owner), then execute the update. This correctly distinguishes `404` from `403` per `api-plan.md §2.4`.
 
 ### Input Validation
 
@@ -187,17 +194,52 @@ export function validateUpdateTripCommand(data: unknown) {
 }
 ```
 
-### Step 2 — Verify `updateTrip` in `trip.service.ts` (ALREADY IMPLEMENTED)
+### Step 2 — Update `updateTrip` in `trip.service.ts` to use two-step fetch+check pattern (GAP)
 
 **File:** `src/lib/services/trip.service.ts`
 
-Confirm the function:
+Per `api-plan.md §2.4`, a `403` must be returned when the trip exists but belongs to another user. Use the same two-step pattern as `deleteTrip` and `getTripById`:
 
-1. Calls `.update(updates).eq('id', tripId).eq('user_id', userId).select().single()`
-2. Throws `createInternalError()` on error or missing result
-3. Calls `deriveTripStatus()` and returns full `TripDTO`
+```typescript
+export async function updateTrip(
+  tripId: number,
+  userId: string,
+  updates: UpdateTripCommand
+): Promise<TripDTO> {
+  // Step 1: Fetch to verify existence and ownership
+  const { data: existing, error: fetchError } = await supabaseClient
+    .from('trips')
+    .select('id, user_id')
+    .eq('id', tripId)
+    .single()
 
-If the current implementation does not distinguish 403 from 404 (both collapse to 404 via `user_id` filter), this is acceptable for MVP. Document the known trade-off in a code comment.
+  if (fetchError || !existing) throw createNotFoundError()
+  if (existing.user_id !== userId) throw createForbiddenError()
+
+  // Step 2: Execute update (RLS also enforces ownership at DB level)
+  const { data, error: updateError } = await supabaseClient
+    .from('trips')
+    .update(updates)
+    .eq('id', tripId)
+    .eq('user_id', userId)
+    .select('*')
+    .single()
+
+  if (updateError || !data) {
+    throw createInternalError(`Failed to update trip: ${updateError?.message ?? 'Unknown error'}`)
+  }
+
+  return {
+    ...data,
+    what: data.what as WhatPreference[],
+    plan_json: data.plan_json as PlanJson | null,
+    speed: data.speed as SpeedPreference | null,
+    type: data.type as TypePreference | null,
+    budget: data.budget as BudgetPreference | null,
+    status: deriveTripStatus(data.note_body, data.plan_json)
+  }
+}
+```
 
 ### Step 3 — Add `updateTrip` action to `trip.store.ts`
 
@@ -236,7 +278,7 @@ async function updateTrip(tripId: number, command: UpdateTripCommand): Promise<v
 - [ ] `note_body` > 10,000 chars returns `400`
 - [ ] Invalid enum (e.g., `speed: "turbo"`) returns `400`
 - [ ] Non-existent `tripId` returns `404`
-- [ ] Another user's `tripId` returns `404` (or `403` if explicit check is added)
+- [ ] Another user's `tripId` returns `403` (explicit fetch+ownership check implemented)
 - [ ] Unauthenticated request returns `401`
 - [ ] `plan_json` and `plan_language` are NOT affected by this endpoint
 - [ ] `status` is recomputed correctly after note_body update (CREATED → DRAFT)

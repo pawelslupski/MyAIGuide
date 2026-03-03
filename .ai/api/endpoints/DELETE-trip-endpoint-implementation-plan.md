@@ -49,12 +49,13 @@ Empty body. Client should remove the trip from local state.
 
 ### Error Responses
 
-| HTTP Code | Error Code       | Condition                    |
-| --------- | ---------------- | ---------------------------- |
-| `401`     | `UNAUTHORIZED`   | No valid Supabase session    |
-| `403`     | `FORBIDDEN`      | Trip belongs to another user |
-| `404`     | `NOT_FOUND`      | Trip does not exist          |
-| `500`     | `INTERNAL_ERROR` | DB delete failure            |
+| HTTP Code | Error Code         | Condition                          |
+| --------- | ------------------ | ---------------------------------- |
+| `400`     | `INVALID_TRIP_ID`  | `tripId` is not a positive integer |
+| `401`     | `UNAUTHORIZED`     | No valid Supabase session          |
+| `403`     | `FORBIDDEN`        | Trip belongs to another user       |
+| `404`     | `NOT_FOUND`        | Trip does not exist                |
+| `500`     | `INTERNAL_ERROR`   | DB delete failure                  |
 
 ---
 

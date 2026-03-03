@@ -343,7 +343,7 @@ Profile is always guaranteed to exist for authenticated users (created by DB tri
 
 - `fetchTrips(page)` – `GET /api/trips?page=N`
 - `fetchTripById(id)` – `GET /api/trips/:id`
-- `createTrip()` – `POST /api/trips` (title only; returns new trip id for navigation)
+- `createTrip({ title: 'New Trip' })` – `POST /api/trips`; always called with the hardcoded default title; profile defaults applied for preference fields; returns `TripDTO` (use `trip.id` for navigation)
 - `updateTrip(id, updates)` – `PATCH /api/trips/:id`
 - `deleteTripById(id)` – `DELETE /api/trips/:id`
 

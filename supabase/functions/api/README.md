@@ -1,158 +1,109 @@
-# API Edge Function
+# Supabase Edge Functions — MyAIGuide
 
-REST API endpoints for MyAIGuide application.
+> **Note:** The `api/` directory (`index.ts`) is a **legacy mock prototype** used during early development. It is not deployed in production. The active Edge Functions are the three named functions documented below.
 
-## Available Endpoints
+---
 
-### GET /api/trips/:id
+## Active Edge Functions
 
-Retrieves detailed information about a specific trip.
+All three functions require a valid Supabase session JWT in the `Authorization: Bearer <token>` header.
+All error responses follow the shared `ErrorResponse` shape:
 
-**URL:** `GET /functions/v1/api/trips/:id`
-
-**Path Parameters:**
-- `id` (required): Trip identifier (positive integer)
-
-**Response (200 OK):**
 ```json
-{
-  "id": 1,
-  "user_id": "uuid-string",
-  "title": "Summer in Croatia",
-  "note_body": "Planning a 10-day trip...",
-  "what": ["culture_museums", "beach_relax", "foodie"],
-  "speed": "balance",
-  "type": "roadtrip",
-  "budget": "moderate",
-  "plan_json": null,
-  "plan_language": null,
-  "status": "DRAFT",
-  "created_at": "2024-01-10T09:00:00Z",
-  "updated_at": "2024-01-22T16:30:00Z"
-}
+{ "error": { "code": "ERROR_CODE", "message": "...", "details": {} } }
 ```
 
-**Error Responses:**
-- `400` - Invalid trip ID (not a positive integer)
-- `404` - Trip not found
-- `500` - Internal server error
+---
 
-### POST /api/generations
+### `generate-plan` — POST /functions/v1/generate-plan
 
-Generates AI travel plan (mock mode).
+Generates a structured AI travel itinerary via OpenRouter.ai. Called after quota and ownership checks in the frontend store. Records the generation attempt in `plan_generations` regardless of success/failure.
 
-**URL:** `POST /functions/v1/api/generations`
-
-**Request Body:**
+**Request body:**
 ```json
-{
-  "tripId": 1,
-  "userId": "user-uuid"
-}
+{ "prompt": "...", "language": "en", "model": "anthropic/claude-sonnet-4-6" }
 ```
+
+**Response (200):**
+```json
+{ "plan": { "days": [ ... ] }, "model_used": "anthropic/claude-sonnet-4-6" }
+```
+
+**Error codes:** `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `QUOTA_EXCEEDED` (429), `AI_API_ERROR` / `INTERNAL_ERROR` (500)
+
+**Environment variable required:** `OPENROUTER_API_KEY`
+
+See [`generate-plan/README.md`](../generate-plan/README.md) for full field reference.
+
+---
+
+### `get-generation-quota` — GET /functions/v1/get-generation-quota
+
+Returns the authenticated user's AI generation usage for the rolling 24-hour window. Only `success` and `api_error` rows count toward the quota; `validation_error` rows are excluded.
+
+**Response (200):**
+```json
+{ "used": 3, "limit": 10, "remaining": 7, "reset_at": "2026-03-04T10:00:00Z" }
+```
+
+**Error codes:** `UNAUTHORIZED` (401), `INTERNAL_ERROR` (500)
+
+No additional environment variables required (uses `SUPABASE_URL` + `SUPABASE_ANON_KEY`, auto-set by CLI).
+
+---
+
+### `delete-account` — DELETE /functions/v1/delete-account
+
+Permanently deletes the authenticated user's account via the Supabase Admin API (`auth.admin.deleteUser`). Cascades to `profiles`, `trips`, and `plan_generations` via database foreign-key constraints.
+
+**Request body:**
+```json
+{ "confirmation": "DELETE MY ACCOUNT" }
+```
+
+**Response (200):**
+```json
+{ "message": "Account successfully deleted" }
+```
+
+**Error codes:** `UNAUTHORIZED` (401), `VALIDATION_ERROR` (400 — wrong confirmation string), `INTERNAL_ERROR` (500)
+
+**Environment variable required:** `SUPABASE_SERVICE_ROLE_KEY` (auto-set by CLI; never expose to the browser).
+
+---
 
 ## Running Locally
 
-### Start the Edge Function
+```bash
+# Serve all functions at once (Supabase CLI ≥ 1.200)
+supabase functions serve --no-verify-jwt --env-file supabase/.env.local
+
+# Or serve individually
+supabase functions serve generate-plan --no-verify-jwt --env-file supabase/.env.local
+supabase functions serve get-generation-quota --no-verify-jwt --env-file supabase/.env.local
+supabase functions serve delete-account --no-verify-jwt --env-file supabase/.env.local
+```
+
+Base URL when running locally: `http://localhost:54321/functions/v1/`
+
+### Required `supabase/.env.local`
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-xxxxx
+```
+
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically by the Supabase CLI.
+
+---
+
+## Deployment
 
 ```bash
-# With mock mode (no database required)
-MOCK_MODE=true supabase functions serve api --no-verify-jwt
+supabase functions deploy generate-plan
+supabase functions deploy get-generation-quota
+supabase functions deploy delete-account
 
-# With real database
-supabase functions serve api --no-verify-jwt
+# Set production secret
+supabase secrets set OPENROUTER_API_KEY=sk-or-v1-xxxxx
 ```
-
-The API will be available at: `http://localhost:54321/functions/v1/api`
-
-### Environment Variables
-
-- `MOCK_MODE` - Set to `true` to use mock data instead of real database (default: `false`)
-- `SUPABASE_URL` - Supabase project URL (auto-set by Supabase CLI)
-- `SUPABASE_SERVICE_ROLE_KEY` - Service role key for database access (auto-set by Supabase CLI)
-
-## Testing
-
-### Testy jednostkowe – Deno test runner
-
-Testy Edge Function pisane są w natywnym środowisku Deno i uruchamiane komendą:
-
-```bash
-deno test --allow-env --allow-net supabase/functions/api/
-```
-
-Pokrycie testów jednostkowych:
-- Routing endpointów (`/api/trips/:id`, `/api/generations`)
-- Obsługa błędów: `400` (nieprawidłowe ID), `404` (nie znaleziono), `500` (błąd wewnętrzny)
-- CORS preflight (`OPTIONS`)
-
-### Testy E2E – Playwright (manualne curl / integracja)
-
-Pełne przepływy przez API testowane są w ramach testów E2E Playwright z użyciem route interception:
-
-```typescript
-// Mock endpointu generacji w testach E2E
-await page.route('**/functions/v1/api/generations', route =>
-  route.fulfill({ status: 200, json: mockGenerationResponse })
-)
-```
-
-Manualne wywołania do weryfikacji podczas developmentu:
-
-```bash
-# GET /api/trips/:id
-curl http://localhost:54321/functions/v1/api/trips/1
-
-# POST /api/generations
-curl -X POST http://localhost:54321/functions/v1/api/generations \
-  -H "Content-Type: application/json" \
-  -d '{"tripId": 1, "userId": "00000000-0000-0000-0000-000000000001"}'
-```
-
-## Mock Mode vs Real Database
-
-### Mock Mode (`MOCK_MODE=true`)
-- Returns hardcoded data
-- No database connection required
-- Useful for frontend development
-- Always returns status 200 for valid trip IDs
-
-### Real Database Mode (`MOCK_MODE=false`)
-- Queries actual Supabase database
-- Requires running Supabase locally or connection to remote instance
-- Returns real trip data
-- Enforces data validation
-
-## MVP Notes
-
-**Authentication:** Currently disabled for MVP. All requests use a default user ID.
-
-**Future:** Add proper authentication by extracting user from JWT token in Authorization header.
-
-## Error Handling
-
-All errors follow the standard ErrorResponse format:
-
-```json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "details": {
-      "additional": "context"
-    }
-  }
-}
-```
-
-## Development
-
-The Edge Function is written in TypeScript for Deno runtime.
-
-**Key files:**
-- `index.ts` - Main router and handlers
-- `README.md` - This file
-
-**Dependencies:**
-- `@supabase/supabase-js` - Supabase client for database access
 

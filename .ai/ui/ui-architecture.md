@@ -948,8 +948,11 @@ export const useTripStore = defineStore('trip', () => {
   async function fetchTrips(page = 1, limit = 20): Promise<void> {
     /* builds DashboardTripViewModel[] */
   }
-  async function createTrip(title = 'New Trip'): Promise<number> {
-    /* returns new trip id */
+  async function createTrip(command: CreateTripCommand): Promise<TripDTO> {
+    /* always called as createTrip({ title: 'New Trip' }) from DashboardView;
+       applies profile defaults for omitted preference fields;
+       prepends DashboardTripViewModel to trips.value;
+       caller uses trip.id for navigation */
   }
   async function deleteTripById(tripId: number): Promise<void> {
     /* removes from list */
@@ -1571,7 +1574,7 @@ App.vue
 │   └── NotFoundView                  → route: /:pathMatch(.*)
 ```
 
-> Trip creation is **inline** (no dedicated view/route). `DashboardView` calls `tripStore.createTrip()` which returns the new trip id, then navigates to `/trips/:id`.
+> Trip creation is **inline** (no dedicated view/route). `DashboardView` calls `tripStore.createTrip({ title: 'New Trip' })` which returns a `TripDTO`; the call-site uses `trip.id` to navigate to `/trips/:id`. The user renames the title and fills in details in the trip detail view.
 
 The architecture is production-ready, fully accessible (WCAG AA), and designed to scale with future enhancements while maintaining a clean, maintainable codebase aligned with Vue 3 best practices and the MyAIGuide product requirements.
 **Features:**

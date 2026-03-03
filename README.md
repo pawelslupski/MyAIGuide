@@ -118,12 +118,20 @@ Apply any pending database migrations:
 supabase db reset
 ```
 
-### 5. Start the Edge Function
+### 5. Start the Edge Functions
 
-In a separate terminal:
+In a separate terminal, serve all three Edge Functions:
 
 ```bash
-supabase functions serve generate-travel-plan --no-verify-jwt --env-file supabase/.env.local
+supabase functions serve generate-plan --no-verify-jwt --env-file supabase/.env.local &
+supabase functions serve get-generation-quota --no-verify-jwt --env-file supabase/.env.local &
+supabase functions serve delete-account --no-verify-jwt --env-file supabase/.env.local
+```
+
+Or serve them all at once (Supabase CLI ≥ 1.200):
+
+```bash
+supabase functions serve --no-verify-jwt --env-file supabase/.env.local
 ```
 
 ### 6. Start the development server
@@ -185,10 +193,17 @@ The app will be available at **http://localhost:5173**.
 
 ## Project Status
 
-**MVP — active development.**
+**MVP — feature-complete.**
 
-The project is in MVP phase. Core features (auth, trip management, AI generation, plan saving) are implemented and
-functional. Further iterations will focus on UX refinements and expanding features based on user feedback.
+All 12 planned API endpoints are implemented and verified (zero TypeScript errors). The full backend surface covers:
+
+- **Auth & accounts** — register, login, logout, password recovery, account deletion
+- **Profile** — fetch and update global travel preferences
+- **Trips** — full CRUD (create, list with pagination/filtering, get, update, delete)
+- **AI plan generation** — quota-aware generation with history tracking, plan save workflow
+- **Edge Functions** — `generate-plan`, `get-generation-quota`, `delete-account`
+
+Further iterations will focus on UX refinements and expanding features based on user feedback.
 
 ---
 

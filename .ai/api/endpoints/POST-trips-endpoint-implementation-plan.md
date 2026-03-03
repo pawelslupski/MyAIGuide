@@ -6,7 +6,9 @@ Creates a new trip for the authenticated user. Preference fields (`what`, `speed
 
 **Implementation approach:** Standard Supabase JS Client (PostgREST + RLS) — no Edge Function required. DB logic lives in `src/lib/services/trip.service.ts` (`createTrip`); orchestration (auth, validation, profile-defaults resolution, state) lives in `src/stores/trip.store.ts`.
 
-**Status:** `createTrip` in `trip.service.ts` is **partially implemented** — it inserts only `title` and `user_id`. Preference fields and profile-defaults resolution are the main gaps.
+**Status:** **Implemented.** `createTrip` in `trip.service.ts` inserts all fields; profile-defaults resolution lives in the store action.
+
+**UX approach (Option A — inline creation):** `DashboardView` always calls `tripStore.createTrip({ title: 'New Trip' })` and immediately navigates to `/trips/:id`. The user renames and fills in details in the trip detail view. There is no creation dialog or `/trips/new` route.
 
 ---
 
@@ -110,8 +112,9 @@ Full trip object with computed `status: "CREATED"` (note_body and plan_json will
 ## 5. Data Flow
 
 ```
-TripCreateView / Dashboard (Vue component)
-  │
+DashboardView (Vue component)
+  │  always calls: tripStore.createTrip({ title: 'New Trip' })
+  │  (user renames title and fills details in the trip detail view)
   ▼
 tripStore.createTrip(command: CreateTripCommand)     [src/stores/trip.store.ts]
   │
@@ -142,7 +145,7 @@ trip.service.ts :: createTrip(command, userId)
   └─► return TripDTO
         │
         ▼
-  tripStore: prepend new trip to trips.value; route to /trips/:id
+  tripStore: prepend new DashboardTripViewModel to trips.value; route to /trips/:id
 ```
 
 ---
@@ -292,8 +295,8 @@ async function createTrip(command: CreateTripCommand): Promise<TripDTO> {
 
 ### Step 4 — Manual verification checklist
 
-- [ ] `POST` with only `title` creates a trip with profile defaults applied to preferences (`201`)
-- [ ] `POST` with all fields creates a trip using the provided values (`201`)
+- [x] `POST` with only `title: 'New Trip'` (dashboard default) creates a trip with profile defaults applied to preferences (`201`)
+- [x] `POST` with all fields creates a trip using the provided values (`201`)
 - [ ] Missing `title` returns `400` with `details.title`
 - [ ] `title` > 255 chars returns `400`
 - [ ] `note_body` > 10,000 chars returns `400`
