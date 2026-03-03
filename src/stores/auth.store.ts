@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabaseClient } from '@/db/supabase.client'
+import router from '@/router'
+import { createValidationError, createInternalError, toApiError } from '@/lib/errors/api.error'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
@@ -51,6 +53,35 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * Permanently delete the authenticated user's account and all associated data.
+   * Requires the exact confirmation string "DELETE MY ACCOUNT".
+   * On success: clears local session and redirects to /register.
+   */
+  async function deleteAccount(confirmation: string): Promise<void> {
+    // Client-side guard — also validated server-side
+    if (confirmation !== 'DELETE MY ACCOUNT') {
+      throw createValidationError('Invalid confirmation string', {
+        confirmation: 'Must be exactly: DELETE MY ACCOUNT'
+      })
+    }
+
+    try {
+      const { error } = await supabaseClient.functions.invoke('delete-account', {
+        method: 'DELETE',
+        body: { confirmation }
+      })
+
+      if (error) throw createInternalError(error.message)
+
+      // Clear local session after successful deletion
+      await supabaseClient.auth.signOut()
+      await router.push('/register')
+    } catch (err: unknown) {
+      throw toApiError(err)
+    }
+  }
+
+  /**
    * Reset all stores on logout to prevent data leakage between sessions.
    * Composition API stores do not support Pinia's $reset() — use explicit clear actions.
    */
@@ -74,6 +105,7 @@ export const useAuthStore = defineStore('auth', () => {
     initialize,
     login,
     register,
-    logout
+    logout,
+    deleteAccount
   }
 })
