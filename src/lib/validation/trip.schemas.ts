@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { WhatPreferenceSchema } from './plan.schemas'
 
 /**
  * Validates a raw tripId value (URL param string or number) as a positive integer.
@@ -19,3 +20,40 @@ export const getTripsQuerySchema = z.object({
 
 export type GetTripsQueryInput = z.input<typeof getTripsQuerySchema>
 export type GetTripsQuery = z.output<typeof getTripsQuerySchema>
+
+export const CreateTripCommandSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(255),
+  destination: z.string().max(50).nullable().optional(),
+  num_days: z.number().int().min(1).max(30).nullable().optional(),
+  num_people: z.number().int().min(1).max(20).nullable().optional(),
+  what: z.array(WhatPreferenceSchema).optional(),
+  speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable().optional(),
+  type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable().optional(),
+  budget: z.enum(['budget', 'moderate', 'luxury']).nullable().optional(),
+  note_body: z.string().max(10000).nullable().optional()
+})
+
+export function validateCreateTripCommand(data: unknown) {
+  return CreateTripCommandSchema.parse(data)
+}
+
+/**
+ * Zod schema for PATCH /api/trips/{tripId}.
+ * All fields are optional (partial update).
+ * Does NOT include plan_json / plan_language — those are managed by PUT /api/trips/{tripId}/plan.
+ */
+export const UpdateTripCommandSchema = z.object({
+  title: z.string().min(1, 'Title cannot be empty').max(255).optional(),
+  destination: z.string().max(50).nullable().optional(),
+  num_days: z.number().int().min(1).max(30).nullable().optional(),
+  num_people: z.number().int().min(1).max(20).nullable().optional(),
+  what: z.array(WhatPreferenceSchema).optional(),
+  speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable().optional(),
+  type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable().optional(),
+  budget: z.enum(['budget', 'moderate', 'luxury']).nullable().optional(),
+  note_body: z.string().max(10000).nullable().optional()
+})
+
+export function validateUpdateTripCommand(data: unknown) {
+  return UpdateTripCommandSchema.parse(data)
+}

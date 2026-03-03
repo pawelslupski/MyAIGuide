@@ -3,7 +3,12 @@ import type {
   TripDTO,
   TripStatus,
   PlanJson,
+  WhatPreference,
+  SpeedPreference,
+  TypePreference,
+  BudgetPreference,
   CreateTripCommand,
+  UpdateTripCommand,
   TripsListDTO,
   TripListItemDTO,
   GetTripsQuery
@@ -23,27 +28,44 @@ import { ZodError } from 'zod'
  */
 
 /**
- * Create a new trip
+ * Create a new trip with all preference fields.
  *
- * @param command - Trip creation data
- * @returns Promise<{ id: number }> - ID of the newly created trip
+ * @param command - Validated trip creation data (preferences already resolved from profile defaults)
+ * @param userId  - Authenticated user ID (set server-side, never from client body)
+ * @returns Promise<TripDTO> - Full trip DTO with computed status
  * @throws ApiError on database error
  */
-export async function createTrip(
-  command: CreateTripCommand,
-  userId: string
-): Promise<{ id: number }> {
+export async function createTrip(command: CreateTripCommand, userId: string): Promise<TripDTO> {
   const { data, error } = await supabaseClient
     .from('trips')
-    .insert({ title: command.title, user_id: userId })
-    .select('id')
+    .insert({
+      title: command.title,
+      user_id: userId,
+      destination: command.destination ?? null,
+      num_days: command.num_days ?? null,
+      num_people: command.num_people ?? null,
+      what: command.what ?? [],
+      speed: command.speed ?? null,
+      type: command.type ?? null,
+      budget: command.budget ?? null,
+      note_body: command.note_body ?? null
+    })
+    .select('*')
     .single()
 
   if (error || !data) {
-    throw createInternalError(`Failed to create trip: ${error?.message || 'Unknown error'}`)
+    throw createInternalError(`Failed to create trip: ${error?.message ?? 'Unknown error'}`)
   }
 
-  return data
+  return {
+    ...data,
+    what: data.what as WhatPreference[],
+    plan_json: data.plan_json as PlanJson | null,
+    speed: data.speed as SpeedPreference | null,
+    type: data.type as TypePreference | null,
+    budget: data.budget as BudgetPreference | null,
+    status: deriveTripStatus(data)
+  }
 }
 
 /**
@@ -214,52 +236,96 @@ export async function getTrips(userId: string, query: GetTripsQuery): Promise<Tr
 }
 
 /**
- * Update trip fields
+ * Update trip fields (PATCH /api/trips/{tripId})
  *
- * Updates specified fields for a trip owned by the user.
- * Uses .eq('user_id', userId) for RLS + ownership enforcement.
+ * Uses a two-step pattern to correctly distinguish 404 (not found) from 403 (forbidden):
+ *   1. Fetch the trip by ID — throws 404 if it does not exist.
+ *   2. Compare user_id — throws 403 if the trip belongs to another user.
+ *   3. Execute the UPDATE with both `id` and `user_id` filters (defense-in-depth on top of RLS).
  *
- * @param tripId - Trip identifier (positive integer)
- * @param userId - Authenticated user ID (UUID)
- * @param updates - Partial trip fields to update
- * @returns Promise<TripDTO> - Updated trip with derived status
- * @throws ApiError - 404 if not found or not owned by user
+ * Does NOT modify plan_json / plan_language — use savePlanToTrip for that.
+ *
+ * @param tripId  - Trip identifier (positive integer)
+ * @param userId  - Authenticated user ID (UUID)
+ * @param updates - Validated partial fields from UpdateTripCommand
+ * @returns Promise<TripDTO> - Full updated trip with recomputed status
+ * @throws ApiError - 404 if not found, 403 if forbidden, 500 on DB error
  */
-export interface TripUpdateFields {
-  title?: string
-  destination?: string | null
-  note_body?: string | null
-  what?: string[]
-  speed?: string | null
-  type?: string | null
-  budget?: string | null
-  num_days?: number | null
-  num_people?: number | null
-}
-
 export async function updateTrip(
   tripId: number,
   userId: string,
-  updates: TripUpdateFields
+  updates: UpdateTripCommand
 ): Promise<TripDTO> {
-  const { data: updatedTrip, error } = await supabaseClient
+  // Step 1: Verify the trip exists
+  const { data: existing, error: fetchError } = await supabaseClient
+    .from('trips')
+    .select('id, user_id')
+    .eq('id', tripId)
+    .single()
+
+  if (fetchError || !existing) throw createNotFoundError()
+
+  // Step 2: Explicit ownership check — distinguishes 403 from 404
+  if (existing.user_id !== userId) throw createForbiddenError()
+
+  // Step 3: Execute the update (RLS also enforces ownership at DB level)
+  const { data, error: updateError } = await supabaseClient
     .from('trips')
     .update(updates)
     .eq('id', tripId)
-    .eq('user_id', userId)
-    .select()
+    .eq('user_id', userId) // defense-in-depth on top of RLS
+    .select('*')
     .single()
 
-  if (error || !updatedTrip) {
-    throw createInternalError(`Failed to update trip: ${error?.message || 'Unknown error'}`)
+  if (updateError || !data) {
+    throw createInternalError(`Failed to update trip: ${updateError?.message ?? 'Unknown error'}`)
   }
 
-  const status = deriveTripStatus(updatedTrip)
-
   return {
-    ...updatedTrip,
-    plan_json: updatedTrip.plan_json as PlanJson | null,
-    status
+    ...data,
+    what: data.what as WhatPreference[],
+    plan_json: data.plan_json as PlanJson | null,
+    speed: data.speed as SpeedPreference | null,
+    type: data.type as TypePreference | null,
+    budget: data.budget as BudgetPreference | null,
+    status: deriveTripStatus(data)
+  }
+}
+
+/**
+ * Delete a trip by ID with ownership validation (DELETE /api/trips/{tripId})
+ *
+ * Uses a two-step pattern to correctly distinguish 404 (not found) from 403 (forbidden):
+ *   1. Fetch the trip by ID — throws 404 if it does not exist.
+ *   2. Compare user_id — throws 403 if the trip belongs to another user.
+ *   3. Execute the DELETE with both `id` and `user_id` filters (defense-in-depth on top of RLS).
+ *
+ * @param tripId - Trip identifier (positive integer)
+ * @param userId - Authenticated user ID (UUID)
+ * @throws ApiError - 404 if not found, 403 if forbidden, 500 on DB error
+ */
+export async function deleteTrip(tripId: number, userId: string): Promise<void> {
+  // Step 1: Verify the trip exists
+  const { data: trip, error: fetchError } = await supabaseClient
+    .from('trips')
+    .select('id, user_id')
+    .eq('id', tripId)
+    .single()
+
+  if (fetchError || !trip) throw createNotFoundError()
+
+  // Step 2: Explicit ownership check — distinguishes 403 from 404
+  if (trip.user_id !== userId) throw createForbiddenError()
+
+  // Step 3: Execute the delete (RLS also enforces ownership at DB level)
+  const { error: deleteError } = await supabaseClient
+    .from('trips')
+    .delete()
+    .eq('id', tripId)
+    .eq('user_id', userId) // defense-in-depth on top of RLS
+
+  if (deleteError) {
+    throw createInternalError(`Failed to delete trip: ${deleteError.message}`)
   }
 }
 

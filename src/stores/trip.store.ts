@@ -5,17 +5,31 @@ import type {
   TripPreferencesDto,
   ErrorResponse,
   DashboardTripViewModel,
-  PaginationDTO
+  PaginationDTO,
+  CreateTripCommand,
+  UpdateTripCommand,
+  TripStatus
 } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
 import {
   getTripById,
-  updateTrip,
+  updateTrip as updateTripService,
   createTrip as createTripService,
-  deriveTripStatus,
-  type TripUpdateFields
+  deleteTrip as deleteTripService,
+  getTrips as getTripsService
 } from '@/lib/services/trip.service'
-import { createUnauthorizedError, createInvalidTripIdError } from '@/lib/errors/api.error'
+import {
+  createUnauthorizedError,
+  createInvalidTripIdError,
+  createValidationError,
+  toApiError
+} from '@/lib/errors/api.error'
+import {
+  validateCreateTripCommand,
+  validateUpdateTripCommand,
+  getTripsQuerySchema
+} from '@/lib/validation/trip.schemas'
+import { useProfileStore } from '@/stores/profile.store'
 
 /**
  * Validate and coerce a raw tripId value (from URL params or caller) to a positive integer.
@@ -103,7 +117,7 @@ export const useTripStore = defineStore('trip', () => {
       } = await supabaseClient.auth.getUser()
       if (!user) throw new Error('User not authenticated')
 
-      const updated = await updateTrip(tripId, user.id, { title })
+      const updated = await updateTripService(tripId, user.id, { title })
       currentTrip.value = updated
     } catch (err: any) {
       if (currentTrip.value) {
@@ -129,7 +143,7 @@ export const useTripStore = defineStore('trip', () => {
       } = await supabaseClient.auth.getUser()
       if (!user) throw new Error('User not authenticated')
 
-      const updated = await updateTrip(tripId, user.id, { destination })
+      const updated = await updateTripService(tripId, user.id, { destination })
       currentTrip.value = updated
     } catch (err: any) {
       if (currentTrip.value) {
@@ -155,7 +169,7 @@ export const useTripStore = defineStore('trip', () => {
       } = await supabaseClient.auth.getUser()
       if (!user) throw new Error('User not authenticated')
 
-      const updated = await updateTrip(tripId, user.id, { note_body: noteBody })
+      const updated = await updateTripService(tripId, user.id, { note_body: noteBody })
       currentTrip.value = updated
     } catch (err: any) {
       if (currentTrip.value) {
@@ -198,7 +212,7 @@ export const useTripStore = defineStore('trip', () => {
       } = await supabaseClient.auth.getUser()
       if (!user) throw new Error('User not authenticated')
 
-      const updated = await updateTrip(tripId, user.id, {
+      const updated = await updateTripService(tripId, user.id, {
         what: preferences.what,
         speed: preferences.speed,
         type: preferences.type,
@@ -221,11 +235,11 @@ export const useTripStore = defineStore('trip', () => {
   }
 
   /**
-   * Fetch paginated trips list for the dashboard.
-   * Calls Supabase directly to include note_body for notePreview computation,
-   * then maps raw rows → DashboardTripViewModel[] for UI consumption.
+   * Fetch paginated trips list for the dashboard with optional status filter.
+   * Validates query params via Zod, delegates to the getTrips service,
+   * then maps TripListItemDTO[] → DashboardTripViewModel[] for UI consumption.
    */
-  async function fetchTrips(page = 1, limit = 20): Promise<void> {
+  async function fetchTrips(page = 1, limit = 20, status?: TripStatus): Promise<void> {
     isLoadingTrips.value = true
     tripsError.value = null
 
@@ -233,102 +247,108 @@ export const useTripStore = defineStore('trip', () => {
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) {
-        tripsError.value = createUnauthorizedError().toResponse()
-        return
-      }
+      if (!user) throw createUnauthorizedError()
 
-      const from = (page - 1) * limit
-      const to = from + limit - 1
-
-      const {
-        data,
-        error: fetchError,
-        count
-      } = await supabaseClient
-        .from('trips')
-        .select(
-          'id, user_id, title, destination, num_days, num_people, what, speed, type, budget, note_body, plan_json, created_at, updated_at',
-          { count: 'exact' }
+      const queryResult = getTripsQuerySchema.safeParse({ page, limit, status })
+      if (!queryResult.success) {
+        const details = Object.fromEntries(
+          queryResult.error.issues.map((i) => [i.path.join('.'), i.message])
         )
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .range(from, to)
-
-      if (fetchError) {
-        tripsError.value = { error: { code: 'FETCH_ERROR', message: fetchError.message } }
-        return
+        throw createValidationError('Invalid query parameters', details)
       }
 
-      const rows = data ?? []
+      const result = await getTripsService(user.id, queryResult.data)
 
-      // Map raw rows → DashboardTripViewModel; note_body is used for preview then dropped
-      trips.value = rows.map((row) => ({
-        id: row.id,
-        title: row.title,
-        status: deriveTripStatus(row),
-        notePreview: row.note_body
-          ? row.note_body.slice(0, 100) + (row.note_body.length > 100 ? '…' : '')
-          : '',
-        updatedAt: row.updated_at
+      // Map TripListItemDTO[] → DashboardTripViewModel[] for UI consumption
+      trips.value = result.trips.map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        notePreview: '',
+        updatedAt: item.updated_at
       }))
 
-      const total = count ?? 0
-      tripsPagination.value = {
-        current_page: page,
-        total_pages: Math.max(1, Math.ceil(total / limit)),
-        total_count: total,
-        limit
-      }
-    } catch (err: any) {
-      tripsError.value = {
-        error: {
-          code: err.code || 'FETCH_ERROR',
-          message: err.message || 'Failed to fetch trips'
-        }
-      }
+      tripsPagination.value = result.pagination
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      tripsError.value = apiErr.toResponse()
+      throw apiErr
     } finally {
       isLoadingTrips.value = false
     }
   }
 
   /**
-   * Delete a trip by ID, then remove it from the local list
+   * Delete a trip by ID with ownership validation, then remove it from the local list.
+   * Uses the two-step fetch→ownership-check→delete pattern (see trip.service.ts).
    */
-  async function deleteTripById(tripId: number): Promise<void> {
-    const {
-      data: { user }
-    } = await supabaseClient.auth.getUser()
-    if (!user) throw new Error('User not authenticated')
+  async function deleteTrip(tripId: number): Promise<void> {
+    try {
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw createUnauthorizedError()
 
-    const { error: deleteError } = await supabaseClient
-      .from('trips')
-      .delete()
-      .eq('id', tripId)
-      .eq('user_id', user.id)
+      await deleteTripService(tripId, user.id)
 
-    if (deleteError) throw deleteError
+      trips.value = trips.value.filter((t) => t.id !== tripId)
+      if (currentTrip.value?.id === tripId) currentTrip.value = null
 
-    trips.value = trips.value.filter((t) => t.id !== tripId)
-    tripsPagination.value = {
-      ...tripsPagination.value,
-      total_count: Math.max(0, tripsPagination.value.total_count - 1)
+      tripsPagination.value = {
+        ...tripsPagination.value,
+        total_count: Math.max(0, tripsPagination.value.total_count - 1)
+      }
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      tripsError.value = apiErr.toResponse()
+      throw apiErr
     }
   }
 
   /**
-   * Create a new trip and return its ID
+   * Create a new trip, apply profile preference defaults for omitted fields,
+   * prepend the result to the dashboard list and return the full TripDTO.
    */
-  async function createTrip(title = 'New Trip'): Promise<number> {
+  async function createTrip(command: CreateTripCommand): Promise<TripDTO> {
     isCreatingTrip.value = true
     try {
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user) throw createUnauthorizedError()
 
-      const { id } = await createTripService({ title }, user.id)
-      return id
+      const validated = validateCreateTripCommand(command)
+
+      // Apply profile defaults for any preference fields omitted from the command
+      const profileStore = useProfileStore()
+      const profile = profileStore.profile
+      const resolved: CreateTripCommand = {
+        ...validated,
+        what: validated.what ?? profile?.default_what ?? [],
+        speed: validated.speed ?? profile?.default_speed ?? null,
+        type: validated.type ?? profile?.default_type ?? null,
+        budget: validated.budget ?? profile?.default_budget ?? null
+      }
+
+      const newTrip = await createTripService(resolved, user.id)
+
+      // Prepend to dashboard list so it appears at the top without a full refetch
+      const viewModel: DashboardTripViewModel = {
+        id: newTrip.id,
+        title: newTrip.title,
+        status: newTrip.status,
+        notePreview: newTrip.note_body
+          ? newTrip.note_body.slice(0, 100) + (newTrip.note_body.length > 100 ? '…' : '')
+          : '',
+        updatedAt: newTrip.updated_at
+      }
+      trips.value = [viewModel, ...trips.value]
+
+      return newTrip
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      tripsError.value = apiErr.toResponse()
+      throw apiErr
     } finally {
       isCreatingTrip.value = false
     }
@@ -338,19 +358,52 @@ export const useTripStore = defineStore('trip', () => {
    * Save all editable trip fields at once (title, destination, note, preferences).
    * Used by the explicit Save button in TripView.
    */
-  async function saveAllFields(tripId: number, fields: TripUpdateFields): Promise<void> {
+  async function saveAllFields(tripId: number, fields: UpdateTripCommand): Promise<void> {
     if (!currentTrip.value) return
     isSaving.value = true
     try {
       const {
         data: { user }
       } = await supabaseClient.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user) throw createUnauthorizedError()
 
-      const updated = await updateTrip(tripId, user.id, fields)
+      const updated = await updateTripService(tripId, user.id, fields)
       currentTrip.value = updated
     } finally {
       isSaving.value = false
+    }
+  }
+
+  /**
+   * General-purpose trip update action (PATCH /api/trips/{tripId}).
+   *
+   * Orchestrates authentication, tripId validation, Zod command validation,
+   * and delegates to the service layer. Sets currentTrip on success.
+   *
+   * @param tripId  - Trip identifier (positive integer or string coerced to int)
+   * @param command - Partial UpdateTripCommand (all fields optional)
+   * @throws ApiError - 400/401/403/404/500 depending on failure
+   */
+  async function updateTrip(tripId: number | string, command: UpdateTripCommand): Promise<void> {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const {
+        data: { user }
+      } = await supabaseClient.auth.getUser()
+      if (!user) throw createUnauthorizedError()
+
+      const validatedId = validateTripId(tripId)
+      const validated = validateUpdateTripCommand(command)
+      const updated = await updateTripService(validatedId, user.id, validated)
+      currentTrip.value = updated
+    } catch (err: unknown) {
+      const apiErr = toApiError(err)
+      error.value = apiErr.toResponse()
+      throw apiErr
+    } finally {
+      isLoading.value = false
     }
   }
 
@@ -380,6 +433,7 @@ export const useTripStore = defineStore('trip', () => {
     hasPlan,
     // Actions
     fetchTrip,
+    updateTrip,
     updateTripTitle,
     updateTripDestination,
     updateTripNote,
@@ -388,6 +442,6 @@ export const useTripStore = defineStore('trip', () => {
     createTrip,
     clearTrip,
     fetchTrips,
-    deleteTripById
+    deleteTrip
   }
 })

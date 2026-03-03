@@ -44,7 +44,7 @@ async function confirmDelete() {
   if (tripIdToDelete.value === null) return
   isDeleting.value = true
   try {
-    await tripStore.deleteTripById(tripIdToDelete.value)
+    await tripStore.deleteTrip(tripIdToDelete.value)
     toast({
       title: 'Trip deleted',
       description: 'The trip has been permanently removed.',
@@ -66,8 +66,8 @@ async function confirmDelete() {
 
 async function createAndNavigate() {
   try {
-    const id = await tripStore.createTrip()
-    router.push({ name: 'trip-detail', params: { id } })
+    const trip = await tripStore.createTrip({ title: 'New Trip' })
+    router.push({ name: 'trip-detail', params: { id: trip.id } })
   } catch {
     toast({
       title: 'Error',
