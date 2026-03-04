@@ -6,7 +6,7 @@ TripDetailView is the core view of MyAIGuide application, serving as the primary
 
 **Purpose:**
 
-- Display and edit trip notes (1000-10000 characters)
+- Display and edit trip notes (up to 10,000 characters, no minimum)
 - Configure trip-specific preferences (what/speed/type/budget)
 - Generate AI-powered travel plans with quota tracking
 - Review, edit, and save generated plan candidates
@@ -62,7 +62,7 @@ TripDetailView.vue (Main Container)
 │
 ├── TripEditor.vue (Left Panel / Top on Mobile)
 │   ├── TripNoteEditor.vue
-│   │   ├── Textarea (1000-10000 chars)
+│   │   ├── Textarea (max 10,000 chars, no minimum)
 │   │   └── CharacterCounter.vue
 │   │       └── Validation feedback (color-coded)
 │   │
@@ -194,7 +194,7 @@ TripDetailView.vue (Main Container)
 
 **Validation:**
 
-- Title: 1-200 characters, non-empty
+- Title: 1-255 characters, non-empty
 
 **Styling:**
 
@@ -236,11 +236,11 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 
 **Validation:**
 
-- Length: 1000-10000 characters
+- Length: max 10,000 characters (no minimum)
 - Visual feedback:
-  - < 1000: Red text "Minimum 1000 characters"
-  - 1000-10000: Green text "Valid"
-  - > 10000: Red text "Maximum 10000 characters exceeded"
+  - 0–9,000: Normal text (muted foreground)
+  - 9,001–9,999: Yellow/amber "Approaching limit"
+  - ≥ 10,000: Red text "Maximum 10,000 characters exceeded"
 
 **Accessibility:**
 
@@ -263,7 +263,6 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 ```typescript
 {
   currentLength: number
-  minLength: number // 1000
   maxLength: number // 10000
 }
 ```
@@ -402,9 +401,9 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 
 **Options:**
 
-- `slow` - "Slow & Relaxed"
+- `slow_chill` - "Slow & Chill"
 - `balance` - "Balanced"
-- `fast` - "Fast-paced"
+- `intensive` - "Intensive"
 
 ---
 
@@ -436,10 +435,8 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 
 **Options:**
 
-- `solo` - "Solo Travel"
-- `couple` - "Couple"
-- `family` - "Family"
-- `friends` - "Friends"
+- `base` - "Base"
+- `base_with_trips` - "Base + Day Trips"
 - `roadtrip` - "Road Trip"
 
 ---
@@ -561,7 +558,7 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 {
   used: number
   limit: number // always 10
-  resetAt: string | null // ISO 8601, only when at limit
+  reset_at: string // ISO 8601
 }
 ```
 
@@ -569,8 +566,8 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 
 - `percentage`: (used / limit) \* 100
 - `statusColor`:
-  - 0-6: green
-  - 7-9: yellow
+  - 0-7: green
+  - 8-9: yellow
   - 10: red
 - `resetTimeFormatted`: Relative time (e.g., "in 3 hours")
 
@@ -732,7 +729,7 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 
 - Icon: Map/compass graphic
 - Title: "No Plan Yet"
-- Message: "Write your trip notes (minimum 1000 characters) and click 'Generate Plan' to create your AI-powered travel itinerary."
+- Message: "Write your trip notes and click 'Generate Plan' to create your AI-powered travel itinerary."
 - Hint: "Make sure to set your preferences for the best results!"
 
 **Styling:**
@@ -817,6 +814,8 @@ interface GeneratedPlanDTO {
   language: string
   model_used: string
   generated_at: string // ISO 8601
+  /** Updated quota snapshot returned alongside the plan – avoids an extra round-trip. */
+  quota: GenerationQuotaDTO
 }
 ```
 
@@ -826,7 +825,8 @@ interface GeneratedPlanDTO {
 interface GenerationQuotaDTO {
   used: number
   limit: number
-  reset_at: string | null // ISO 8601, only when at limit
+  remaining: number
+  reset_at: string // ISO 8601 – always present
 }
 ```
 
@@ -877,13 +877,13 @@ type WhatPreference = 'nature' | 'culture_museums' | 'beach_relax' | 'city_break
 **SpeedPreference:**
 
 ```typescript
-type SpeedPreference = 'slow' | 'balance' | 'fast'
+type SpeedPreference = 'slow_chill' | 'balance' | 'intensive'
 ```
 
 **TypePreference:**
 
 ```typescript
-type TypePreference = 'solo' | 'couple' | 'family' | 'friends' | 'roadtrip'
+type TypePreference = 'base' | 'base_with_trips' | 'roadtrip'
 ```
 
 **BudgetPreference:**
@@ -909,7 +909,6 @@ interface TripEditorViewModel {
   noteValidation: {
     isValid: boolean
     currentLength: number
-    minLength: number
     maxLength: number
     message: string
   }
@@ -1155,26 +1154,24 @@ export async function fetchTripById(tripId: number): Promise<TripDTO> {
 
 ```typescript
 export async function generatePlan(tripId: number): Promise<GeneratedPlanDTO> {
-  const response = await fetch(`/api/trips/${tripId}/generate-plan`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${await getAccessToken()}`,
-      'Content-Type': 'application/json'
-    }
+  const { data, error } = await supabaseClient.functions.invoke('api', {
+    body: { tripId },
+    // Edge Function route: POST /api/trips/:id/generate-plan
+    headers: { 'x-route': `POST /api/trips/${tripId}/generate-plan` }
   })
 
-  if (!response.ok) {
-    const error = await response.json()
-    throw new ApiError(response.status, error.error.code, error.error.message)
+  if (error) {
+    const parsed = error as { code?: string; message?: string }
+    throw new ApiError(parsed.code ?? 'UNKNOWN', parsed.message ?? 'Generation failed')
   }
 
-  return await response.json()
+  return data as GeneratedPlanDTO
 }
 ```
 
 **Error Handling:**
 
-- 400: Validation error (note too short/long) → Show inline error
+- 400: Validation error (note too long) → Show inline error
 - 429: Quota exceeded → Show quota message with reset time
 - 500: AI API error → Show retry button
 - 503: Service unavailable → Show "try again later" message
@@ -1255,39 +1252,29 @@ export async function savePlanToTrip(
 
 ---
 
-### 7.4 GET /api/quota
+### 7.4 GET /api/users/me/generation-quota
 
 **Purpose:** Fetch current generation quota status
 
 **Service Function:** `fetchGenerationQuota(): Promise<GenerationQuotaDTO>`
 
-**Location:** `src/lib/services/quota.service.ts`
+**Location:** `src/lib/services/generation.service.ts`
 
 **Implementation:**
 
 ```typescript
 export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
-  const userId = await getCurrentUserId()
+  const { data, error } = await supabaseClient.functions.invoke('api', {
+    headers: { 'x-route': 'GET /api/users/me/generation-quota' }
+  })
 
-  const { data, error } = await supabaseClient
-    .from('plan_generations')
-    .select('created_at')
-    .eq('user_id', userId)
-    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-    .order('created_at', { ascending: true })
+  if (error) throw new Error((error as { message?: string }).message ?? 'Failed to fetch quota')
 
-  if (error) throw new Error(error.message)
-
-  const used = data.length
-  const limit = 10
-  const resetAt =
-    used >= limit && data.length > 0
-      ? new Date(new Date(data[0].created_at).getTime() + 24 * 60 * 60 * 1000).toISOString()
-      : null
-
-  return { used, limit, reset_at: resetAt }
+  return data as GenerationQuotaDTO
 }
 ```
+
+> **Note:** `quota.service.ts` does **not** exist. All quota operations live in `generation.service.ts`. The quota snapshot is also returned directly in the `GeneratedPlanDTO.quota` field after each generation, so a separate round-trip is only needed on initial TripView mount.
 
 ---
 
@@ -1342,7 +1329,7 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 
 **Preconditions:**
 
-- Note body is 1000-10000 characters
+- Note body is present and does not exceed 10,000 characters (no minimum)
 - Generation quota not exceeded (< 10 in 24 hours)
 - Not already generating
 
@@ -1373,7 +1360,7 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 
 **Error Messages:**
 
-- 400 (note invalid): "Your trip note must be between 1,000 and 10,000 characters"
+- 400 (note invalid): "Your trip note exceeds the maximum of 10,000 characters"
 - 429 (quota exceeded): "You've reached your limit of 10 plan generations. Quota resets in X hours."
 - 500 (AI error): "Failed to generate plan. Please try again."
 - 503 (service unavailable): "AI service is temporarily unavailable. Please try again later."
@@ -1474,21 +1461,20 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 
 **Rules:**
 
-- Minimum length: 1000 characters
-- Maximum length: 10000 characters
-- Cannot be null when generating plan
+- **No minimum length** — any non-null note is accepted
+- Maximum length: 10,000 characters
+- Cannot be null when generating plan (destination must also be set)
 
 **Validation Points:**
 
 - Real-time in CharacterCounter component
-- Before enabling Generate button
+- Before enabling Generate button (disabled when length > 10,000 or destination missing)
 - Server-side in POST /api/trips/:id/generate-plan
 
 **Error Messages:**
 
-- < 1000: "Minimum 1000 characters required (currently: X)"
-- > 10000: "Maximum 10000 characters exceeded (currently: X)"
-- null: "Trip note is required to generate a plan"
+- > 10,000: "Maximum 10,000 characters exceeded (currently: X)"
+- null / empty: "A trip note is required to generate a plan"
 
 ---
 
@@ -1508,7 +1494,7 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 **UI Feedback:**
 
 - Quota counter shows X/10 used
-- Color-coded: green (0-6), yellow (7-9), red (10)
+- Color-coded: green (0-7), yellow (8-9), red (10)
 - When at limit: "Quota resets in X hours"
 - Generate button disabled when quota exceeded
 
@@ -1771,7 +1757,7 @@ try {
 - Create `src/stores/trip.store.ts` (useTripStore)
 - Create `src/stores/plan.store.ts` (usePlanStore)
 - Create `src/stores/profile.store.ts` (useProfileStore)
-- Create `src/stores/quota.store.ts` (useQuotaStore)
+- Create `src/stores/quota.store.ts` (useQuotaStore) — manages quota state; updated from `GeneratedPlanDTO.quota` after generation
 - Define state, getters, actions for each store
 
 **Step 1.3: Create Service Layer**
@@ -1783,9 +1769,9 @@ try {
   - `savePlanToTrip()`
   - `deriveTripStatus()`
 - Create `src/lib/services/generation.service.ts`
-  - `generatePlan()`
-- Create `src/lib/services/quota.service.ts`
-  - `fetchGenerationQuota()`
+  - `generatePlan()` — calls Supabase Edge Function via `supabaseClient.functions.invoke()`
+  - `fetchGenerationQuota()` — calls Edge Function for initial quota load on mount
+    > **Note:** There is no `quota.service.ts`. All quota-related logic lives in `generation.service.ts`.
 
 **Step 1.4: Create Validation Schemas**
 

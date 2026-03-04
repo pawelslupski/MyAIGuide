@@ -106,5 +106,5 @@ sequenceDiagram
     SA-->>AS: sukces
     AS->>SA: signOut()
     SA-->>AS: zdarzenie SIGNED_OUT
-    V->>R: Przekierowanie do /login
+    V->>R: Przekierowanie do /register
 ```

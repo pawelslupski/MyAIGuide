@@ -4,14 +4,13 @@
 
 This specification covers the complete authentication system for MyAIGuide, addressing PRD user stories US-001 through US-004. The system uses Supabase Auth for email/password authentication, Pinia for reactive auth state, Vue Router guards for route protection, RLS for database-level data isolation, and an Edge Function for secure account deletion.
 
-### Current State
+### Current State (as of implementation)
 
-- No auth store, no login/register views, no router guards, no session management
-- RLS is **disabled** (migration `20260111120500_disable_all_rls_policies.sql` drops all policies)
-- Router has three routes: `/` (DemoView), `/trips/:id` (TripDetailView), `/:pathMatch(.*)*` (404)
-- Supabase client exists at `src/db/supabase.client.ts` with a hardcoded `DEFAULT_USER_ID`
-- Stores (`trip.store`, `plan.store`, `profile.store`, `quota.store`) call `supabaseClient.auth.getUser()` but there is no auth initialization
+- Auth store (`src/stores/auth.store.ts`), login/register views, router guard all implemented
+- RLS is **re-enabled** via migration `20260222000000_reenable_rls.sql`
+- `DEFAULT_USER_ID` removed from `src/db/supabase.client.ts`
 - `config.toml` has `enable_confirmations = false` (no email verification required)
+- **Remaining**: `auth.store.ts` is missing `isPasswordRecovery`, `userId`, `resetPassword()`, `updatePassword()` — needed to wire up `ForgotPasswordView` and `ResetPasswordView` (both currently have `TODO` stubs)
 
 ### Target State
 
@@ -199,24 +198,18 @@ This specification covers the complete authentication system for MyAIGuide, addr
   <header class="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
     <div class="container flex h-14 items-center justify-between px-4">
       <!-- Left: Brand -->
-      <RouterLink to="/" class="font-bold text-lg">MyAIGuide</RouterLink>
+      <RouterLink to="/" class="text-lg font-bold">MyAIGuide</RouterLink>
 
-      <!-- Right: User menu -->
+      <!-- Right: Theme toggle + user email + logout -->
       <div class="flex items-center gap-2">
         <ThemeToggle />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
-              {{ authStore.userEmail }}
-              <ChevronDown class="h-4 w-4 ml-1" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem @click="router.push('/profile')">Profile</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem @click="authStore.logout()">Log out</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div class="flex items-center gap-1">
+          <span class="text-sm text-muted-foreground">{{ authStore.userEmail }}</span>
+          <Button variant="ghost" size="sm" class="gap-1 text-muted-foreground" @click="handleLogout">
+            <LogOut class="h-4 w-4" />
+            <span>Log out</span>
+          </Button>
+        </div>
       </div>
     </div>
   </header>
@@ -230,7 +223,7 @@ This specification covers the complete authentication system for MyAIGuide, addr
 **Key decisions:**
 
 - Header-based layout (not sidebar) — simpler for MVP, matches PRD requirement for login/logout button in "top-right corner" (US-002)
-- User email displayed in dropdown trigger (PRD says nothing about avatars)
+- User email shown as plain text next to logout button (no dropdown, no avatar, no `/profile` link — profile management is embedded in DashboardView via `UserProfilePanel`)
 - ThemeToggle preserved from existing implementation
 - `container` class for max-width constraint
 
@@ -254,7 +247,6 @@ This specification covers the complete authentication system for MyAIGuide, addr
 | `/forgot-password` | `forgot-password` | ForgotPasswordView | No (guestOnly) | AuthLayout |
 | `/reset-password`  | `reset-password`  | ResetPasswordView  | No             | AuthLayout |
 | `/trips/:id`       | `trip-detail`     | TripDetailView     | Yes            | AppLayout  |
-| `/profile`         | `profile`         | ProfileView        | Yes            | AppLayout  |
 | `/:pathMatch(.*)*` | `not-found`       | NotFoundView       | No             | AuthLayout |
 
 **Key changes:**
@@ -317,11 +309,11 @@ The PRD says _"Użytkownik może logować się do systemu poprzez przycisk w pra
 1. User navigates to profile settings
 2. Clicks "Delete account" button (destructive variant)
 3. AlertDialog confirmation: "This will permanently delete your account, all trips, and all plans. This action cannot be undone."
-4. User confirms by typing "DELETE" or clicking confirm
-5. `authStore.deleteAccount()` calls `delete-account` Edge Function
+4. User confirms by typing exactly `DELETE MY ACCOUNT` (validated client-side and server-side)
+5. `authStore.deleteAccount(confirmation)` calls `delete-account` Edge Function with `{ method: 'DELETE', body: { confirmation } }`
 6. Edge Function uses `service_role` to delete user from `auth.users` (cascades to all data)
 7. Client-side: `signOut()` clears session
-8. Redirect to `/login`
+8. Redirect to `/register`
 
 ---
 
@@ -342,11 +334,11 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const session = ref<Session | null>(null)
   const isLoading = ref(true) // true until initial session check completes
-  const isPasswordRecovery = ref(false)
+  const isPasswordRecovery = ref(false) // TODO: not yet in actual auth.store.ts — add when wiring ForgotPasswordView/ResetPasswordView
 
   // Getters
   const isAuthenticated = computed(() => !!session.value)
-  const userId = computed(() => user.value?.id ?? null)
+  const userId = computed(() => user.value?.id ?? null) // TODO: not yet in actual auth.store.ts
   const userEmail = computed(() => user.value?.email ?? null)
 
   /**
@@ -360,7 +352,7 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = newSession?.user ?? null
 
       if (event === 'PASSWORD_RECOVERY') {
-        isPasswordRecovery.value = true
+        isPasswordRecovery.value = true // TODO: not yet in actual auth.store.ts
       }
 
       if (event === 'SIGNED_OUT') {
@@ -400,6 +392,7 @@ export const useAuthStore = defineStore('auth', () => {
     // State is cleared via onAuthStateChange listener (SIGNED_OUT event)
   }
 
+  // TODO: not yet in actual auth.store.ts — add when wiring ForgotPasswordView
   async function resetPassword(email: string): Promise<void> {
     const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`
@@ -407,6 +400,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) throw error
   }
 
+  // TODO: not yet in actual auth.store.ts — add when wiring ResetPasswordView
   async function updatePassword(newPassword: string): Promise<void> {
     const { error } = await supabaseClient.auth.updateUser({
       password: newPassword
@@ -415,10 +409,28 @@ export const useAuthStore = defineStore('auth', () => {
     isPasswordRecovery.value = false
   }
 
-  async function deleteAccount(): Promise<void> {
-    const { error } = await supabaseClient.functions.invoke('delete-account')
-    if (error) throw error
-    await logout()
+  /**
+   * Permanently delete the authenticated user's account and all associated data.
+   * Requires exact confirmation string "DELETE MY ACCOUNT" (validated client- and server-side).
+   * On success: clears local session and redirects to /register.
+   */
+  async function deleteAccount(confirmation: string): Promise<void> {
+    if (confirmation !== 'DELETE MY ACCOUNT') {
+      throw createValidationError('Invalid confirmation string', {
+        confirmation: 'Must be exactly: DELETE MY ACCOUNT'
+      })
+    }
+    try {
+      const { error } = await supabaseClient.functions.invoke('delete-account', {
+        method: 'DELETE',
+        body: { confirmation }
+      })
+      if (error) throw createInternalError(error.message)
+      await supabaseClient.auth.signOut()
+      await router.push('/register')
+    } catch (err: unknown) {
+      throw toApiError(err)
+    }
   }
 
   /**
@@ -536,12 +548,6 @@ const routes = [
         return { name: 'not-found' }
       }
     }
-  },
-  {
-    path: '/profile',
-    name: 'profile',
-    component: () => import('@/views/ProfileView.vue'),
-    meta: { requiresAuth: true }
   },
   {
     path: '/:pathMatch(.*)*',
@@ -806,16 +812,16 @@ Additionally, `SUPABASE_USER_ID` must be removed from `.env.example` — it is a
 
 All auth operations use the Supabase JS client (`@supabase/supabase-js`). No custom auth API endpoints are needed.
 
-| Operation       | Method                                                             | Notes                                   |
-| --------------- | ------------------------------------------------------------------ | --------------------------------------- |
-| Register        | `supabaseClient.auth.signUp({ email, password })`                  | No email confirmation (per config.toml) |
-| Login           | `supabaseClient.auth.signInWithPassword({ email, password })`      | Returns session + user                  |
-| Logout          | `supabaseClient.auth.signOut()`                                    | Clears local session                    |
-| Forgot password | `supabaseClient.auth.resetPasswordForEmail(email, { redirectTo })` | Sends recovery email                    |
-| Update password | `supabaseClient.auth.updateUser({ password })`                     | Used after recovery link                |
-| Get session     | `supabaseClient.auth.getSession()`                                 | Check stored session                    |
-| Get user        | `supabaseClient.auth.getUser()`                                    | Validates JWT with server               |
-| Delete account  | `supabaseClient.functions.invoke('delete-account')`                | Custom Edge Function                    |
+| Operation       | Method                                                                                            | Notes                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Register        | `supabaseClient.auth.signUp({ email, password })`                                                 | No email confirmation (per config.toml)                                                         |
+| Login           | `supabaseClient.auth.signInWithPassword({ email, password })`                                     | Returns session + user                                                                          |
+| Logout          | `supabaseClient.auth.signOut()`                                                                   | Clears local session                                                                            |
+| Forgot password | `supabaseClient.auth.resetPasswordForEmail(email, { redirectTo })`                                | Sends recovery email                                                                            |
+| Update password | `supabaseClient.auth.updateUser({ password })`                                                    | Used after recovery link                                                                        |
+| Get session     | `supabaseClient.auth.getSession()`                                                                | Check stored session                                                                            |
+| Get user        | `supabaseClient.auth.getUser()`                                                                   | Validates JWT with server                                                                       |
+| Delete account  | `supabaseClient.functions.invoke('delete-account', { method: 'DELETE', body: { confirmation } })` | Custom Edge Function; requires `confirmation === 'DELETE MY ACCOUNT'`; redirects to `/register` |
 
 ### 4.2 Session Management via `onAuthStateChange`
 

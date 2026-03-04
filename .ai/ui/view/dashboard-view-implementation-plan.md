@@ -282,16 +282,16 @@ export interface DashboardTripViewModel {
 
 **`tripStore` (`src/stores/trip.store.ts`)**
 
-| Member               | Type                               | Used for                                              |
-| -------------------- | ---------------------------------- | ----------------------------------------------------- |
-| `trips`              | `DashboardTripViewModel[]`         | Rendered as `TripCard` list                           |
-| `tripsPagination`    | `PaginationDTO`                    | Passed to `TripListPagination`                        |
-| `isLoadingTrips`     | `boolean`                          | Show skeleton cards                                   |
-| `isCreatingTrip`     | `boolean`                          | Disable "New Trip" button while creation is in-flight |
-| `tripsError`         | `ErrorResponse \| null`            | Show inline error state                               |
-| `fetchTrips(page?)`  | `(page?: number) => Promise<void>` | Called on mount and page change                       |
-| `createTrip(command)` | `(command: CreateTripCommand) => Promise<TripDTO>` | Creates a trip with `{ title: 'New Trip' }`, returns full DTO; `trip.id` used for navigation |
-| `deleteTripById(id)` | `(id: number) => Promise<void>`    | Called after user confirms delete Dialog              |
+| Member                      | Type                                               | Used for                                                                                     |
+| --------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `trips`                     | `DashboardTripViewModel[]`                         | Rendered as `TripCard` list                                                                  |
+| `tripsPagination`           | `PaginationDTO`                                    | Passed to `TripListPagination`                                                               |
+| `isLoadingTrips`            | `boolean`                                          | Show skeleton cards                                                                          |
+| `isCreatingTrip`            | `boolean`                                          | Disable "New Trip" button while creation is in-flight                                        |
+| `tripsError`                | `ErrorResponse \| null`                            | Show inline error state                                                                      |
+| `fetchTrips(page?, limit?)` | `(page?: number, limit?: number) => Promise<void>` | Called on mount and page change (default: page 1, limit 20)                                  |
+| `createTrip(command)`       | `(command: CreateTripCommand) => Promise<TripDTO>` | Creates a trip with `{ title: 'New Trip' }`, returns full DTO; `trip.id` used for navigation |
+| `deleteTripById(id)`        | `(id: number) => Promise<void>`                    | Called after user confirms delete Dialog                                                     |
 
 ### Local state in `DashboardView.vue`
 
@@ -386,6 +386,7 @@ supabaseClient
 **Action:** `tripStore.createTrip({ title: 'New Trip' })` — called on "New Trip" button click.
 
 **Store flow:**
+
 1. Auth guard: `supabaseClient.auth.getUser()` — throws `401` if no session.
 2. Validates command via `validateCreateTripCommand` (Zod).
 3. Applies profile defaults for omitted preference fields (`what`, `speed`, `type`, `budget`).
@@ -397,8 +398,11 @@ supabaseClient
 supabaseClient
   .from('trips')
   .insert({
-    title: 'New Trip', user_id: authenticatedUserId,
-    destination: null, num_days: null, num_people: null,
+    title: 'New Trip',
+    user_id: authenticatedUserId,
+    destination: null,
+    num_days: null,
+    num_people: null,
     what: profile.default_what ?? [],
     speed: profile.default_speed ?? null,
     type: profile.default_type ?? null,
@@ -429,22 +433,22 @@ supabaseClient.from('trips').delete().eq('id', tripId).eq('user_id', authenticat
 
 ## 8. User Interactions
 
-| Interaction                              | Trigger                                  | Outcome                                                                                                                  |
-| ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Page load                                | `onMounted`                              | Parallel fetch of profile and trips (page 1); skeletons shown in both sections                                           |
-| Profile traveler flag toggle (simple)    | Pill `@click` in Section A               | `profileStore.updateProfile({ <flag>: newValue })` immediately; controls disabled while saving                           |
-| Dietary preference toggle OFF → ON       | `has_dietary_preferences` pill click     | Textarea appears; `dietaryPending = true`; save deferred until valid description entered                                 |
-| Dietary preference Textarea blur (valid) | Textarea `@blur`                         | `profileStore.updateProfile({ has_dietary_preferences: true, dietary_preferences_description: text })`                   |
-| Dietary preference Textarea blur (empty) | Textarea `@blur`                         | Destructive toast "Dietary description is required"; pill reverts to OFF                                                 |
-| Dietary preference toggle ON → OFF       | `has_dietary_preferences` pill click     | `profileStore.updateProfile({ has_dietary_preferences: false, dietary_preferences_description: null })` immediately      |
-| Travel style preference change           | Pill click in Section B                  | `profileStore.updateProfile({ default_<field>: newValue })` immediately                                                  |
+| Interaction                              | Trigger                                  | Outcome                                                                                                                                                |
+| ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Page load                                | `onMounted`                              | Parallel fetch of profile and trips (page 1); skeletons shown in both sections                                                                         |
+| Profile traveler flag toggle (simple)    | Pill `@click` in Section A               | `profileStore.updateProfile({ <flag>: newValue })` immediately; controls disabled while saving                                                         |
+| Dietary preference toggle OFF → ON       | `has_dietary_preferences` pill click     | Textarea appears; `dietaryPending = true`; save deferred until valid description entered                                                               |
+| Dietary preference Textarea blur (valid) | Textarea `@blur`                         | `profileStore.updateProfile({ has_dietary_preferences: true, dietary_preferences_description: text })`                                                 |
+| Dietary preference Textarea blur (empty) | Textarea `@blur`                         | Destructive toast "Dietary description is required"; pill reverts to OFF                                                                               |
+| Dietary preference toggle ON → OFF       | `has_dietary_preferences` pill click     | `profileStore.updateProfile({ has_dietary_preferences: false, dietary_preferences_description: null })` immediately                                    |
+| Travel style preference change           | Pill click in Section B                  | `profileStore.updateProfile({ default_<field>: newValue })` immediately                                                                                |
 | Click "New Trip" button                  | `@click` on header button                | `tripStore.createTrip({ title: 'New Trip' })` → on success `router.push({ name: 'trip-detail', params: { id: trip.id } })`; button shows loading state |
-| Click trip card                          | `@click` on `TripCard`                   | `router.push({ name: 'trip-detail', params: { id: trip.id } })`                                                          |
-| Click delete icon on card                | `@delete` from `TripCard`                | Store `deletingTripId`, open delete Dialog                                                                               |
-| Confirm delete in Dialog                 | Dialog confirm button click              | `tripStore.deleteTripById(id)` → success toast → list updated → Dialog closed                                            |
-| Cancel delete in Dialog                  | Dialog cancel / Escape / overlay click   | `deletingTripId = null`, Dialog closed                                                                                   |
-| Pagination "Previous" / "Next"           | `@page-change` from `TripListPagination` | `currentPage = newPage`, `tripStore.fetchTrips(newPage)`                                                                 |
-| Retry on trips error                     | "Try again" button click                 | `tripStore.fetchTrips(currentPage)`                                                                                      |
+| Click trip card                          | `@click` on `TripCard`                   | `router.push({ name: 'trip-detail', params: { id: trip.id } })`                                                                                        |
+| Click delete icon on card                | `@delete` from `TripCard`                | Store `deletingTripId`, open delete Dialog                                                                                                             |
+| Confirm delete in Dialog                 | Dialog confirm button click              | `tripStore.deleteTripById(id)` → success toast → list updated → Dialog closed                                                                          |
+| Cancel delete in Dialog                  | Dialog cancel / Escape / overlay click   | `deletingTripId = null`, Dialog closed                                                                                                                 |
+| Pagination "Previous" / "Next"           | `@page-change` from `TripListPagination` | `currentPage = newPage`, `tripStore.fetchTrips(newPage)`                                                                                               |
+| Retry on trips error                     | "Try again" button click                 | `tripStore.fetchTrips(currentPage)`                                                                                                                    |
 
 ---
 
@@ -547,7 +551,7 @@ const { toast } = useToast()
    - `isLoadingTrips: Ref<boolean>`
    - `isCreatingTrip: Ref<boolean>`
    - `tripsError: Ref<ErrorResponse | null>`
-   - `fetchTrips(page?: number): Promise<void>` — select includes `note_body` internally for `notePreview` mapping
+   - `fetchTrips(page?: number, limit?: number): Promise<void>` — select includes `note_body` internally for `notePreview` mapping; defaults are `page = 1, limit = 20`
    - `createTrip(command: CreateTripCommand): Promise<TripDTO>` — always called with `{ title: 'New Trip' }`; returns full `TripDTO` (use `trip.id` for navigation)
    - `deleteTripById(id: number): Promise<void>`
 

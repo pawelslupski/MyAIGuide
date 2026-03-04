@@ -86,8 +86,9 @@ This document defines the user interface architecture for MyAIGuide MVP, a Vue 3
 
 - Dashboard (Home icon)
 - My Trips (Map icon)
-- Profile (User icon)
 - Logout (LogOut icon)
+
+> **Note:** There is no `/profile` route or sidebar link. Profile management is embedded directly in `DashboardView` via `UserProfilePanel` (per PRD §3.2 / US-005).
 
 **Implementation:**
 
@@ -128,17 +129,6 @@ This document defines the user interface architecture for MyAIGuide MVP, a Vue 3
               <span>My Trips</span>
             </NavigationMenuLink>
           </NavigationMenuItem>
-
-          <NavigationMenuItem>
-            <NavigationMenuLink
-              :to="{ name: 'profile' }"
-              :aria-current="isActive('profile') ? 'page' : undefined"
-              class="flex items-center gap-3 rounded-md px-4 py-2 hover:bg-accent"
-            >
-              <User class="h-5 w-5" />
-              <span>Profile</span>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu>
 
@@ -159,7 +149,7 @@ This document defines the user interface architecture for MyAIGuide MVP, a Vue 3
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Home, Map, User, LogOut } from 'lucide-vue-next'
+import { Home, Map, LogOut } from 'lucide-vue-next'
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -1102,11 +1092,11 @@ export const useQuotaStore = defineStore('quota', () => {
 
 Stores do **not** call Supabase directly for complex operations. Instead they delegate to typed service functions that handle DB access, validation (Zod), and error mapping.
 
-| File                    | Responsibility                                                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `profile.service.ts`    | `getProfile(userId)`, `updateProfile(userId, updates)` – validates response via `profile.schemas.ts`                          |
-| `trip.service.ts`       | `getTripById`, `updateTrip`, `createTrip`, `savePlanToTrip` – derives `TripStatus`, validates plan via `plan.schemas.ts`      |
-| `generation.service.ts` | `checkGenerationQuota`, `detectLanguage`, `buildAIPrompt`, `callAIService` (invokes Edge Function), `recordGenerationAttempt` |
+| File                    | Responsibility                                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile.service.ts`    | `getProfile(userId)`, `updateProfile(userId, updates)` – validates response via `profile.schemas.ts`                                                            |
+| `trip.service.ts`       | `getTrips(page, limit)`, `getTripById`, `createTrip`, `updateTrip`, `deleteTrip`, `savePlanToTrip` – derives `TripStatus`, validates plan via `plan.schemas.ts` |
+| `generation.service.ts` | `generatePlan` (invokes Edge Function via `supabaseClient.functions.invoke()`), `fetchGenerationQuota`                                                          |
 
 Error handling is centralised in `src/lib/errors/api.error.ts` which provides typed `ApiError` constructors (`createNotFoundError`, `createForbiddenError`, `createValidationError`, `createInternalError`, `createUnauthorizedError`).
 

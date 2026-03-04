@@ -336,12 +336,12 @@ Profile is always guaranteed to exist for authenticated users (created by DB tri
 
 ### 5.3 TripStore (`stores/trip.store.ts`)
 
-**State:** `trips: TripListItemDTO[]`, `currentTrip: TripDTO | null`, `tripsPagination`, `isLoadingTrips`,
+**State:** `trips: DashboardTripViewModel[]`, `currentTrip: TripDTO | null`, `tripsPagination`, `isLoadingTrips`,
 `isCreatingTrip`
 
 **Actions:**
 
-- `fetchTrips(page)` – `GET /api/trips?page=N`
+- `fetchTrips(page, limit?)` – `GET /api/trips?page=N&limit=M`; builds `DashboardTripViewModel[]`
 - `fetchTripById(id)` – `GET /api/trips/:id`
 - `createTrip({ title: 'New Trip' })` – `POST /api/trips`; always called with the hardcoded default title; profile defaults applied for preference fields; returns `TripDTO` (use `trip.id` for navigation)
 - `updateTrip(id, updates)` – `PATCH /api/trips/:id`

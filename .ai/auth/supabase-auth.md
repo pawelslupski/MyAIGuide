@@ -32,7 +32,14 @@ import type { Database } from '../db/database.types'
 
 export const supabaseClient = createClient<Database>(
   import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true, // store session in localStorage; restored via getSession() on reload
+      autoRefreshToken: true, // silently refresh JWT before expiry (jwt_expiry = 3600 in config.toml)
+      detectSessionInUrl: true // parse #access_token from URL hash — required for PASSWORD_RECOVERY event on /reset-password
+    }
+  }
 )
 ```
 
@@ -107,10 +114,28 @@ export const useAuthStore = defineStore('auth', () => {
     isPasswordRecovery.value = false
   }
 
-  async function deleteAccount(): Promise<void> {
-    const { error } = await supabaseClient.functions.invoke('delete-account')
-    if (error) throw error
-    await logout()
+  /**
+   * Permanently delete the authenticated user's account and all associated data.
+   * Requires exact confirmation string "DELETE MY ACCOUNT" (validated client- and server-side).
+   * On success: clears local session and redirects to /register.
+   */
+  async function deleteAccount(confirmation: string): Promise<void> {
+    if (confirmation !== 'DELETE MY ACCOUNT') {
+      throw createValidationError('Invalid confirmation string', {
+        confirmation: 'Must be exactly: DELETE MY ACCOUNT'
+      })
+    }
+    try {
+      const { error } = await supabaseClient.functions.invoke('delete-account', {
+        method: 'DELETE',
+        body: { confirmation }
+      })
+      if (error) throw createInternalError(error.message)
+      await supabaseClient.auth.signOut()
+      await router.push('/register')
+    } catch (err: unknown) {
+      throw toApiError(err)
+    }
   }
 
   function resetAllStores(): void {
@@ -119,6 +144,10 @@ export const useAuthStore = defineStore('auth', () => {
     import('@/stores/plan.store').then(({ usePlanStore }) => usePlanStore().discardCandidate())
     import('@/stores/profile.store').then(({ useProfileStore }) => {
       useProfileStore().profile = null
+    })
+    // quota store — reset to null so it re-fetches on next login
+    import('@/stores/quota.store').then(({ useQuotaStore }) => {
+      useQuotaStore().quota = null
     })
   }
 
@@ -192,16 +221,16 @@ router.beforeEach(async (to) => {
 
 ## Supabase Auth Operations
 
-| Operation           | Method                                                              |
-| ------------------- | ------------------------------------------------------------------- |
-| Register            | `supabaseClient.auth.signUp({ email, password })`                   |
-| Login               | `supabaseClient.auth.signInWithPassword({ email, password })`       |
-| Logout              | `supabaseClient.auth.signOut()`                                     |
-| Forgot password     | `supabaseClient.auth.resetPasswordForEmail(email, { redirectTo })`  |
-| Update password     | `supabaseClient.auth.updateUser({ password })`                      |
-| Get current session | `supabaseClient.auth.getSession()`                                  |
-| Verify user JWT     | `supabaseClient.auth.getUser()` (validates with Supabase server)    |
-| Delete account      | `supabaseClient.functions.invoke('delete-account')` (Edge Function) |
+| Operation           | Method                                                                                                                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Register            | `supabaseClient.auth.signUp({ email, password })`                                                                                                                                        |
+| Login               | `supabaseClient.auth.signInWithPassword({ email, password })`                                                                                                                            |
+| Logout              | `supabaseClient.auth.signOut()`                                                                                                                                                          |
+| Forgot password     | `supabaseClient.auth.resetPasswordForEmail(email, { redirectTo })`                                                                                                                       |
+| Update password     | `supabaseClient.auth.updateUser({ password })`                                                                                                                                           |
+| Get current session | `supabaseClient.auth.getSession()`                                                                                                                                                       |
+| Verify user JWT     | `supabaseClient.auth.getUser()` (validates with Supabase server)                                                                                                                         |
+| Delete account      | `supabaseClient.functions.invoke('delete-account', { method: 'DELETE', body: { confirmation } })` — requires `confirmation === 'DELETE MY ACCOUNT'`; redirects to `/register` on success |
 
 ## onAuthStateChange Events
 

@@ -52,9 +52,9 @@ export interface ProfileDTO extends Omit<
   'default_what' | 'default_speed' | 'default_type' | 'default_budget'
 > {
   default_what: WhatPreference[]
-  default_speed: SpeedPreference
-  default_type: TypePreference
-  default_budget: BudgetPreference
+  default_speed: SpeedPreference | null
+  default_type: TypePreference | null
+  default_budget: BudgetPreference | null
 }
 
 /**
