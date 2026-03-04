@@ -4,6 +4,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     guestOnly?: boolean
+    title?: string
   }
 }
 
@@ -42,7 +43,7 @@ const routes = [
     path: '/trips/:id',
     name: 'trip-detail',
     component: () => import('@/views/TripView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, title: 'Trip Details' },
     beforeEnter: (to: any) => {
       const tripId = parseInt(to.params.id as string, 10)
       if (isNaN(tripId) || tripId <= 0) {

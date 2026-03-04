@@ -8,6 +8,7 @@ import { useProfileStore } from '@/stores/profile.store'
 import { useQuotaStore } from '@/stores/quota.store'
 import { useToast } from '@/components/ui/toast/use-toast'
 import TripEditor from '@/components/TripEditor.vue'
+import TripHeader from '@/components/TripHeader.vue'
 import PlanPanel from '@/components/PlanPanel.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
@@ -66,9 +67,20 @@ watch(
   { immediate: true }
 )
 
-function handleFieldsChange(fields: PendingFields) {
-  pendingFields.value = fields
+function handleFieldsChange(fields: Omit<PendingFields, 'title'>) {
+  pendingFields.value = {
+    title: pendingFields.value?.title ?? tripStore.currentTrip?.title ?? '',
+    ...fields
+  }
 }
+
+function handleTitleChange(newTitle: string) {
+  if (pendingFields.value) {
+    pendingFields.value = { ...pendingFields.value, title: newTitle }
+  }
+}
+
+const isNoteOverLimit = computed(() => (pendingFields.value?.note_body?.length ?? 0) > 10000)
 
 const isDirty = computed(() => {
   const t = tripStore.currentTrip
@@ -249,21 +261,18 @@ async function handleNoteBlur() {
 
     <!-- Main Content -->
     <div v-else-if="tripStore.currentTrip" class="space-y-6">
-      <!-- Trip Header with Theme Toggle -->
-      <div class="rounded-lg border bg-card p-4">
-        <div class="flex items-start justify-between gap-4">
-          <div class="flex-1">
-            <h1 class="text-2xl font-bold">{{ tripStore.currentTrip.title }}</h1>
-            <p class="mt-1 text-sm text-muted-foreground">
-              Status: {{ tripStore.currentTrip.status }}
-            </p>
-          </div>
-          <div class="flex items-center gap-2">
-            <span v-if="tripStore.isSaving" class="text-xs text-muted-foreground">Saving…</span>
-            <ThemeToggle />
-          </div>
-        </div>
-      </div>
+      <!-- Trip Header -->
+      <TripHeader
+        :title="pendingFields?.title ?? tripStore.currentTrip.title"
+        :status="tripStore.currentTrip.status"
+        :updated-at="tripStore.currentTrip.updated_at"
+        :is-saving="tripStore.isSaving"
+        @update:title="handleTitleChange"
+      >
+        <template #actions>
+          <ThemeToggle />
+        </template>
+      </TripHeader>
 
       <!-- Responsive Grid Layout -->
       <div class="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
@@ -272,6 +281,7 @@ async function handleNoteBlur() {
           <TripEditor
             :trip="tripStore.currentTrip"
             :default-preferences="profileStore.defaultPreferences"
+            :profile="profileStore.profile"
             @update:fields="handleFieldsChange"
             @blur:note="handleNoteBlur"
           />
@@ -279,7 +289,11 @@ async function handleNoteBlur() {
 
         <!-- Right Panel: Plan Panel (order-2, sticky on desktop) -->
         <div class="order-2 space-y-4 lg:sticky lg:top-4 lg:self-start">
-          <PlanPanel :trip="tripStore.currentTrip" />
+          <PlanPanel
+            :trip="tripStore.currentTrip"
+            :destination="pendingFields?.destination ?? null"
+            :is-note-over-limit="isNoteOverLimit"
+          />
         </div>
       </div>
     </div>
