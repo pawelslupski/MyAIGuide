@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const session = ref<Session | null>(null)
   const isLoading = ref(true)
+  const isPasswordRecovery = ref(false)
 
   const isAuthenticated = computed(() => !!session.value)
   const userEmail = computed(() => user.value?.email ?? null)
@@ -24,6 +25,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (event === 'SIGNED_OUT') {
         resetAllStores()
+      }
+      if (event === 'PASSWORD_RECOVERY') {
+        isPasswordRecovery.value = true
       }
     })
 
@@ -81,6 +85,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function resetPassword(email: string): Promise<void> {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`
+    })
+    if (error) throw error
+  }
+
+  async function updatePassword(newPassword: string): Promise<void> {
+    const { error } = await supabaseClient.auth.updateUser({ password: newPassword })
+    if (error) throw error
+  }
+
   /**
    * Reset all stores on logout to prevent data leakage between sessions.
    * Composition API stores do not support Pinia's $reset() — use explicit clear actions.
@@ -100,12 +116,15 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     session,
     isLoading,
+    isPasswordRecovery,
     isAuthenticated,
     userEmail,
     initialize,
     login,
     register,
     logout,
-    deleteAccount
+    deleteAccount,
+    resetPassword,
+    updatePassword
   }
 })

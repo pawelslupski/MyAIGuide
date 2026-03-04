@@ -16,8 +16,8 @@ import {
 import { resetPasswordSchema } from '@/lib/validation/auth.schemas'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 
-// TODO: import { useAuthStore } from '@/stores/auth.store'
-// const authStore = useAuthStore()
+import { useAuthStore } from '@/stores/auth.store'
+const authStore = useAuthStore()
 // Note: user arrives via Supabase recovery email link; token is handled by onAuthStateChange
 
 const form = reactive({
@@ -48,7 +48,7 @@ async function handleSubmit() {
 
   isLoading.value = true
   try {
-    // TODO: await authStore.updatePassword(form.password)
+    await authStore.updatePassword(form.password)
     success.value = true
   } catch (err: any) {
     errorMessage.value = mapResetError(err)

@@ -16,8 +16,8 @@ import {
 import { forgotPasswordSchema } from '@/lib/validation/auth.schemas'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 
-// TODO: import { useAuthStore } from '@/stores/auth.store'
-// const authStore = useAuthStore()
+import { useAuthStore } from '@/stores/auth.store'
+const authStore = useAuthStore()
 
 const form = reactive({ email: '' })
 const fieldErrors = reactive<{ email?: string }>({})
@@ -37,7 +37,7 @@ async function handleSubmit() {
 
   isLoading.value = true
   try {
-    // TODO: await authStore.resetPassword(form.email)
+    await authStore.resetPassword(form.email)
     submitted.value = true
   } catch (_err: any) {
     // Always show success (security best practice — do not reveal if email exists)
