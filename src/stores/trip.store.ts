@@ -282,7 +282,7 @@ export const useTripStore = defineStore('trip', () => {
    * Delete a trip by ID with ownership validation, then remove it from the local list.
    * Uses the two-step fetch→ownership-check→delete pattern (see trip.service.ts).
    */
-  async function deleteTrip(tripId: number): Promise<void> {
+  async function deleteTripById(tripId: number): Promise<void> {
     try {
       const {
         data: { user }
@@ -442,6 +442,6 @@ export const useTripStore = defineStore('trip', () => {
     createTrip,
     clearTrip,
     fetchTrips,
-    deleteTrip
+    deleteTripById
   }
 })

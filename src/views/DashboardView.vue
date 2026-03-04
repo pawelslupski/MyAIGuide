@@ -26,25 +26,26 @@ const tripStore = useTripStore()
 const profileStore = useProfileStore()
 const { toast } = useToast()
 
+const currentPage = ref<number>(1)
 const showDeleteDialog = ref(false)
-const tripIdToDelete = ref<number | null>(null)
+const deletingTripId = ref<number | null>(null)
 const isDeleting = ref(false)
 
 function openDeleteDialog(tripId: number) {
-  tripIdToDelete.value = tripId
+  deletingTripId.value = tripId
   showDeleteDialog.value = true
 }
 
 function cancelDelete() {
   showDeleteDialog.value = false
-  tripIdToDelete.value = null
+  deletingTripId.value = null
 }
 
 async function confirmDelete() {
-  if (tripIdToDelete.value === null) return
+  if (deletingTripId.value === null) return
   isDeleting.value = true
   try {
-    await tripStore.deleteTrip(tripIdToDelete.value)
+    await tripStore.deleteTripById(deletingTripId.value)
     toast({
       title: 'Trip deleted',
       description: 'The trip has been permanently removed.',
@@ -60,7 +61,7 @@ async function confirmDelete() {
   } finally {
     isDeleting.value = false
     showDeleteDialog.value = false
-    tripIdToDelete.value = null
+    deletingTripId.value = null
   }
 }
 
@@ -71,7 +72,7 @@ async function createAndNavigate() {
   } catch {
     toast({
       title: 'Error',
-      description: 'Failed to create trip.',
+      description: 'Failed to create trip. Please try again.',
       variant: 'destructive',
       duration: 5000
     })
@@ -79,11 +80,12 @@ async function createAndNavigate() {
 }
 
 async function handlePageChange(page: number) {
+  currentPage.value = page
   await tripStore.fetchTrips(page)
 }
 
 async function retryFetch() {
-  await tripStore.fetchTrips(tripStore.tripsPagination.current_page)
+  await tripStore.fetchTrips(currentPage.value)
 }
 
 onMounted(async () => {
@@ -108,7 +110,7 @@ onMounted(async () => {
 
     <!-- Page header -->
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-2xl font-bold">My Trips</h1>
+      <h2 class="text-2xl font-bold">My Trips</h2>
       <Button
         v-if="tripStore.trips.length > 0"
         :disabled="tripStore.isCreatingTrip"
@@ -136,8 +138,8 @@ onMounted(async () => {
     <Alert v-else-if="tripStore.tripsError" variant="destructive">
       <AlertCircle class="h-4 w-4" />
       <AlertTitle>Failed to load trips</AlertTitle>
-      <AlertDescription>{{ tripStore.tripsError.error.message }}</AlertDescription>
-      <Button variant="outline" size="sm" class="mt-3" @click="retryFetch">Retry</Button>
+      <AlertDescription>Failed to load your trips</AlertDescription>
+      <Button variant="outline" size="sm" class="mt-3" @click="retryFetch">Try again</Button>
     </Alert>
 
     <!-- Empty state -->
