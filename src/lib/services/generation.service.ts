@@ -32,7 +32,7 @@ export async function checkGenerationQuota(userId: string): Promise<QuotaCheckRe
     .from('plan_generations')
     .select('created_at')
     .eq('user_id', userId)
-    .in('status', ['success', 'api_error'])
+    .eq('status', 'success')
     .gte('created_at', new Date(Date.now() - QUOTA_WINDOW_HOURS * 60 * 60 * 1000).toISOString())
     .order('created_at', { ascending: true })
 
@@ -190,7 +190,7 @@ export async function callAIService(params: AIPlanParams): Promise<AIServiceResp
   )
 
   const { data, error } = await supabaseClient.functions.invoke('generate-plan', {
-    body: { prompt, language: params.language }
+    body: { prompt, language: params.language, tripId: params.tripId }
   })
 
   if (error) {

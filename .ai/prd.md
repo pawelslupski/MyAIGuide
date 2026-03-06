@@ -36,10 +36,8 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
 - Domyślne preferencje stylu podróży: Co? / Jak szybko? / Jaki typ? / Budżet.
   1. Co? (Wielokrotny wybór): [🌲 Przyroda] [🏛️ Kultura/Muzea] [🏖️ Plaża/Relaks] [🏙️ City Break] [🍽️ Foodie].
   2. Jak szybko? (Jeden wybór): [🐢 Slow / Chill] [⚖️ Balans] [🐇 Intensywnie / Max atrakcji].
-  3. Jaki typ? (Jeden wybór): [📍 Baza wypadowa (jedno miejsce, atrakcje w sensownym zasięgu),
-  4. Baza wypadowa(jedno miejsce) z fakultatywnymi dalszymi
-     wycieczkami/wypadami] [🚗 Roadtrip (ciągle w ruchu, kilka miejsc do spania)].
-  5. Budżet - oszczędnie €, umiarkowanie €€, luksusowo €€€
+  3. Jaki typ? (Jeden wybór): [📍 Baza wypadowa (`base` – jedno miejsce)] [📍🚗 Baza z wycieczkami (`base_with_trips` – jedno miejsce + fakultatywne wypady)] [🚗 Roadtrip (`roadtrip` – kilka miejsc do spania)].
+  4. Budżet (Jeden wybór): [💰 Oszczędnie (`budget`)] [💳 Umiarkowanie (`moderate`)] [💎 Luksusowo (`luxury`)]
 - Profil tworzony automatycznie przy rejestracji z domyślnymi wartościami preferencjami:
   Co? Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie.
 - Wszystkie preferencje powinny mieć przyjazne dla oka ikony

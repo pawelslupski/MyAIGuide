@@ -1,14 +1,16 @@
 // Supabase Edge Function: Generate Travel Plan
 // Calls OpenRouter.ai API to generate structured travel plans
 //
-// Route: POST /functions/v1/generate-travel-plan
-// Body: { "prompt": string, "language": string }
+// Route: POST /functions/v1/generate-plan
+// Headers: Authorization: Bearer <supabase_session_token>
+// Body: { "prompt": string, "language": string, "tripId": number }
 //
 // Response: { "plan": PlanJson, "model_used": string }
 //
-// This Edge Function keeps API keys secure on the server side
-// and provides structured outputs using JSON schema
+// Enforces per-user quota (10 generations / 24 h) and records every
+// attempt in plan_generations — no client-side bypass possible.
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import type {
   ValidatedInput,
   PlanJson,
@@ -26,6 +28,9 @@ const DEFAULT_MODEL = 'anthropic/claude-sonnet-4-6'
 const REQUEST_TIMEOUT_MS = 60000 // 60 seconds
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 8000 // Increased for longer plans and non-English languages
+
+const QUOTA_LIMIT = 10
+const QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000
 
 // CORS headers for frontend communication
 const corsHeaders = {
@@ -49,7 +54,37 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // 1. Parse request body
+    // 1. Authenticate user — reject unauthenticated requests immediately
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
+    )
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return createErrorResponse(401, 'UNAUTHORIZED', 'Authentication required')
+    }
+
+    // 2. Server-side quota check — cannot be bypassed by the client
+    const cutoff = new Date(Date.now() - QUOTA_WINDOW_MS).toISOString()
+    const { data: usedRows, error: quotaError } = await supabase
+      .from('plan_generations')
+      .select('id')
+      .eq('user_id', user.id)
+      .in('status', ['success', 'api_error'])
+      .gte('created_at', cutoff)
+
+    if (quotaError) {
+      console.error('[ERROR] Quota check failed:', quotaError.message)
+      return createErrorResponse(500, 'INTERNAL_ERROR', 'Failed to verify generation quota')
+    }
+
+    if ((usedRows?.length ?? 0) >= QUOTA_LIMIT) {
+      return createErrorResponse(429, 'QUOTA_EXCEEDED', 'Generation quota exceeded. Try again in 24 hours.')
+    }
+
+    // 3. Parse request body
     let body: any
     try {
       body = await req.json()
@@ -57,7 +92,13 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(400, 'VALIDATION_ERROR', 'Invalid JSON in request body')
     }
 
-    // 2. Validate input
+    // 4. Validate tripId
+    const tripId = body?.tripId
+    if (!tripId || typeof tripId !== 'number' || !Number.isInteger(tripId) || tripId <= 0) {
+      return createErrorResponse(400, 'VALIDATION_ERROR', 'Field "tripId" is required and must be a positive integer')
+    }
+
+    // 5. Validate prompt + language
     let validatedInput: ValidatedInput
     try {
       validatedInput = validateInput(body)
@@ -72,81 +113,79 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[INFO] Generating plan - Language: ${language}, Model: ${DEFAULT_MODEL}`)
 
-    // 3. Build OpenRouter request
+    // 6. Build OpenRouter request
     const openRouterRequest = buildOpenRouterRequest(prompt, language)
 
-    // 4. Call OpenRouter API
+    // 7. Call OpenRouter API
     let openRouterResponse: OpenRouterResponse
     try {
       openRouterResponse = await callOpenRouterAPI(openRouterRequest)
     } catch (error) {
+      // Record api_error before returning
+      await supabase.from('plan_generations').insert({
+        user_id: user.id,
+        trip_id: tripId,
+        status: 'api_error',
+        error_message: error instanceof Error ? error.message : 'Unknown error'
+      })
+
       if (error instanceof Error) {
-        // Parse error type from message
         if (error.message.startsWith('AUTHENTICATION_ERROR:')) {
-          return createErrorResponse(
-            401,
-            'AUTHENTICATION_ERROR',
-            'OpenRouter API authentication failed. Please check API key configuration.'
-          )
+          return createErrorResponse(401, 'AUTHENTICATION_ERROR', 'OpenRouter API authentication failed. Please check API key configuration.')
         }
         if (error.message.startsWith('RATE_LIMIT_ERROR:')) {
           const retryMatch = error.message.match(/Retry after (\d+)s/)
           const retryAfter = retryMatch ? parseInt(retryMatch[1]) : 60
-          return createErrorResponse(
-            429,
-            'RATE_LIMIT_ERROR',
-            'AI service rate limit exceeded. Please try again later.',
-            { retry_after: retryAfter }
-          )
+          return createErrorResponse(429, 'RATE_LIMIT_ERROR', 'AI service rate limit exceeded. Please try again later.', { retry_after: retryAfter })
         }
         if (error.message.startsWith('TIMEOUT_ERROR:')) {
-          return createErrorResponse(
-            504,
-            'TIMEOUT_ERROR',
-            'Request timeout. Please try again with a simpler prompt.',
-            { timeout_ms: REQUEST_TIMEOUT_MS }
-          )
+          return createErrorResponse(504, 'TIMEOUT_ERROR', 'Request timeout. Please try again with a simpler prompt.', { timeout_ms: REQUEST_TIMEOUT_MS })
         }
         if (error.message.startsWith('SERVICE_UNAVAILABLE:')) {
-          return createErrorResponse(
-            503,
-            'SERVICE_UNAVAILABLE',
-            'AI service is temporarily unavailable. Please try again later.'
-          )
+          return createErrorResponse(503, 'SERVICE_UNAVAILABLE', 'AI service is temporarily unavailable. Please try again later.')
         }
       }
       throw error
     }
 
-    // 5. Parse response
+    // 8. Parse response
     let parsedResponse: ParsedResponse
     try {
       parsedResponse = parseOpenRouterResponse(openRouterResponse)
     } catch (error) {
+      await supabase.from('plan_generations').insert({
+        user_id: user.id,
+        trip_id: tripId,
+        status: 'api_error',
+        error_message: error instanceof Error ? error.message : 'Invalid response from AI'
+      })
+
       if (error instanceof Error && error.message.startsWith('AI_API_ERROR:')) {
         const errorMessage = error.message.replace('AI_API_ERROR: ', '')
-        return createErrorResponse(
-          502,
-          'AI_API_ERROR',
-          'Failed to generate valid plan. Please try again.',
-          { reason: errorMessage }
-        )
+        return createErrorResponse(502, 'AI_API_ERROR', 'Failed to generate valid plan. Please try again.', { reason: errorMessage })
       }
       throw error
     }
 
-    // 6. Return success response
+    // 9. Record successful generation
     console.log(`[INFO] Plan generated successfully - Model: ${parsedResponse.model_used}`)
+    const { error: insertError } = await supabase.from('plan_generations').insert({
+      user_id: user.id,
+      trip_id: tripId,
+      status: 'success',
+      model_name: parsedResponse.model_used
+    })
+    if (insertError) {
+      console.error('[ERROR] Failed to record generation:', insertError.message)
+    }
+
+    // 10. Return success response
     return new Response(JSON.stringify(parsedResponse), {
       status: 200,
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json'
-      }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch (error) {
-    // Catch-all for unexpected errors
     console.error('[ERROR] Unexpected error:', error)
     return createErrorResponse(500, 'INTERNAL_ERROR', 'An unexpected error occurred')
   }

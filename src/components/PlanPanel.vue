@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { usePlanStore } from '@/stores/plan.store'
 import { useQuotaStore } from '@/stores/quota.store'
 import { Button } from '@/components/ui/button'
@@ -10,12 +10,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger
-} from '@/components/ui/accordion'
-import { Loader2, Sparkles, Check, X, AlertCircle, AlertTriangle, Calendar } from 'lucide-vue-next'
+  Loader2,
+  Sparkles,
+  Check,
+  X,
+  AlertCircle,
+  AlertTriangle,
+  Calendar,
+  Sunrise,
+  Sun,
+  Moon
+} from 'lucide-vue-next'
 import { useToast } from '@/components/ui/toast/use-toast'
 import type { TripDTO, PlanJson, Activity } from '@/types'
 
@@ -49,12 +54,29 @@ watch(
     if (candidate && !prevCandidate) {
       // New candidate – take a deep copy so local edits don't mutate the store directly
       localPlan.value = JSON.parse(JSON.stringify(candidate.plan))
+      // Auto-resize all textareas after the DOM updates
+      nextTick(() => {
+        document
+          .querySelectorAll<HTMLTextAreaElement>('.plan-description-textarea')
+          .forEach(fitTextarea)
+      })
     } else if (!candidate) {
       localPlan.value = null
     }
   },
   { immediate: true }
 )
+
+function fitTextarea(el: HTMLTextAreaElement) {
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
+function handleDescriptionInput(event: Event, dayIndex: number, actIndex: number) {
+  const el = event.target as HTMLTextAreaElement
+  fitTextarea(el)
+  updateActivityField(dayIndex, actIndex, 'description', el.value)
+}
 
 // Computed states
 const hasSavedPlan = computed(() => props.trip.plan_json !== null)
@@ -81,15 +103,6 @@ const planDays = computed(() => {
 
 const hasPlan = computed(() => hasSavedPlan.value || hasCandidate.value)
 
-// Color class for the quota progress bar fill
-const quotaBarColor = computed(() => {
-  const used = quota.value?.used ?? 0
-  const limit = quota.value?.limit ?? 10
-  if (used >= limit) return 'bg-destructive'
-  if (used >= 8) return 'bg-amber-500'
-  return 'bg-green-500'
-})
-
 const quotaPercentage = computed(() => {
   if (!quota.value) return 0
   return Math.min(100, (quota.value.used / quota.value.limit) * 100)
@@ -115,9 +128,7 @@ async function handleSave() {
 }
 
 function handleDiscard() {
-  if (window.confirm('Are you sure? This plan will be lost.')) {
-    planStore.discardCandidate()
-  }
+  planStore.discardCandidate()
 }
 
 // Update a single field on a candidate activity and sync to the store
@@ -169,18 +180,16 @@ function formatResetDate(isoDate: string): string {
         </div>
         <!-- Generation Quota Counter -->
         <div v-if="quota" class="w-40 space-y-1" aria-live="polite">
-          <div class="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{{ quota.used }} / {{ quota.limit }} used</span>
-            <span v-if="quotaExceeded" class="text-destructive">
-              Resets in {{ formatResetDate(quota.reset_at) }}
-            </span>
-          </div>
+          <span class="text-xs text-muted-foreground"
+            >{{ quota.used }} / {{ quota.limit }} used</span
+          >
           <div class="relative h-2 w-full overflow-hidden rounded-full bg-primary/20">
-            <div
-              class="h-full transition-all"
-              :class="quotaBarColor"
-              :style="`width: ${quotaPercentage}%`"
-            />
+            <div class="h-full bg-primary transition-all" :style="`width: ${quotaPercentage}%`" />
+          </div>
+          <div v-if="quotaExceeded" class="flex justify-end">
+            <span class="text-xs text-destructive"
+              >Resets in {{ formatResetDate(quota.reset_at) }}</span
+            >
           </div>
         </div>
       </div>
@@ -242,8 +251,7 @@ function formatResetDate(isoDate: string): string {
       <!-- Unsaved Plan Candidate Banner -->
       <Alert
         v-if="hasCandidate"
-        variant="destructive"
-        class="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400"
+        class="border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary"
       >
         <AlertTriangle class="h-4 w-4" />
         <AlertTitle>Unsaved Plan</AlertTitle>
@@ -271,11 +279,9 @@ function formatResetDate(isoDate: string): string {
 
         <!-- Saved Plan Banner + Regenerate -->
         <div v-if="hasSavedPlan && !hasCandidate" class="space-y-2">
-          <Alert
-            class="border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300 [&>svg]:text-green-600 dark:[&>svg]:text-green-400"
-          >
+          <Alert class="border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary">
             <Check class="h-4 w-4" />
-            <AlertTitle>Plan saved</AlertTitle>
+            <AlertTitle class="text-primary">Plan saved</AlertTitle>
             <AlertDescription>
               Last updated {{ formatRelativeTime(trip.updated_at) }}
             </AlertDescription>
@@ -295,80 +301,75 @@ function formatResetDate(isoDate: string): string {
           <span class="text-muted-foreground">Generating your plan…</span>
         </div>
 
-        <!-- Days Accordion -->
-        <Accordion v-else-if="planDays.length" type="single" collapsible default-value="day-1">
-          <AccordionItem
+        <!-- Days Cards -->
+        <div v-else-if="planDays.length" class="space-y-6">
+          <div
             v-for="(day, dayIndex) in planDays"
             :key="day.day"
-            :value="`day-${day.day}`"
+            class="overflow-hidden rounded-xl border bg-card shadow-sm"
           >
-            <AccordionTrigger>
-              <span class="flex items-center gap-2">
-                <Calendar class="h-4 w-4 text-primary" />
-                Day {{ day.day }}
-                <span class="text-xs font-normal text-muted-foreground">
-                  — {{ day.activities.length }}
-                  {{ day.activities.length === 1 ? 'activity' : 'activities' }}
-                </span>
+            <!-- Day header -->
+            <div class="flex items-center gap-3 border-b bg-muted/40 px-5 py-3">
+              <Calendar class="h-4 w-4 text-primary" />
+              <span class="font-semibold">Day {{ day.day }}</span>
+              <span class="text-xs text-muted-foreground">
+                {{ day.activities.length }}
+                {{ day.activities.length === 1 ? 'activity' : 'activities' }}
               </span>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div class="space-y-3">
-                <div
-                  v-for="(activity, actIndex) in day.activities"
-                  :key="actIndex"
-                  class="border-l-2 pl-4"
-                  :class="hasCandidate ? 'border-amber-300' : 'border-muted'"
-                >
-                  <div class="flex items-start gap-3">
-                    <Badge variant="outline" class="mt-1 shrink-0 text-xs">
-                      {{ activity.timeOfDay }}
-                    </Badge>
-                    <div class="min-w-0 flex-1 space-y-2">
-                      <!-- Editable fields in candidate mode -->
-                      <template v-if="hasCandidate">
-                        <Input
-                          :value="activity.locationName"
-                          class="font-medium"
-                          placeholder="Location name"
-                          @change="
-                            updateActivityField(
-                              dayIndex,
-                              actIndex,
-                              'locationName',
-                              ($event.target as HTMLInputElement).value
-                            )
-                          "
-                        />
-                        <Textarea
-                          :value="activity.description"
-                          class="min-h-[60px] resize-none text-sm text-muted-foreground"
-                          placeholder="Activity description"
-                          @change="
-                            updateActivityField(
-                              dayIndex,
-                              actIndex,
-                              'description',
-                              ($event.target as HTMLTextAreaElement).value
-                            )
-                          "
-                        />
-                      </template>
-                      <!-- Read-only in saved mode -->
-                      <template v-else>
-                        <h4 class="font-medium">{{ activity.locationName }}</h4>
-                        <p class="text-sm text-muted-foreground">{{ activity.description }}</p>
-                      </template>
-                      <Badge variant="secondary" class="text-xs">
-                        {{ activity.categoryTag.replace('_', ' ') }}
-                      </Badge>
-                    </div>
-                  </div>
+            </div>
+
+            <!-- Activities -->
+            <div class="divide-y">
+              <div v-for="(activity, actIndex) in day.activities" :key="actIndex" class="px-5 py-4">
+                <!-- Time of day label -->
+                <div class="mb-3 flex items-center gap-2">
+                  <Sunrise v-if="activity.timeOfDay === 'morning'" class="h-4 w-4 text-primary" />
+                  <Sun
+                    v-else-if="activity.timeOfDay === 'afternoon'"
+                    class="h-4 w-4 text-primary"
+                  />
+                  <Moon v-else class="h-4 w-4 text-primary" />
+                  <span class="text-xs font-semibold uppercase tracking-widest text-primary">
+                    {{ activity.timeOfDay }}
+                  </span>
                 </div>
+
+                <!-- Editable fields in candidate mode -->
+                <template v-if="hasCandidate">
+                  <Input
+                    :model-value="activity.locationName"
+                    class="mb-2 border-0 bg-transparent p-0 font-semibold shadow-none focus-visible:ring-0"
+                    placeholder="Location name"
+                    @update:model-value="
+                      updateActivityField(dayIndex, actIndex, 'locationName', String($event))
+                    "
+                  />
+                  <textarea
+                    :value="activity.description"
+                    class="plan-description-textarea mb-3 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-relaxed text-muted-foreground outline-none focus:outline-none"
+                    placeholder="Activity description"
+                    rows="1"
+                    @input="handleDescriptionInput($event, dayIndex, actIndex)"
+                  />
+                </template>
+                <!-- Read-only in saved mode -->
+                <template v-else>
+                  <h4 class="mb-1 font-semibold leading-snug">{{ activity.locationName }}</h4>
+                  <p class="mb-3 text-sm leading-relaxed text-muted-foreground">
+                    {{ activity.description }}
+                  </p>
+                </template>
+
+                <Badge
+                  variant="secondary"
+                  class="border-primary/30 bg-primary/10 text-xs capitalize"
+                >
+                  {{ activity.categoryTag.replace('_', ' ') }}
+                </Badge>
               </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+            </div>
+          </div>
+        </div>
       </div>
     </CardContent>
   </Card>

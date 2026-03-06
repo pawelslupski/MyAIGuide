@@ -17,10 +17,8 @@ const emit = defineEmits<{
 }>()
 
 function statusClass(status: TripStatus): string {
-  if (status === 'CONFIRMED')
-    return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400'
-  if (status === 'DRAFT')
-    return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400'
+  if (status === 'CONFIRMED') return 'bg-primary/10 text-primary border-primary/30'
+  if (status === 'DRAFT') return 'bg-primary/10 text-primary border-primary/30'
   return ''
 }
 
@@ -44,10 +42,10 @@ function formatRelativeTime(isoDate: string): string {
     <div class="flex items-center justify-between gap-4">
       <div class="flex min-w-0 flex-1 items-center gap-3">
         <Input
-          :value="title"
+          :model-value="title"
           class="flex-1 text-xl font-bold"
           placeholder="Enter trip title"
-          @input="emit('update:title', ($event.target as HTMLInputElement).value)"
+          @update:model-value="emit('update:title', String($event))"
         />
         <Badge variant="outline" :class="statusClass(status)">{{ status }}</Badge>
       </div>

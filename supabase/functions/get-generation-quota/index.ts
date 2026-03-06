@@ -1,7 +1,7 @@
 // Supabase Edge Function: Get Generation Quota
 // Returns the authenticated user's plan generation usage for the rolling 24-hour window.
 //
-// Route: GET /functions/v1/get-generation-quota
+// Route: POST /functions/v1/get-generation-quota
 // Headers: Authorization: Bearer <supabase_session_token>
 //
 // Response: GenerationQuotaDTO { used, limit, remaining, reset_at }
@@ -37,9 +37,9 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  // Only allow GET
-  if (req.method !== 'GET') {
-    return createErrorResponse(405, 'METHOD_NOT_ALLOWED', 'Only GET method is allowed')
+  // Only allow POST (supabaseClient.functions.invoke always sends POST)
+  if (req.method !== 'POST') {
+    return createErrorResponse(405, 'METHOD_NOT_ALLOWED', 'Only POST method is allowed')
   }
 
   try {

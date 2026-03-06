@@ -121,15 +121,15 @@ tables reference `users(id)` via foreign keys.
 
 **Purpose:** Track AI plan generation attempts for rate limiting and diagnostics.
 
-| Column          | Type         | Constraints                                                              | Description                               |
-| --------------- | ------------ | ------------------------------------------------------------------------ | ----------------------------------------- |
-| `id`            | bigserial    | PRIMARY KEY                                                              | Generation record identifier              |
-| `user_id`       | uuid         | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                    | User who triggered generation             |
-| `trip_id`       | bigint       | NOT NULL, REFERENCES trips(id) ON DELETE CASCADE                         | Trip for which plan was generated         |
-| `status`        | varchar(20)  | NOT NULL, CHECK (status IN ('success', 'api_error', 'validation_error')) | Generation outcome                        |
-| `model_name`    | varchar(100) |                                                                          | AI model used (NULL for validation_error) |
-| `error_message` | text         |                                                                          | Error details (NULL for successful runs)  |
-| `created_at`    | timestamptz  | NOT NULL DEFAULT now()                                                   | Generation attempt timestamp              |
+| Column          | Type         | Constraints                                                              | Description                                           |
+| --------------- | ------------ | ------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `id`            | bigserial    | PRIMARY KEY                                                              | Generation record identifier                          |
+| `user_id`       | uuid         | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                    | User who triggered generation                         |
+| `trip_id`       | bigint       | NOT NULL                                                                 | Trip for which plan was generated (no FK — see §6.13) |
+| `status`        | varchar(20)  | NOT NULL, CHECK (status IN ('success', 'api_error', 'validation_error')) | Generation outcome                                    |
+| `model_name`    | varchar(100) |                                                                          | AI model used (NULL for validation_error)             |
+| `error_message` | text         |                                                                          | Error details (NULL for successful runs)              |
+| `created_at`    | timestamptz  | NOT NULL DEFAULT now()                                                   | Generation attempt timestamp                          |
 
 **Notes:**
 
@@ -157,7 +157,10 @@ tables reference `users(id)` via foreign keys.
 **Cascade deletion:**
 
 - Deleting a user from `users` cascades to `profiles`, `trips`, and `plan_generations`
-- Deleting a trip cascades to its `plan_generations` records
+- Deleting a **trip** does **not** cascade to `plan_generations` — the FK constraint was intentionally dropped
+  (migration `20260306000000_fix_plan_generations_trip_cascade`). `trip_id` is kept as a plain `bigint` for
+  diagnostic/history purposes. This prevents a quota-bypass attack where deleting a trip would erase generation
+  records and allow unlimited re-generation.
 
 ---
 
@@ -464,6 +467,18 @@ Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie."
   - Prevents unauthorized access even if application logic has bugs
   - Aligns with PRD requirement US-003 (data isolation)
 
+### 6.13 Dropped FK on `plan_generations.trip_id`
+
+- **Decision:** Remove the `REFERENCES trips(id) ON DELETE CASCADE` foreign key from `plan_generations.trip_id`
+  (migration `20260306000000_fix_plan_generations_trip_cascade`).
+- **Rationale:** With the cascade in place, deleting a trip would delete its generation records, allowing a user to
+  bypass the 10-generations/24h quota by repeatedly creating and deleting trips. Dropping the FK keeps generation
+  records intact for accurate rate limiting even after the associated trip is deleted.
+- **Trade-off:** `trip_id` becomes an orphaned reference after trip deletion; this is acceptable because the column
+  is used for diagnostics only and is never joined from the UI.
+
+---
+
 ### 6.12 Conditional Dietary Preferences Description
 
 - **Decision:** Add `dietary_preferences_description` text column to `profiles` with a conditional CHECK constraint.
@@ -488,7 +503,7 @@ Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie."
 5. Profile auto-creation trigger
 6. RLS disable/enable policies
 7. Profile preference column defaults
-8.
+8. `20260306000000_fix_plan_generations_trip_cascade` — drop `plan_generations.trip_id` FK to prevent quota bypass
 
 ---
 

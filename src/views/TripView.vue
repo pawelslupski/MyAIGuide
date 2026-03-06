@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { useDebounceFn } from '@vueuse/core'
 import { useTripStore } from '@/stores/trip.store'
 import { usePlanStore } from '@/stores/plan.store'
@@ -145,20 +154,36 @@ async function initializeView() {
 /**
  * Navigation guard - warn about unsaved trip edits or unsaved plan candidate
  */
-onBeforeRouteLeave((_to, _from, next) => {
+const showLeaveDialog = ref(false)
+let leaveResolve: ((confirmed: boolean) => void) | null = null
+
+function confirmLeave() {
+  showLeaveDialog.value = false
+  leaveResolve?.(true)
+}
+
+function cancelLeave() {
+  showLeaveDialog.value = false
+  leaveResolve?.(false)
+}
+
+onBeforeRouteLeave(async (_to, _from, next) => {
   const hasUnsaved = isDirty.value || planStore.hasCandidate
-  if (hasUnsaved) {
-    const confirmed = window.confirm(
-      'You have unsaved changes. Are you sure you want to leave? Your changes will be lost.'
-    )
-    if (confirmed) {
-      planStore.discardCandidate()
-      next()
-    } else {
-      next(false)
-    }
-  } else {
+  if (!hasUnsaved) {
     next()
+    return
+  }
+
+  const confirmed = await new Promise<boolean>((resolve) => {
+    leaveResolve = resolve
+    showLeaveDialog.value = true
+  })
+
+  if (confirmed) {
+    planStore.discardCandidate()
+    next()
+  } else {
+    next(false)
   }
 })
 
@@ -306,4 +331,27 @@ async function handleNoteBlur() {
       </div>
     </div>
   </div>
+
+  <!-- Unsaved changes navigation guard dialog -->
+  <Dialog
+    :open="showLeaveDialog"
+    @update:open="
+      (val) => {
+        if (!val) cancelLeave()
+      }
+    "
+  >
+    <DialogContent class="sm:max-w-sm">
+      <DialogHeader>
+        <DialogTitle>Leave without saving?</DialogTitle>
+        <DialogDescription>
+          You have unsaved changes. If you leave now, they will be lost.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter class="gap-3">
+        <Button variant="outline" @click="cancelLeave">Stay</Button>
+        <Button @click="confirmLeave">Leave</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

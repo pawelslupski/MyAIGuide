@@ -157,10 +157,12 @@ export const usePlanStore = defineStore('plan', () => {
         dietaryPreferencesDescription: profileStore.profile?.dietary_preferences_description ?? null
       }
 
-      // 10. Call AI service — record api_error and throw 502 on Edge Function / network failure
+      // 10. Call AI service — quota check + generation recording are enforced server-side
+      //     in the generate-plan Edge Function; api_error handling is also server-side.
       let rawResponse: AIServiceResponse
       try {
         rawResponse = await callAIService({
+          tripId: validTripId,
           language,
           noteBody: trip.note_body ?? '',
           destination: trip.destination,
@@ -168,12 +170,6 @@ export const usePlanStore = defineStore('plan', () => {
           tripPreferences
         })
       } catch (aiError) {
-        await recordGenerationAttempt({
-          userId,
-          tripId: validTripId,
-          status: 'api_error',
-          errorMessage: aiError instanceof Error ? aiError.message : 'Unknown error'
-        })
         throw createAIApiError(aiError instanceof Error ? aiError.message : undefined)
       }
 
@@ -190,21 +186,18 @@ export const usePlanStore = defineStore('plan', () => {
         throw createAIResponseValidationError(zodErr instanceof Error ? zodErr.message : undefined)
       }
 
-      // 12. Record successful generation
-      await recordGenerationAttempt({
-        userId,
-        tripId: validTripId,
-        status: 'success',
-        modelName: rawResponse.model_used
-      })
-
       // 13. Refresh quota via the dedicated Edge Function so generationQuota store
       //     state is updated and the UI counter reflects the new usage immediately.
       await fetchGenerationQuota()
 
       // 14. Store candidate in memory (not saved to database yet).
       //     Use the freshly fetched generationQuota snapshot for the embedded quota field.
-      const quota = generationQuota.value ?? { used: 0, limit: 10, remaining: 10, reset_at: new Date(Date.now() + 86400000).toISOString() }
+      const quota = generationQuota.value ?? {
+        used: 0,
+        limit: 10,
+        remaining: 10,
+        reset_at: new Date(Date.now() + 86400000).toISOString()
+      }
       planCandidate.value = {
         plan: rawResponse.plan,
         language,

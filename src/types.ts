@@ -318,6 +318,7 @@ export interface GeneratePlanCommand {
 
 /** Input parameters passed to the OpenRouter.ai call. */
 export interface AIPlanParams {
+  tripId: number
   language: string
   noteBody: string
   destination: string

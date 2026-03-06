@@ -196,24 +196,19 @@ Four pill-toggle buttons, each with a Lucide icon:
 
 ---
 
-### 4.4 Note Editor (`TripNoteEditor.vue`)
+### 4.4 Trip Editor (`TripEditor.vue`)
 
-**Features:**
+**Single component** that merges destination, trip preferences, read-only profile flags, and trip notes. It accepts
+a `profile` prop (read-only profile flags) and a `defaultPreferences` prop (profile defaults for initialising
+preference fields).
 
-- `<Textarea>` for note content (no minimum, max 10,000 characters)
-- Real-time character counter: `N / 10,000`
-- Counter color coding (WCAG AA):
-  - Normal (`text-muted-foreground`): 0–9,000 characters
-  - Warning (`text-yellow-600`): 9,001–9,999 characters
-  - Error (`text-destructive`): ≥ 10,000 characters
-- "Generate Plan" button is disabled when character count > 10,000
-- Auto-save on blur (debounced 500 ms via `tripStore.updateTrip()`)
+**Sub-sections rendered inside `TripEditor`:**
 
----
+#### Destination
 
-### 4.5 Trip Preferences Panel (`TripPreferences.vue`)
+- `<Input>` for destination text (max 50 chars). Required before AI plan generation.
 
-**Fields in TripView (per-trip overrides):**
+#### Trip Preferences (`<Card>`)
 
 | Field             | Required for generation? | Editable at trip level?    |
 | ----------------- | ------------------------ | -------------------------- |
@@ -225,83 +220,85 @@ Four pill-toggle buttons, each with a Lucide icon:
 | Trip type         | No                       | ✅ Yes (overrides profile) |
 | Budget            | No                       | ✅ Yes (overrides profile) |
 
-**Read-only at trip level** (always sourced from profile, shown for context only):
+**Trip type options (internal values):** `base` · `base_with_trips` · `roadtrip`
 
-- `has_kids`, `has_pets`, `has_mobility_issues`, `has_dietary_preferences` + description
+**Budget options (internal values):** `budget` · `moderate` · `luxury`
 
 **Inherited-value indicator:**
 
-- Values that match the current profile default are shown with a subtle muted style and a tooltip "From your profile".
-- Overridden values show a "Reset to profile default" ghost button.
+- Preference fields whose current local value matches the profile default show a `"From profile"` `<Badge>` with a
+  `<Tooltip>` explaining the inheritance. The badge disappears immediately when the user changes the selection.
+- There is **no** "Reset to profile default" button — the "From profile" badge is display-only.
+
+**Read-only profile flags** (always sourced from global profile, shown as `<Badge>` chips for context):
+
+- `has_kids` → "Traveling with kids"
+- `has_pets` → "Traveling with pets"
+- `has_mobility_issues` → "Mobility considerations"
+- `has_dietary_preferences` → "Dietary preferences" (description shown below if set)
+- When no flags are set, shows: "No special traveler flags set"
+
+#### Trip Notes (`<Card>`)
+
+- `<Textarea>` for note content (no minimum, max 10,000 characters)
+- Real-time character counter: `N / 10,000`
+- Counter color coding (WCAG AA):
+  - Normal (`text-muted-foreground`): 0–9,000 characters
+  - Warning (`text-amber-600`): 9,001–9,999 characters
+  - Error (`text-destructive`): ≥ 10,001 characters
+- Note saves **on blur** (not on every keystroke); other fields auto-save debounced 800 ms
 
 ---
 
 ### 4.6 Generation Quota Counter
 
-**Location:** Plan panel, directly above the "Generate Plan" button.
+**Location:** `PlanPanel` `<CardHeader>`, inline next to the "Travel Plan" title (top-right corner of the card).
 
-**Display format:** `X / 10 generations used in the last 24 h`
+**Display format:** `X / 10 used`
 
-**Progress bar** visualization with color states (WCAG AA):
+**Progress bar** visualization: a single custom `<div>` progress bar using `bg-primary`; no color state changes
+(always primary color). `aria-live="polite"` on the container for screen reader updates.
 
-| Used | Color                 |
-| ---- | --------------------- |
-| 0–7  | Green                 |
-| 8–9  | Yellow/amber          |
-| 10   | Red (button disabled) |
+When quota = 10/10:
 
-When quota = 10/10, show: reset time (`Resets at HH:MM`).
+- Shows "Resets in N hours" below the progress bar (relative time, not absolute `HH:MM`).
+- "Generation Limit Reached" destructive `<Alert>` is shown in the card body.
+- "Generate Plan" / "Regenerate" buttons are disabled.
 
-Data source: `quota` field returned in the `POST …/generate-plan` response; also from
-`GET /api/users/me/generation-quota` on TripView mount.
+Data source: `useQuotaStore()` (separate Pinia store). Quota is fetched on TripView mount via `quotaStore.fetchQuota()`
+and refreshed after each successful generation.
 
 ---
 
-### 4.7 Plan Candidate vs. Saved Plan (`PlanViewer.vue`)
+### 4.7 Plan Panel (`PlanPanel.vue`)
+
+**Single component** that consolidates quota counter, generation controls, plan display, and save/discard actions.
 
 **Unsaved candidate state:**
 
-- Amber alert banner: "Unsaved plan – changes will be lost on page refresh"
-- Prominent "Save Plan" button (primary, large, full-width)
-- "Discard" button (outline)
-- All activity fields editable inline (description, location name)
+- Amber-tinted `<Alert>` banner: "Unsaved Plan – changes will be lost if you leave this page"
+- "Save Plan" button (primary) + "Discard" button (outline) row
+- All activity `locationName` fields editable via inline `<Input>`, `description` fields via auto-resizing `<textarea>`
 
 **Saved plan state:**
 
-- Green alert banner: "Plan saved · Last updated [relative timestamp]"
-- "Regenerate Plan" button
-- Read-only by default; inline "Edit" affordance per activity field
+- Primary-tinted `<Alert>` banner: "Plan saved · Last updated [relative timestamp]"
+- "Regenerate" button (outline, small, top-right)
+- All fields **read-only** (rendered as `<h4>` / `<p>`) — no per-field inline edit affordance
 
 **No plan yet:**
 
-- Placeholder message with instructions to write a note and generate a plan.
-- Pre-generation checklist shown if destination is missing.
+- Centered placeholder with `<Sparkles>` icon and instructions
+- Pre-generation checklist `<div>` shown if destination is missing (amber-tinted)
+- "Generate Plan" button (large)
 
----
+**Plan day cards** (rendered directly inside `PlanPanel`, no separate component):
 
-### 4.8 Plan Day List (`PlanDayList.vue`)
-
-**Built on:** shadcn-vue Accordion
-
-**Structure per day:**
-
-```
-AccordionItem: "Day 1"
-  ├── Morning
-  │     locationName  (editable in candidate mode)
-  │     description   (editable in candidate mode)
-  │     categoryTag   badge
-  ├── Afternoon
-  └── Evening
-```
-
-Category tag badge colors (consistent icon mapping to `WhatPreference`):
-
-- `nature` → TreePine
-- `culture_museums` → Landmark
-- `beach_relax` → Waves
-- `city_break` → Building2
-- `foodie` → UtensilsCrossed
+- Custom day card: rounded border with `<Calendar>` icon + "Day N" header row, activity count subtitle
+- Activities divided by `<hr>` within each day; **not** using shadcn-vue `Accordion`
+- Per-activity: time-of-day icon (`<Sunrise>` / `<Sun>` / `<Moon>`) + uppercase time label, location name, description,
+  `<Badge>` category tag
+- Category tag `categoryTag` value displayed with `_` replaced by space, capitalized
 
 ---
 
@@ -342,27 +339,56 @@ Profile is always guaranteed to exist for authenticated users (created by DB tri
 **Actions:**
 
 - `fetchTrips(page, limit?)` – `GET /api/trips?page=N&limit=M`; builds `DashboardTripViewModel[]`
-- `fetchTripById(id)` – `GET /api/trips/:id`
+- `fetchTrip(id)` – `GET /api/trips/:id` (alias: `fetchTripById`)
 - `createTrip({ title: 'New Trip' })` – `POST /api/trips`; always called with the hardcoded default title; profile defaults applied for preference fields; returns `TripDTO` (use `trip.id` for navigation)
-- `updateTrip(id, updates)` – `PATCH /api/trips/:id`
+- `saveAllFields(id, fields)` – `PATCH /api/trips/:id`; persists all pending fields (title, destination, note, preferences) in one call
 - `deleteTripById(id)` – `DELETE /api/trips/:id`
 
 ---
 
 ### 5.4 PlanStore (`stores/plan.store.ts`)
 
-**State:** `candidate: GeneratedPlanDTO | null`, `quota: GenerationQuotaDTO | null`, `isGenerating`
+**State:**
 
-**Computed:** `hasUnsavedCandidate`
+| ref                    | Type                             | Description                                     |
+| ---------------------- | -------------------------------- | ----------------------------------------------- |
+| `planCandidate`        | `GeneratedPlanDTO \| null`       | In-memory generated plan (lost on page refresh) |
+| `isGenerating`         | `boolean`                        | AI call in progress                             |
+| `isSaving`             | `boolean`                        | Persisting plan to DB                           |
+| `generationError`      | `ErrorResponse \| null`          | Last generation error                           |
+| `saveError`            | `ErrorResponse \| null`          | Last save error                                 |
+| `tripGenerations`      | `PlanGenerationHistoryItemDTO[]` | Generation history for current trip (readonly)  |
+| `generationsError`     | `ErrorResponse \| null`          | History fetch error (readonly)                  |
+| `isLoadingGenerations` | `boolean`                        | History loading flag (readonly)                 |
+
+**Computed:** `hasCandidate` (boolean), `candidatePlan` (PlanJson | null)
 
 **Actions:**
 
-- `generatePlan(tripId)` – `POST /api/trips/:id/generate-plan`; stores result as `candidate`; updates `quota`
-- `savePlan(tripId)` – `PUT /api/trips/:id/plan`; persists `candidate`; clears `candidate`
-- `discardCandidate()` – clears `candidate` without saving
-- `fetchQuota()` – `GET /api/users/me/generation-quota`
+- `generatePlan(tripId)` – Validates destination + note length client-side, checks quota, calls AI service via Supabase
+  Edge Function (`generate-plan`), stores result in `planCandidate`. Does **not** hit a REST endpoint directly.
+- `savePlanToTrip(tripId)` – Persists `planCandidate` to DB via `trip.service`; clears candidate on success.
+- `discardCandidate()` – Clears `planCandidate` without saving.
+- `updateCandidatePlan(plan)` – Updates candidate with user-edited plan structure (inline editing).
+- `fetchGenerationQuota()` – Calls `get-generation-quota` Edge Function; results stored in `QuotaStore`.
+- `fetchTripGenerations(tripId, limit?)` – Fetches generation history for a trip.
 
 The candidate is intentionally **not persisted** to localStorage; it is lost on page refresh (per PRD §3.6 / US-016).
+
+---
+
+### 5.5 QuotaStore (`stores/quota.store.ts`)
+
+**State:** `quota: GenerationQuotaDTO | null`, `isLoading`, `error`
+
+**Computed:** `isQuotaExceeded` (boolean)
+
+**Actions:**
+
+- `fetchQuota()` – calls `get-generation-quota` Edge Function; stores result in `quota`
+
+Used by `PlanPanel` to render the progress bar and disable the generate button. Quota is fetched on TripView mount in
+parallel with trip and profile data, and refreshed after each `generatePlan()` call.
 
 ---
 
@@ -376,17 +402,22 @@ then enforces:
 - `requiresAuth: true` + not authenticated → redirect to `/login?redirect=<path>`
 - `guestOnly: true` + authenticated → redirect to `/`
 
-### 6.2 Unsaved Candidate Guard
+### 6.2 Unsaved Changes Guard
 
-In `TripView.vue`:
+In `TripView.vue`, `onBeforeRouteLeave` fires when either:
 
-```typescript
-onBeforeRouteLeave(() => {
-  if (planStore.hasUnsavedCandidate) {
-    return window.confirm('You have an unsaved plan. Leave and discard it?')
-  }
-})
+- `isDirty` is `true` (unsaved trip field edits — title, destination, note, preferences), **or**
+- `planStore.hasCandidate` is `true` (unsaved generated plan candidate)
+
+When triggered, a **shadcn-vue `<Dialog>`** is shown (not `window.confirm`):
+
 ```
+"Leave without saving?"
+"You have unsaved changes. If you leave now, they will be lost."
+[Stay]  [Leave]
+```
+
+If the user confirms leaving, `planStore.discardCandidate()` is called and navigation proceeds.
 
 ### 6.3 Trip ID Validation Guard
 
@@ -482,7 +513,7 @@ Key color assignments:
 ### 9.3 Confirmation Dialogs
 
 - Delete trip: shadcn-vue `Dialog` with "Delete trip?" + destructive button
-- Discard unsaved plan: `window.confirm` in route-leave guard (MVP; can be upgraded to Dialog later)
+- Discard unsaved plan / unsaved edits: shadcn-vue `<Dialog>` in route-leave guard ("Leave without saving?")
 - Account deletion: requires typing confirmation string "DELETE MY ACCOUNT"
 
 ---
@@ -510,18 +541,21 @@ component: () => import('@/views/DashboardView.vue')
 
 **On TripView mount:**
 
-1. `tripStore.fetchTripById(id)`
-2. `planStore.fetchQuota()`
+1. `tripStore.fetchTripById(id)` (skipped if same trip already loaded)
+2. `profileStore.fetchProfile()`
+3. `quotaStore.fetchQuota()`
+
+All three are run in parallel via `Promise.all()`.
 
 ### 10.3 Pinia Cache Invalidation
 
-| Store               | Invalidated when                                                  |
-| ------------------- | ----------------------------------------------------------------- |
-| ProfileStore        | `updateProfile()` call (replaces in-place)                        |
-| TripStore — list    | After `createTrip()` or `deleteTripById()`                        |
-| TripStore — current | After `updateTrip()` (replaces in-place)                          |
-| PlanStore candidate | On `discardCandidate()`, `savePlan()`, or route leave             |
-| PlanStore quota     | After each `generatePlan()` (quota snapshot returned in response) |
+| Store               | Invalidated when                                                        |
+| ------------------- | ----------------------------------------------------------------------- |
+| ProfileStore        | `updateProfile()` call (replaces in-place)                              |
+| TripStore — list    | After `createTrip()` or `deleteTripById()`                              |
+| TripStore — current | After `saveAllFields()` (replaces in-place)                             |
+| PlanStore candidate | On `discardCandidate()`, `savePlanToTrip()`, or route leave             |
+| QuotaStore quota    | After each `generatePlan()` via explicit `quotaStore.fetchQuota()` call |
 
 ---
 
@@ -626,14 +660,16 @@ App
 │   │   ├── TripCard × N
 │   │   └── TripListPagination
 │   ├── TripView             → /trips/:id
-│   │   ├── TripNoteEditor (Textarea + char counter)
-│   │   ├── TripPreferences (per-trip overrides + read-only profile flags)
-│   │   └── PlanViewer
-│   │       ├── GenerationQuotaCounter (Progress bar)
+│   │   ├── TripHeader (inline title Input, status Badge, updated_at timestamp, ThemeToggle slot)
+│   │   ├── TripEditor (destination, trip preferences, read-only profile flags, note Textarea + counter)
+│   │   └── PlanPanel
+│   │       ├── [CardHeader] quota progress bar (X / 10 used)
+│   │       ├── [Alert] quota exceeded / generation error / save error
 │   │       ├── [Generate / Regenerate button]
-│   │       ├── PlanDayList (Accordion × days)
-│   │       │   └── ActivityItem × N (editable in candidate mode)
-│   │       └── [Save Plan / Discard buttons]
+│   │       ├── [Alert] unsaved plan warning (candidate mode)
+│   │       ├── [Save Plan / Discard buttons] (candidate mode)
+│   │       └── Day cards × N (custom cards, no Accordion)
+│   │           └── Activity rows × N (editable Input+textarea in candidate, read-only in saved)
 │   └── NotFoundView         → /*
 └── Toaster (global toast outlet)
 ```
@@ -644,20 +680,19 @@ App
 
 ### Core Components
 
-| Component                                     | Used for                                                    |
-| --------------------------------------------- | ----------------------------------------------------------- |
-| `Card / CardHeader / CardTitle / CardContent` | Profile panel, trip cards, plan day items                   |
-| `Button`                                      | All actions; variants: default, outline, ghost, destructive |
-| `Badge`                                       | Trip status, category tags, time-of-day labels              |
-| `Alert / AlertTitle / AlertDescription`       | Unsaved plan warning, saved plan confirmation, error states |
-| `Dialog / DialogContent / DialogFooter`       | Delete trip confirmation, account deletion                  |
-| `Toast / Toaster`                             | All transient notifications                                 |
-| `Accordion / AccordionItem`                   | Plan day expansion in PlanDayList                           |
-| `Textarea`                                    | Note editor, dietary description                            |
-| `Input`                                       | Trip title, destination, account deletion confirmation      |
-| `Progress`                                    | Quota counter visualization                                 |
-| `Skeleton`                                    | Loading placeholders (profile panel, trip list)             |
-| `Separator`                                   | Visual dividers in panels                                   |
+| Component                                     | Used for                                                                                                               |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `Card / CardHeader / CardTitle / CardContent` | Profile panel, trip cards, plan day items                                                                              |
+| `Button`                                      | All actions; variants: default, outline, ghost, destructive                                                            |
+| `Badge`                                       | Trip status, category tags, time-of-day labels                                                                         |
+| `Alert / AlertTitle / AlertDescription`       | Unsaved plan warning, saved plan confirmation, error states                                                            |
+| `Dialog / DialogContent / DialogFooter`       | Delete trip confirmation, account deletion, unsaved-changes guard                                                      |
+| `Toast / Toaster`                             | All transient notifications                                                                                            |
+| `Textarea`                                    | Note editor, dietary description                                                                                       |
+| `Input`                                       | Trip title (inline in TripHeader), destination, activity location name (candidate mode), account deletion confirmation |
+| `Tooltip / TooltipProvider / TooltipContent`  | "From profile" inherited-value badge explanations in TripEditor                                                        |
+| `Skeleton`                                    | Loading placeholders (profile panel, trip list)                                                                        |
+| `Separator`                                   | Visual dividers in panels                                                                                              |
 
 ### Form Components
 

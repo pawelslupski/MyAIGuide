@@ -189,15 +189,15 @@ const isWhatInherited = computed(() => {
   return sorted(localWhat.value) === sorted(profileWhat)
 })
 
-// Handlers for number inputs (convert NaN from empty field → null)
-function handleNumDaysChange(e: any) {
-  const val = e.target.valueAsNumber
-  localNumDays.value = Number.isNaN(val) ? null : val
+// Handlers for number inputs (convert string from model-value update → null or integer)
+function handleNumDaysInput(val: string | number | undefined) {
+  const num = val === '' || val === undefined || val === null ? null : Number(val)
+  localNumDays.value = num === null || Number.isNaN(num) ? null : num
 }
 
-function handleNumPeopleChange(e: any) {
-  const val = e.target.valueAsNumber
-  localNumPeople.value = Number.isNaN(val) ? null : val
+function handleNumPeopleInput(val: string | number | undefined) {
+  const num = val === '' || val === undefined || val === null ? null : Number(val)
+  localNumPeople.value = num === null || Number.isNaN(num) ? null : num
 }
 
 // Apply profile defaults when defaultPreferences arrives or changes (e.g. profile loaded after mount)
@@ -273,13 +273,13 @@ watch(
             <Label for="num-days">Trip Duration (days)</Label>
             <Input
               id="num-days"
-              :value="localNumDays ?? undefined"
+              :model-value="localNumDays ?? undefined"
               type="number"
               min="1"
               max="30"
               placeholder="e.g. 7"
               class="w-32"
-              @change="handleNumDaysChange"
+              @update:model-value="handleNumDaysInput"
             />
           </div>
 
@@ -288,13 +288,13 @@ watch(
             <Label for="num-people">Number of People</Label>
             <Input
               id="num-people"
-              :value="localNumPeople ?? undefined"
+              :model-value="localNumPeople ?? undefined"
               type="number"
               min="1"
               max="20"
               placeholder="e.g. 2"
               class="w-32"
-              @change="handleNumPeopleChange"
+              @update:model-value="handleNumPeopleInput"
             />
           </div>
 
