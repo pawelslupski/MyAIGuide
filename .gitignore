@@ -34,6 +34,7 @@ dist-ssr
 .env.keys
 .env.local
 .env.*.local
+.env.test
 
 #claude
 /.claude/settings.json
