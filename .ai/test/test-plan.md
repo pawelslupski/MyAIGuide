@@ -47,8 +47,8 @@ MyAIGuide to jednostronicowa aplikacja webowa (SPA) umożliwiająca szybkie twor
 **Zakres:** wyłącznie czyste funkcje bez I/O i wywołań sieciowych
 **Pokrycie:**
 
-- `src/lib/services/generation.service.ts` – `detectLanguage` (pusty string, mieszany tekst EN+PL, truncacja do 1000 znaków), `buildAIPrompt` (warianty profilu i preferencji, fallbacki, constraint kategorii, num_days; profil z `dietaryPreferencesDescription`), `validatePlanResponse` ✅ _zaimplementowane w `generation.service.spec.ts`_
-- `src/lib/validation/trip.schemas.ts` – `validateCreateTripCommand`: walidacja title, destination (max 50), num_days (1–30), num_people (1–20), speed/type/budget enums, what array, note_body (max 10 000) ✅ _zaimplementowane w `trip.schemas.spec.ts`_
+- `src/lib/services/generation.service.ts` – `detectLanguage` (pusty string, mieszany tekst EN+PL, truncacja do 1000 znaków), `buildAIPrompt` (warianty profilu i preferencji, fallbacki, constraint kategorii, num*days; profil z `dietaryPreferencesDescription`), `validatePlanResponse` ✅ \_zaimplementowane w `generation.service.spec.ts`*
+- `src/lib/validation/trip.schemas.ts` – `validateCreateTripCommand`: walidacja title, destination (max 50), num*days (1–30), num_people (1–20), speed/type/budget enums, what array, note_body (max 10 000) ✅ \_zaimplementowane w `trip.schemas.spec.ts`*
 - `src/lib/services/trip.service.ts` – `createTrip`: zwracanie TripDTO ze statusem CREATED/DRAFT, insercja pól, obsługa błędu DB ✅ _zaimplementowane w `trip.service.spec.ts`_
 - `src/lib/errors/api.error.ts` – fabryki błędów (`createQuotaExceededError`, `toApiError`, `isApiError`, itp.), `ApiError.toResponse()`
 - `src/lib/validation/` – schematy Zod: `loginSchema`, `registerSchema`, `resetPasswordSchema`, `tripIdSchema`, `getTripsQuerySchema`, `PlanJsonSchema`, `ActivitySchema`, `SavePlanCommandSchema`
@@ -84,7 +84,7 @@ MyAIGuide to jednostronicowa aplikacja webowa (SPA) umożliwiająca szybkie twor
 ### 3.4 Testy End-to-End (E2E Tests)
 
 **Narzędzie:** Playwright
-**Środowisko:** Supabase lokalny (`supabase start`) + aplikacja Vite dev server (`npm run dev`)
+**Środowisko:** Dedykowany projekt Supabase w chmurze (E2E) + aplikacja Vite dev server (`npm run dev`)
 
 **Strategia organizacji kodu (Page Object Model):**
 
@@ -235,30 +235,40 @@ Scenariusze opisane w sekcji 4.
 
 ## 5. Środowisko testowe
 
-### 5.1 Środowisko lokalne (unit + integration)
+### 5.1 Środowisko lokalne – unit + integration
 
 ```
 Node.js >= 20
 Supabase CLI (local) – supabase start
-Vite dev server – npm run dev
-Zmienne środowiskowe: .env.local (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+Zmienne środowiskowe: .env.local (VITE_SUPABASE_URL=http://127.0.0.1:54321, VITE_SUPABASE_ANON_KEY)
+Vitest uruchamiany bez Vite dev server (środowisko jsdom/node)
 ```
 
-### 5.2 Środowisko E2E
+> Testy jednostkowe i integracyjne działają wyłącznie przeciwko lokalnemu Supabase.
+> Nie wymagają połączenia z chmurą ani uruchomionej aplikacji.
+
+### 5.2 Środowisko E2E – dedykowany projekt chmurowy
 
 ```
 Playwright – headless Chromium (CI), headed (lokalne debugowanie)
-Supabase lokalny z seed danymi testowymi
-Konto testowe: TEST_USER_EMAIL / TEST_USER_PASSWORD (zob. GitHub Secrets lub .env.test – nigdy plain text w repozytorium)
+Supabase Cloud – dedykowany projekt E2E (odizolowany od produkcji i developmentu)
+Vite dev server – npm run dev (wskazujący na projekt E2E przez .env.test)
+Zmienne środowiskowe: .env.test (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY – wyłącznie do seed/cleanup w fixtures)
+Konto testowe: TEST_USER_EMAIL / TEST_USER_PASSWORD (GitHub Secrets – nigdy plain text w repozytorium)
 Mock Edge Function: Playwright route interception – zob. strategię w sekcji 3.4
 ```
+
+> Projekt chmurowy E2E posiada własne migracje, seed i konto testowe.
+> Dane czyszczone per-suite przez Supabase Admin API (`service_role` key) w `afterEach`/`afterAll`.
 
 ### 5.3 Środowisko CI (GitHub Actions)
 
 ```
 ubuntu-latest
-supabase/setup-cli action
-npm ci → npm run build → npm run test → npx playwright test
+Job 1 (unit + integration): supabase/setup-cli + supabase start → npm ci → npm run test
+Job 2 (E2E): npm ci → npm run build → npx playwright test
+  (bez supabase/setup-cli – E2E korzysta z projektu chmurowego przez GitHub Secrets)
 ```
 
 ---
