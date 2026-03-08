@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ZodError } from 'zod'
-import { validateCreateTripCommand } from './trip.schemas'
+import { validateCreateTripCommand, validateUpdateTripCommand } from './trip.schemas'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -211,5 +211,116 @@ describe('validateCreateTripCommand – note_body', () => {
   it('CTRIP-27: accepts note_body of exactly 10 000 characters', () => {
     const result = validateCreateTripCommand({ title: 'T', note_body: 'x'.repeat(10000) })
     expect(result.note_body).toHaveLength(10000)
+  })
+})
+
+// ─── validateUpdateTripCommand ────────────────────────────────────────────────
+
+function firstUpdateIssueOf(data: unknown) {
+  try {
+    validateUpdateTripCommand(data)
+  } catch (err) {
+    expect(err).toBeInstanceOf(ZodError)
+    return (err as ZodError).issues[0]!
+  }
+  throw new Error('Expected ZodError but none was thrown')
+}
+
+describe('validateUpdateTripCommand – valid inputs', () => {
+  it('UTRIP-01: accepts an empty object (all fields optional)', () => {
+    expect(() => validateUpdateTripCommand({})).not.toThrow()
+  })
+
+  it('UTRIP-02: accepts a fully populated update payload', () => {
+    const result = validateUpdateTripCommand({
+      title: 'Updated Paris Trip',
+      destination: 'Paris',
+      num_days: 5,
+      num_people: 2,
+      what: ['culture_museums', 'foodie'],
+      speed: 'balance',
+      type: 'base',
+      budget: 'moderate',
+      note_body: 'Visit the Louvre.'
+    })
+    expect(result.title).toBe('Updated Paris Trip')
+    expect(result.num_days).toBe(5)
+  })
+
+  it('UTRIP-03: accepts null for nullable optional fields', () => {
+    const result = validateUpdateTripCommand({
+      destination: null,
+      num_days: null,
+      num_people: null,
+      speed: null,
+      type: null,
+      budget: null,
+      note_body: null
+    })
+    expect(result.destination).toBeNull()
+    expect(result.num_days).toBeNull()
+  })
+})
+
+describe('validateUpdateTripCommand – title', () => {
+  it('UTRIP-04: rejects empty string title', () => {
+    const issue = firstUpdateIssueOf({ title: '' })
+    expect(issue.path).toContain('title')
+    expect(issue.message).toMatch(/cannot be empty/i)
+  })
+
+  it('UTRIP-05: rejects title longer than 255 characters', () => {
+    const issue = firstUpdateIssueOf({ title: 'a'.repeat(256) })
+    expect(issue.path).toContain('title')
+  })
+
+  it('UTRIP-06: accepts title of exactly 255 characters', () => {
+    expect(() => validateUpdateTripCommand({ title: 'a'.repeat(255) })).not.toThrow()
+  })
+})
+
+describe('validateUpdateTripCommand – numeric fields', () => {
+  it('UTRIP-07: rejects num_days below minimum (0)', () => {
+    const issue = firstUpdateIssueOf({ num_days: 0 })
+    expect(issue.path).toContain('num_days')
+  })
+
+  it('UTRIP-08: rejects num_days above maximum (31)', () => {
+    const issue = firstUpdateIssueOf({ num_days: 31 })
+    expect(issue.path).toContain('num_days')
+  })
+
+  it('UTRIP-09: rejects num_people above maximum (21)', () => {
+    const issue = firstUpdateIssueOf({ num_people: 21 })
+    expect(issue.path).toContain('num_people')
+  })
+})
+
+describe('validateUpdateTripCommand – enums', () => {
+  it('UTRIP-10: rejects invalid speed value', () => {
+    const issue = firstUpdateIssueOf({ speed: 'turbo' })
+    expect(issue.path).toContain('speed')
+  })
+
+  it('UTRIP-11: rejects invalid type value', () => {
+    const issue = firstUpdateIssueOf({ type: 'luxury_cruise' })
+    expect(issue.path).toContain('type')
+  })
+
+  it('UTRIP-12: rejects invalid budget value', () => {
+    const issue = firstUpdateIssueOf({ budget: 'expensive' })
+    expect(issue.path).toContain('budget')
+  })
+
+  it('UTRIP-13: rejects invalid what value', () => {
+    const issue = firstUpdateIssueOf({ what: ['skydiving'] })
+    expect(issue.path[0]).toBe('what')
+  })
+})
+
+describe('validateUpdateTripCommand – note_body', () => {
+  it('UTRIP-14: rejects note_body longer than 10 000 characters', () => {
+    const issue = firstUpdateIssueOf({ note_body: 'x'.repeat(10001) })
+    expect(issue.path).toContain('note_body')
   })
 })

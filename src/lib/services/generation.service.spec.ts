@@ -94,6 +94,11 @@ describe('buildAIPrompt', () => {
     const prompt = buildAIPrompt('note', makeProfile(), makePrefs(), undefined)
     expect(prompt).toMatch(/Destination:\s*not specified/)
   })
+
+  it('PROMPT-08: includes "has dietary preferences" when hasDietaryPreferences is true', () => {
+    const prompt = buildAIPrompt('note', makeProfile({ hasDietaryPreferences: true }), makePrefs())
+    expect(prompt).toContain('has dietary preferences')
+  })
 })
 
 // ─── validatePlanResponse ─────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { supabaseClient } from '@/db/supabase.client'
-import { createTrip } from './trip.service'
+import { createTrip, deriveTripStatus } from './trip.service'
 import { ApiError } from '@/lib/errors/api.error'
 
 // Override global setup mock — service imports supabaseClient, not supabase
@@ -127,5 +127,57 @@ describe('createTrip (service)', () => {
     await expect(createTrip({ title: 'Trip' }, USER_ID)).rejects.toSatisfy(
       (e: unknown) => e instanceof ApiError && e.code === 'INTERNAL_ERROR'
     )
+  })
+})
+
+// ─── deriveTripStatus ─────────────────────────────────────────────────────────
+
+describe('deriveTripStatus', () => {
+  it('DSTS-01: returns CONFIRMED when plan_json is set', () => {
+    expect(deriveTripStatus({ plan_json: { days: [] } })).toBe('CONFIRMED')
+  })
+
+  it('DSTS-02: returns CREATED when plan_json is null and no fields are set', () => {
+    expect(
+      deriveTripStatus({
+        plan_json: null,
+        note_body: null,
+        destination: null,
+        what: [],
+        speed: null,
+        type: null,
+        budget: null,
+        num_days: null,
+        num_people: null
+      })
+    ).toBe('CREATED')
+  })
+
+  it('DSTS-03: returns DRAFT when plan_json is null and note_body is set', () => {
+    expect(deriveTripStatus({ plan_json: null, note_body: 'My notes' })).toBe('DRAFT')
+  })
+
+  it('DSTS-04: returns DRAFT when plan_json is null and destination is set', () => {
+    expect(deriveTripStatus({ plan_json: null, destination: 'Paris' })).toBe('DRAFT')
+  })
+
+  it('DSTS-05: returns DRAFT when plan_json is null and what is non-empty', () => {
+    expect(deriveTripStatus({ plan_json: null, what: ['nature'] })).toBe('DRAFT')
+  })
+
+  it('DSTS-06: returns DRAFT when plan_json is null and speed is set', () => {
+    expect(deriveTripStatus({ plan_json: null, speed: 'balance' })).toBe('DRAFT')
+  })
+
+  it('DSTS-07: returns DRAFT when plan_json is null and num_days is set', () => {
+    expect(deriveTripStatus({ plan_json: null, num_days: 5 })).toBe('DRAFT')
+  })
+
+  it('DSTS-08: returns CREATED when note_body is an empty string', () => {
+    expect(deriveTripStatus({ plan_json: null, note_body: '' })).toBe('CREATED')
+  })
+
+  it('DSTS-09: returns CREATED when what is an empty array', () => {
+    expect(deriveTripStatus({ plan_json: null, what: [] })).toBe('CREATED')
   })
 })

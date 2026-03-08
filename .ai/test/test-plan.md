@@ -43,11 +43,13 @@ MyAIGuide to jednostronicowa aplikacja webowa (SPA) umożliwiająca szybkie twor
 
 ### 3.1 Testy jednostkowe (Unit Tests)
 
-**Narzędzie:** Vitest
+**Narzędzie:** Vitest (skonfigurowany: `vitest.config.ts`, setup: `src/test/setup.ts`)
 **Zakres:** wyłącznie czyste funkcje bez I/O i wywołań sieciowych
 **Pokrycie:**
 
-- `src/lib/services/generation.service.ts` – `detectLanguage` (pusty string, mieszany tekst EN+PL, truncacja do 1000 znaków), `buildAIPrompt` (warianty profilu i preferencji, fallbacki, constraint kategorii, num_days), `validatePlanResponse`
+- `src/lib/services/generation.service.ts` – `detectLanguage` (pusty string, mieszany tekst EN+PL, truncacja do 1000 znaków), `buildAIPrompt` (warianty profilu i preferencji, fallbacki, constraint kategorii, num_days; profil z `dietaryPreferencesDescription`), `validatePlanResponse` ✅ _zaimplementowane w `generation.service.spec.ts`_
+- `src/lib/validation/trip.schemas.ts` – `validateCreateTripCommand`: walidacja title, destination (max 50), num_days (1–30), num_people (1–20), speed/type/budget enums, what array, note_body (max 10 000) ✅ _zaimplementowane w `trip.schemas.spec.ts`_
+- `src/lib/services/trip.service.ts` – `createTrip`: zwracanie TripDTO ze statusem CREATED/DRAFT, insercja pól, obsługa błędu DB ✅ _zaimplementowane w `trip.service.spec.ts`_
 - `src/lib/errors/api.error.ts` – fabryki błędów (`createQuotaExceededError`, `toApiError`, `isApiError`, itp.), `ApiError.toResponse()`
 - `src/lib/validation/` – schematy Zod: `loginSchema`, `registerSchema`, `resetPasswordSchema`, `tripIdSchema`, `getTripsQuerySchema`, `PlanJsonSchema`, `ActivitySchema`, `SavePlanCommandSchema`
 - `src/lib/utils.ts` – funkcje pomocnicze
@@ -61,8 +63,8 @@ MyAIGuide to jednostronicowa aplikacja webowa (SPA) umożliwiająca szybkie twor
 - **Serwisy async** – `checkGenerationQuota` (okno 24h, reset, osiągnięcie limitu), `recordGenerationAttempt` (statusy: `success` / `api_error` / `validation_error`)
 - **auth.store** – `initialize`, `login`, `register`, `logout`, `resetAllStores` (weryfikacja braku wycieku danych między sesjami)
 - **trip.store** – `fetchTrips`, `createTrip`, `fetchTrip`, `updateTripNote`, `updateTripPreferences`, `deleteTripById`, paginacja
-- **plan.store** – `generatePlan` (pełny przepływ z quota check + AI call), `savePlanToTrip`, `discardCandidate`, `updateCandidatePlan`, ochrona przed double-submit (`isGenerating`)
-- **quota.store** – `fetchQuota`, `incrementUsed`, `isQuotaExceeded`, `remainingGenerations`
+- **plan.store** – `generatePlan` (pełny przepływ z quota check + AI call), `savePlanToTrip`, `discardCandidate`, `updateCandidatePlan`, `fetchGenerationQuota` (wywołanie Edge Function `get-generation-quota`), `fetchTripGenerations`, ochrona przed double-submit (`isGenerating`)
+- **quota.store** – `fetchQuota` (wywołuje `checkGenerationQuota` bezpośrednio z DB), `incrementUsed`, `isQuotaExceeded`, `remainingGenerations`
 - **profile.store** – `fetchProfile`, `updateProfile`, `defaultPreferences`, brak profilu przy próbie generowania
 - **router** – navigation guards (`requiresAuth`, `guestOnly`), walidacja parametru `tripId`
 
@@ -70,13 +72,14 @@ MyAIGuide to jednostronicowa aplikacja webowa (SPA) umożliwiająca szybkie twor
 
 **Narzędzie:** Vitest + @vue/test-utils + @pinia/testing
 
-| Komponent                | Co testować                                                                                        |
-| ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `TripEditor.vue`         | Renderowanie z danymi, emitowanie zdarzeń zapisu, walidacja długości notatki (> 10 000 znaków)     |
-| `PlanPanel.vue`          | Wyświetlanie kandydata planu, przyciski zapisz/odrzuć, stan ładowania (`isGenerating`, `isSaving`) |
-| `TripCard.vue`           | Renderowanie statusu (CREATED/DRAFT/CONFIRMED), akcja usunięcia z dialogiem potwierdzenia          |
-| `UserProfilePanel.vue`   | Toggling flag (hasKids, hasPets, mobilność, dieta), zapis preferencji domyślnych                   |
-| `TripListPagination.vue` | Emitowanie zdarzeń zmiany strony, wyłączenie przycisków na granicy paginacji                       |
+| Komponent                | Co testować                                                                                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TripHeader.vue`         | Inline editing tytułu (emit `update:title`), wyświetlanie badge statusu (CREATED/DRAFT/CONFIRMED), relatywny timestamp, slot `actions`                                                                                                                                                     |
+| `TripEditor.vue`         | Renderowanie z danymi, emitowanie zdarzeń zapisu, walidacja długości notatki (> 10 000 znaków), wyświetlanie flag profilu (read-only), badge „From profile" dla preferencji                                                                                                                |
+| `PlanPanel.vue`          | Accordion (collapse/expand dni), inline edycja `locationName`/`description`, przyciski zapisz/odrzuć z dialogiem potwierdzenia odrzucenia, stan ładowania (`isGenerating`, `isSaving`), progress bar kwoty (kolor primary, `aria-live`), alert „Generation Limit Reached" przy quota=10/10 |
+| `TripCard.vue`           | Renderowanie statusu (CREATED/DRAFT/CONFIRMED), akcja usunięcia z dialogiem potwierdzenia                                                                                                                                                                                                  |
+| `UserProfilePanel.vue`   | Toggling flag (hasKids, hasPets, mobilność, dieta), edge case diety (blokada zapisu przy pustym opisie), zapis preferencji domyślnych, skeleton przy ładowaniu                                                                                                                             |
+| `TripListPagination.vue` | Emitowanie zdarzeń zmiany strony, wyłączenie przycisków na granicy paginacji                                                                                                                                                                                                               |
 
 ### 3.4 Testy End-to-End (E2E Tests)
 
@@ -113,7 +116,8 @@ Scenariusze opisane w sekcji 4.
 **Narzędzie:** Deno test runner (natywny dla Supabase Edge Functions)
 **Pokrycie:**
 
-- `generate-plan/index.ts` – walidacja wejścia, obsługa odpowiedzi OpenRouter, timeout (60 s), błędy CORS
+- `generate-plan/index.ts` – walidacja wejścia (`prompt`, `language`, `tripId`), obsługa odpowiedzi OpenRouter, timeout (60 s), błędy CORS, quota check server-side
+- `get-generation-quota/index.ts` – obliczanie `used`/`remaining`/`reset_at` z ruchomym oknem 24h, guard sesji
 - `api/index.ts` – routing endpointów, obsługa 404, CORS preflight
 
 ---
@@ -166,46 +170,66 @@ Scenariusze opisane w sekcji 4.
 
 ### 4.4 Profil użytkownika
 
-| ID     | Scenariusz                          | Kroki                                 | Oczekiwany wynik                                          |
-| ------ | ----------------------------------- | ------------------------------------- | --------------------------------------------------------- |
-| PRF-01 | Wyświetlenie profilu                | Przejdź na `/profile`                 | Dane profilu załadowane z DB                              |
-| PRF-02 | Aktualizacja preferencji domyślnych | Zmień speed/type/budget/what → Zapisz | Zaktualizowane w DB, defaultPreferences getter odświeżony |
-| PRF-03 | Flagi podróżnika                    | Zaznacz hasKids, hasPets              | Wartości zapisane, używane przy generowaniu promptu       |
-| PRF-04 | Fallback preferencji w planie       | Trip bez preferencji                  | Używane preferencje z profilu podczas generowania         |
+> **Uwaga architektoniczna:** Brak dedykowanej trasy `/profile`. Panel profilu globalnego (`UserProfilePanel`) osadzony jest bezpośrednio w górnej części `DashboardView` (per PRD §3.2 / US-005).
+
+| ID     | Scenariusz                          | Kroki                                                         | Oczekiwany wynik                                          |
+| ------ | ----------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------- |
+| PRF-01 | Wyświetlenie profilu                | Otwórz Dashboard (`/`) → panel „Your Travel Profile" na górze | Dane profilu załadowane z DB                              |
+| PRF-02 | Aktualizacja preferencji domyślnych | Zmień speed/type/budget/what → auto-save (natychmiast)        | Zaktualizowane w DB, defaultPreferences getter odświeżony |
+| PRF-03 | Flagi podróżnika                    | Zaznacz hasKids, hasPets                                      | Wartości zapisane, używane przy generowaniu promptu       |
+| PRF-04 | Fallback preferencji w planie       | Trip bez preferencji                                          | Używane preferencje z profilu podczas generowania         |
+| PRF-05 | Preferencje dietetyczne – edge case | Włącz flagę „Dietary preferences" → opuść pole bez opisu      | Toast błędu, flaga cofana do OFF; DB nie zmienione        |
 
 ### 4.5 Walidacja schematów Zod (testy jednostkowe)
 
-| ID     | Schema                  | Przypadek testowy                                                                                      |
-| ------ | ----------------------- | ------------------------------------------------------------------------------------------------------ |
-| ZOD-01 | `loginSchema`           | Pusty email → błąd; niepoprawny format → błąd; poprawny → OK                                           |
-| ZOD-02 | `registerSchema`        | Niezgodne hasła → błąd `confirmPassword`; < 6 znaków → błąd                                            |
-| ZOD-03 | `tripIdSchema`          | `"abc"` → błąd; `0` → błąd; `-1` → błąd; `1` → OK; `"5"` → coerce do 5                                 |
-| ZOD-04 | `ActivitySchema`        | Brak `timeOfDay` → błąd; `categoryTag` spoza enum → błąd                                               |
-| ZOD-05 | `PlanJsonSchema`        | Pusta tablica `days` → błąd; brak aktywności w dniu → błąd                                             |
-| ZOD-06 | `SavePlanCommandSchema` | Niepoprawny kod języka (np. `"123"`) → błąd                                                            |
-| ZOD-07 | `getTripsQuerySchema`   | `page=0` → błąd; `limit=101` → błąd; `status="INVALID"` → błąd; wartości domyślne `page=1`, `limit=20` |
+| ID          | Schema                                            | Przypadek testowy                                                                                                                     |
+| ----------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| ZOD-01      | `loginSchema`                                     | Pusty email → błąd; niepoprawny format → błąd; poprawny → OK                                                                          |
+| ZOD-02      | `registerSchema`                                  | Niezgodne hasła → błąd `confirmPassword`; < 6 znaków → błąd                                                                           |
+| ZOD-03      | `tripIdSchema`                                    | `"abc"` → błąd; `0` → błąd; `-1` → błąd; `1` → OK; `"5"` → coerce do 5                                                                |
+| ZOD-04      | `ActivitySchema`                                  | Brak `timeOfDay` → błąd; `categoryTag` spoza enum → błąd                                                                              |
+| ZOD-05      | `PlanJsonSchema`                                  | Pusta tablica `days` → błąd; brak aktywności w dniu → błąd                                                                            |
+| ZOD-06      | `SavePlanCommandSchema`                           | Niepoprawny kod języka (np. `"123"`) → błąd                                                                                           |
+| ZOD-07      | `getTripsQuerySchema`                             | `page=0` → błąd; `limit=101` → błąd; `status="INVALID"` → błąd; wartości domyślne `page=1`, `limit=20`                                |
+| CTRIP-01–06 | `validateCreateTripCommand` (happy path)          | Tylko title → OK; pełny payload → OK; nullable fields → OK; title 255 znaków → OK; num_days/num_people na granicy (1, 30, 20) → OK ✅ |
+| CTRIP-07–09 | `validateCreateTripCommand` – title               | Brak title → błąd; pusty string → błąd; title > 255 znaków → błąd ✅                                                                  |
+| CTRIP-10–11 | `validateCreateTripCommand` – destination         | > 50 znaków → błąd; dokładnie 50 znaków → OK ✅                                                                                       |
+| CTRIP-12–16 | `validateCreateTripCommand` – num_days/num_people | 0 → błąd; 31 → błąd; 2.5 → błąd; 21 (people) → błąd ✅                                                                                |
+| CTRIP-17–25 | `validateCreateTripCommand` – enums/what          | Nieprawidłowe speed/type/budget/what → błąd; wszystkie poprawne wartości → OK; pusta tablica what → OK ✅                             |
+| CTRIP-26–27 | `validateCreateTripCommand` – note_body           | > 10 000 znaków → błąd; dokładnie 10 000 znaków → OK ✅                                                                               |
 
 ### 4.6 Testy jednostkowe `buildAIPrompt` (szczegółowe)
 
-| ID        | Konfiguracja wejściowa                                 | Co weryfikować w prompcie                                              |
-| --------- | ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| PROMPT-01 | Profil z `hasKids=true, hasPets=true`                  | Zawiera „traveling with kids", „traveling with pets"                   |
-| PROMPT-02 | Profil bez flag specjalnych                            | Zawiera „No special requirements"                                      |
-| PROMPT-03 | Trip bez preferencji + profil z `default_speed='slow'` | Fallback speed pojawia się w prompcie                                  |
-| PROMPT-04 | `what = ['beach_relax', 'foodie']`                     | Constraint „≥90% activities" i hard rule z kategorii obecne w prompcie |
-| PROMPT-05 | `num_days = 5`                                         | Zawiera „EXACTLY 5 day entries"                                        |
-| PROMPT-06 | Pusta notatka (`note_body = ''`)                       | Zawiera „No notes provided"                                            |
-| PROMPT-07 | `destination = undefined`                              | Zawiera „not specified" w sekcji Destination                           |
+| ID        | Konfiguracja wejściowa                                                     | Co weryfikować w prompcie                                                 |
+| --------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| PROMPT-01 | Profil z `hasKids=true, hasPets=true`                                      | Zawiera „traveling with kids", „traveling with pets" ✅                   |
+| PROMPT-02 | Profil bez flag specjalnych                                                | Zawiera „No special requirements" ✅                                      |
+| PROMPT-03 | Trip bez preferencji + profil z `default_speed='slow_chill'`               | Fallback speed `slow_chill` pojawia się w prompcie ✅                     |
+| PROMPT-04 | `what = ['beach_relax', 'foodie']`                                         | Constraint „≥90% activities" i hard rule z kategorii obecne w prompcie ✅ |
+| PROMPT-05 | `num_days = 5`                                                             | Zawiera „EXACTLY 5" ✅                                                    |
+| PROMPT-06 | Pusta notatka (`note_body = ''`)                                           | Zawiera „No notes provided" ✅                                            |
+| PROMPT-07 | `destination = undefined`                                                  | Zawiera „not specified" w sekcji Destination ✅                           |
+| PROMPT-08 | Profil z `hasDietaryPreferences=true, dietaryPreferencesDescription='...'` | Zawiera „has dietary preferences" w sekcji Traveler Profile               |
 
 ### 4.7 Testy jednostkowe `detectLanguage` (szczegółowe)
 
-| ID      | Wejście                                                      | Oczekiwany wynik                         |
-| ------- | ------------------------------------------------------------ | ---------------------------------------- |
-| LANG-01 | Pusty string `''`                                            | `'en'` (domyślny fallback)               |
-| LANG-02 | Tekst tylko z cyframi i znakami specjalnymi                  | `'en'` (domyślny fallback)               |
-| LANG-03 | Tekst zawierający polskie znaki (`ą`, `ę`, `ź`)              | `'pl'`                                   |
-| LANG-04 | Tekst angielski bez polskich znaków                          | `'en'`                                   |
-| LANG-05 | String > 1000 znaków z polskim znakiem tylko po pozycji 1000 | `'en'` (truncacja do 1000 znaków działa) |
+| ID      | Wejście                                                      | Oczekiwany wynik                            |
+| ------- | ------------------------------------------------------------ | ------------------------------------------- |
+| LANG-01 | Pusty string `''`                                            | `'en'` (domyślny fallback) ✅               |
+| LANG-02 | Tekst tylko z cyframi i znakami specjalnymi                  | `'en'` (domyślny fallback) ✅               |
+| LANG-03 | Tekst zawierający polskie znaki (`ą`, `ę`, `ź`)              | `'pl'` ✅                                   |
+| LANG-04 | Tekst angielski bez polskich znaków                          | `'en'` ✅                                   |
+| LANG-05 | String > 1000 znaków z polskim znakiem tylko po pozycji 1000 | `'en'` (truncacja do 1000 znaków działa) ✅ |
+
+### 4.8 Testy jednostkowe `createTrip` (trip.service)
+
+| ID       | Scenariusz                                             | Oczekiwany wynik                                               |
+| -------- | ------------------------------------------------------ | -------------------------------------------------------------- |
+| CTSVC-01 | Minimalny insert (tylko title)                         | TripDTO ze statusem `CREATED`, `plan_json` = null ✅           |
+| CTSVC-02 | Insert z preferencjami (speed, type, budget, what)     | TripDTO ze statusem `DRAFT`, pola zmapowane ✅                 |
+| CTSVC-03 | Insert ze wszystkimi polami – weryfikacja danych do DB | `supabaseClient.from().insert` wywołany z właściwymi polami ✅ |
+| CTSVC-04 | Supabase zwraca obiekt błędu                           | Rzuca `ApiError` z kodem `INTERNAL_ERROR` ✅                   |
+| CTSVC-05 | Supabase zwraca `null` bez błędu                       | Rzuca `ApiError` z kodem `INTERNAL_ERROR` ✅                   |
 
 ---
 
@@ -253,21 +277,21 @@ npm ci → npm run build → npm run test → npx playwright test
 | Pokrycie kodu               | **@vitest/coverage-v8**       | Raport pokrycia z progu minimalnego                                 |
 | Testy dostępności           | **@axe-core/playwright**      | Skan WCAG 2.1 AA integrowany jako asercja w testach E2E             |
 
-**Brak istniejących testów** – projekt nie posiada aktualnie żadnych plików testowych ani skonfigurowanego frameworka testowego. Wdrożenie planu wymaga uprzedniej instalacji narzędzi.
+**Stan infrastruktury testowej:** Vitest jest skonfigurowany (`vitest.config.ts`); plik setup (`src/test/setup.ts`) zawiera globalne mocki Supabase. Istniejące pliki spec: `generation.service.spec.ts` (LANG, PROMPT, validatePlanResponse), `trip.schemas.spec.ts` (CTRIP), `trip.service.spec.ts` (CTSVC). Brak dotychczas testów integracyjnych stores, komponentów Vue i E2E — wymagają dalszego wdrożenia.
 
 ---
 
 ## 7. Harmonogram testów
 
-| Faza                                      | Zakres                                                                                                   | Szacowany czas           | Zależy od |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------ | --------- |
-| **F1** – Konfiguracja środowiska          | Instalacja Vitest, @vue/test-utils, Playwright, msw, @axe-core/playwright; konfiguracja CI; scaffold POM | 2–3 dni                  | –         |
-| **F2** – Testy jednostkowe                | Schematy Zod (ZOD-01–07), serwisy (PROMPT-01–07, LANG-01–05), api.error                                  | 3–4 dni                  | F1        |
-| **F3** – Testy komponentów + integracyjne | 5 stores Pinia, router guards, komponenty Vue (TripEditor, PlanPanel, TripCard)                          | 4–5 dni                  | F1        |
-| **F4** – Testy E2E (przepływy krytyczne)  | AUTH + TRIP + GEN scenariusze (priorytety HIGH), seed fixtures, skany a11y                               | 5–6 dni                  | F1, F2    |
-| **F5** – Testy Edge Functions             | generate-plan + api mock (Deno test runner)                                                              | 2–3 dni                  | F1        |
-| **F6** – Stabilizacja CI i bufor          | Naprawa flaky testów E2E, progi pokrycia, dokumentacja CI pipeline                                       | 3–4 dni                  | F2–F5     |
-| **Łącznie (z buforem ~15%)**              |                                                                                                          | **~19–25 dni roboczych** |           |
+| Faza                                      | Zakres                                                                                                                                           | Szacowany czas           | Zależy od | Status          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
+| **F1** – Konfiguracja środowiska          | Instalacja Vitest, @vue/test-utils, Playwright, msw, @axe-core/playwright; konfiguracja CI; scaffold POM                                         | 2–3 dni                  | –         | ✅ Ukończone    |
+| **F2** – Testy jednostkowe                | Schematy Zod (ZOD-01–07, CTRIP-01–27), serwisy (PROMPT-01–07, LANG-01–05, CTSVC-01–05), api.error                                                | 3–4 dni                  | F1        | 🔄 Częściowo    |
+| **F3** – Testy komponentów + integracyjne | 5 stores Pinia (auth, trip, plan, quota, profile), router guards, komponenty Vue (TripHeader, TripEditor, PlanPanel, TripCard, UserProfilePanel) | 4–5 dni                  | F1        | ⬜ Do zrobienia |
+| **F4** – Testy E2E (przepływy krytyczne)  | AUTH + TRIP + GEN scenariusze (priorytety HIGH), seed fixtures, skany a11y                                                                       | 5–6 dni                  | F1, F2    | ⬜ Do zrobienia |
+| **F5** – Testy Edge Functions             | generate-plan + get-generation-quota (Deno test runner)                                                                                          | 2–3 dni                  | F1        | ⬜ Do zrobienia |
+| **F6** – Stabilizacja CI i bufor          | Naprawa flaky testów E2E, progi pokrycia, dokumentacja CI pipeline                                                                               | 3–4 dni                  | F2–F5     | ⬜ Do zrobienia |
+| **Łącznie (z buforem ~15%)**              |                                                                                                                                                  | **~15–20 dni roboczych** |           |                 |
 
 ---
 
