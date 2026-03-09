@@ -144,6 +144,49 @@ The app will be available at **http://localhost:5173**.
 
 ---
 
+## Running E2E Tests
+
+E2E tests use Playwright with a dedicated cloud Supabase project (isolated from development and production).
+
+### 1. Install Playwright browsers (once)
+
+```bash
+npx playwright install chromium
+```
+
+### 2. Configure `.env.test`
+
+Create a `.env.test` file in the project root:
+
+```env
+VITE_SUPABASE_URL=https://<your-e2e-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon-key>
+E2E_USERNAME=<test-account-email>
+E2E_PASSWORD=<test-account-password>
+```
+
+> The test account must exist in the E2E Supabase project. Never commit `.env.test` to the repository.
+
+### 3. Run the tests
+
+```bash
+# Headless (CI-style)
+npm run test:e2e
+
+# Interactive UI mode (for debugging)
+npm run test:e2e:ui
+```
+
+Playwright automatically starts the Vite dev server (`--mode test`) on port 5174 before running tests. Authentication is performed via the Supabase API (not the UI) and injected into `localStorage`, so no login form interaction is needed per test.
+
+### View the HTML report
+
+```bash
+npx playwright show-report
+```
+
+---
+
 ## Available Scripts
 
 | Script                  | Description                                                |
