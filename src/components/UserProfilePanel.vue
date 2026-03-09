@@ -215,10 +215,21 @@ async function saveProfile() {
     <CardHeader class="flex flex-row items-center justify-between pb-4">
       <CardTitle>Your Travel Profile</CardTitle>
       <div v-if="profile" class="flex gap-2">
-        <Button variant="outline" size="sm" :disabled="!isDirty || isSaving" @click="resetProfile">
+        <Button
+          data-testid="profile-reset-btn"
+          variant="outline"
+          size="sm"
+          :disabled="!isDirty || isSaving"
+          @click="resetProfile"
+        >
           Reset
         </Button>
-        <Button size="sm" :disabled="!isDirty || isSaving" @click="saveProfile">
+        <Button
+          data-testid="profile-save-btn"
+          size="sm"
+          :disabled="!isDirty || isSaving"
+          @click="saveProfile"
+        >
           {{ isSaving ? 'Saving…' : 'Save' }}
         </Button>
       </div>
@@ -256,6 +267,7 @@ async function saveProfile() {
             <button
               v-for="flag in flags"
               :key="flag.key"
+              :data-testid="`profile-flag-${flag.key}`"
               :disabled="isSaving"
               :class="[
                 'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
@@ -273,6 +285,7 @@ async function saveProfile() {
 
             <!-- Dietary preferences pill -->
             <button
+              data-testid="profile-flag-has_dietary_preferences"
               :disabled="isSaving"
               :class="[
                 'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
@@ -293,6 +306,7 @@ async function saveProfile() {
           <div v-if="local.has_dietary_preferences" class="mt-3">
             <Textarea
               v-model="local.dietary_preferences_description"
+              data-testid="profile-dietary-textarea"
               :disabled="isSaving"
               placeholder="Describe your dietary preferences (e.g. vegetarian, gluten-free, nut allergy)…"
               class="min-h-[80px] resize-none"
@@ -315,6 +329,7 @@ async function saveProfile() {
               <button
                 v-for="opt in whatOptions"
                 :key="opt.value"
+                :data-testid="`profile-what-${opt.value}`"
                 :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
@@ -341,6 +356,7 @@ async function saveProfile() {
               <button
                 v-for="opt in speedOptions"
                 :key="opt.value"
+                :data-testid="`profile-speed-${opt.value}`"
                 :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
@@ -367,6 +383,7 @@ async function saveProfile() {
               <button
                 v-for="opt in typeOptions"
                 :key="opt.value"
+                :data-testid="`profile-type-${opt.value}`"
                 :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
@@ -393,6 +410,7 @@ async function saveProfile() {
               <button
                 v-for="opt in budgetOptions"
                 :key="opt.value"
+                :data-testid="`profile-budget-${opt.value}`"
                 :disabled="isSaving"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',

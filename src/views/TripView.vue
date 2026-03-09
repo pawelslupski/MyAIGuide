@@ -94,15 +94,22 @@ const isNoteOverLimit = computed(() => (pendingFields.value?.note_body?.length ?
 const isDirty = computed(() => {
   const t = tripStore.currentTrip
   const p = pendingFields.value
+  const d = profileStore.defaultPreferences
   if (!t || !p) return false
+  // For preference fields, fall back to profile defaults when the trip has no saved value
+  // so that profile-inherited values don't trigger an unsolicited auto-save.
+  const effectiveWhat = (t.what?.length ? t.what : d?.what) ?? []
+  const effectiveSpeed = t.speed ?? d?.speed ?? null
+  const effectiveType = t.type ?? d?.type ?? null
+  const effectiveBudget = t.budget ?? d?.budget ?? null
   return (
     p.title !== t.title ||
     p.destination !== (t.destination ?? null) ||
     p.note_body !== (t.note_body ?? null) ||
-    JSON.stringify(p.what) !== JSON.stringify(t.what ?? []) ||
-    p.speed !== (t.speed ?? null) ||
-    p.type !== (t.type ?? null) ||
-    p.budget !== (t.budget ?? null) ||
+    JSON.stringify(p.what) !== JSON.stringify(effectiveWhat) ||
+    p.speed !== effectiveSpeed ||
+    p.type !== effectiveType ||
+    p.budget !== effectiveBudget ||
     p.num_days !== (t.num_days ?? null) ||
     p.num_people !== (t.num_people ?? null)
   )

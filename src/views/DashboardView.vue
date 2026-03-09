@@ -113,6 +113,7 @@ onMounted(async () => {
       <h2 class="text-2xl font-bold">My Trips</h2>
       <Button
         v-if="tripStore.trips.length > 0"
+        data-testid="new-trip-btn"
         :disabled="tripStore.isCreatingTrip"
         @click="createAndNavigate"
       >
@@ -148,7 +149,11 @@ onMounted(async () => {
       class="flex flex-col items-center gap-4 pt-6 text-center"
     >
       <p class="text-muted-foreground">You don't have any trips yet.</p>
-      <Button :disabled="tripStore.isCreatingTrip" @click="createAndNavigate">
+      <Button
+        data-testid="create-first-trip-btn"
+        :disabled="tripStore.isCreatingTrip"
+        @click="createAndNavigate"
+      >
         <Plus class="mr-2 h-4 w-4" />
         {{ tripStore.isCreatingTrip ? 'Creating…' : 'Create your first trip' }}
       </Button>
@@ -189,8 +194,19 @@ onMounted(async () => {
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" :disabled="isDeleting" @click="cancelDelete">Cancel</Button>
-          <Button variant="destructive" :disabled="isDeleting" @click="confirmDelete">
+          <Button
+            data-testid="delete-dialog-cancel"
+            variant="outline"
+            :disabled="isDeleting"
+            @click="cancelDelete"
+            >Cancel</Button
+          >
+          <Button
+            data-testid="delete-dialog-confirm"
+            variant="destructive"
+            :disabled="isDeleting"
+            @click="confirmDelete"
+          >
             {{ isDeleting ? 'Deleting…' : 'Delete' }}
           </Button>
         </DialogFooter>

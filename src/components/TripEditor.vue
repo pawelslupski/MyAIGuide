@@ -254,6 +254,7 @@ watch(
         <Input
           id="trip-destination"
           v-model="localDestination"
+          data-testid="trip-destination-input"
           placeholder="e.g. Paris, France"
           maxlength="50"
         />
@@ -273,6 +274,7 @@ watch(
             <Label for="num-days">Trip Duration (days)</Label>
             <Input
               id="num-days"
+              data-testid="trip-num-days-input"
               :model-value="localNumDays ?? undefined"
               type="number"
               min="1"
@@ -288,6 +290,7 @@ watch(
             <Label for="num-people">Number of People</Label>
             <Input
               id="num-people"
+              data-testid="trip-num-people-input"
               :model-value="localNumPeople ?? undefined"
               type="number"
               min="1"
@@ -319,6 +322,7 @@ watch(
               >
                 <Checkbox
                   :id="`what-${option.value}`"
+                  :data-testid="`trip-what-checkbox-${option.value}`"
                   :model-value="localWhat.includes(option.value)"
                   @update:model-value="toggleWhat(option.value)"
                 />
@@ -348,7 +352,11 @@ watch(
                 :key="option.value"
                 class="flex items-center space-x-2"
               >
-                <RadioGroupItem :id="`speed-${option.value}`" :value="option.value" />
+                <RadioGroupItem
+                  :id="`speed-${option.value}`"
+                  :value="option.value"
+                  :data-testid="`trip-speed-radio-${option.value}`"
+                />
                 <Label :for="`speed-${option.value}`" class="cursor-pointer font-normal">
                   <div>
                     <div class="font-medium">{{ option.label }}</div>
@@ -378,7 +386,11 @@ watch(
                 :key="option.value"
                 class="flex items-center space-x-2"
               >
-                <RadioGroupItem :id="`type-${option.value}`" :value="option.value" />
+                <RadioGroupItem
+                  :id="`type-${option.value}`"
+                  :value="option.value"
+                  :data-testid="`trip-type-radio-${option.value}`"
+                />
                 <Label :for="`type-${option.value}`" class="cursor-pointer font-normal">
                   <div>
                     <div class="font-medium">{{ option.label }}</div>
@@ -408,7 +420,11 @@ watch(
                 :key="option.value"
                 class="flex items-center space-x-2"
               >
-                <RadioGroupItem :id="`budget-${option.value}`" :value="option.value" />
+                <RadioGroupItem
+                  :id="`budget-${option.value}`"
+                  :value="option.value"
+                  :data-testid="`trip-budget-radio-${option.value}`"
+                />
                 <Label :for="`budget-${option.value}`" class="cursor-pointer font-normal">
                   <div>
                     <div class="font-medium">{{ option.label }}</div>
@@ -464,6 +480,7 @@ watch(
         <CardContent class="space-y-2">
           <Textarea
             v-model="localNote"
+            data-testid="trip-note-textarea"
             placeholder="Write your trip notes here... (optional)"
             class="min-h-[200px] resize-y"
             aria-label="Trip note content"
@@ -471,7 +488,11 @@ watch(
             @blur="emit('blur:note')"
           />
           <div class="flex items-center justify-between text-sm">
-            <span v-if="noteValidationMessage" :class="noteValidationClass">
+            <span
+              v-if="noteValidationMessage"
+              data-testid="note-validation-message"
+              :class="noteValidationClass"
+            >
               {{ noteValidationMessage }}
             </span>
             <span v-else />

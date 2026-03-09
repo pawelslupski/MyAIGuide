@@ -42,15 +42,18 @@ function formatRelativeTime(isoDate: string): string {
     <div class="flex items-center justify-between gap-4">
       <div class="flex min-w-0 flex-1 items-center gap-3">
         <Input
+          data-testid="trip-title-input"
           :model-value="title"
           class="flex-1 text-xl font-bold"
           placeholder="Enter trip title"
           @update:model-value="emit('update:title', String($event))"
         />
-        <Badge variant="outline" :class="statusClass(status)">{{ status }}</Badge>
+        <Badge data-testid="trip-status-badge" variant="outline" :class="statusClass(status)">{{
+          status
+        }}</Badge>
       </div>
       <div class="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-        <span v-if="isSaving">Saving…</span>
+        <span v-if="isSaving" data-testid="trip-saving-indicator">Saving…</span>
         <span>Updated {{ formatRelativeTime(updatedAt) }}</span>
         <slot name="actions" />
       </div>

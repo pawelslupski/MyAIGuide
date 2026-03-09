@@ -34,8 +34,13 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'cleanup',
+      testMatch: /global\.teardown\.ts/
+    },
+    {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] }
+      use: { ...devices['Desktop Chrome'] },
+      teardown: 'cleanup'
     }
   ],
   webServer: {

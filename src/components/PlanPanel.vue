@@ -241,7 +241,12 @@ function formatResetDate(isoDate: string): string {
             </li>
           </ul>
         </div>
-        <Button :disabled="!canGenerate" size="lg" @click="handleGenerate">
+        <Button
+          data-testid="generate-plan-btn"
+          :disabled="!canGenerate"
+          size="lg"
+          @click="handleGenerate"
+        >
           <Sparkles v-if="!isGenerating" class="mr-2 h-4 w-4" />
           <Loader2 v-else class="mr-2 h-4 w-4 animate-spin" />
           {{ isGenerating ? 'Generating...' : 'Generate Plan' }}
@@ -262,12 +267,18 @@ function formatResetDate(isoDate: string): string {
 
       <!-- Candidate Actions -->
       <div v-if="hasCandidate" class="flex gap-2">
-        <Button :disabled="isSaving" class="flex-1" @click="handleSave">
+        <Button data-testid="save-plan-btn" :disabled="isSaving" class="flex-1" @click="handleSave">
           <Check v-if="!isSaving" class="mr-2 h-4 w-4" />
           <Loader2 v-else class="mr-2 h-4 w-4 animate-spin" />
           {{ isSaving ? 'Saving...' : 'Save Plan' }}
         </Button>
-        <Button variant="outline" :disabled="isSaving" class="flex-1" @click="handleDiscard">
+        <Button
+          data-testid="discard-plan-btn"
+          variant="outline"
+          :disabled="isSaving"
+          class="flex-1"
+          @click="handleDiscard"
+        >
           <X class="mr-2 h-4 w-4" />
           Discard
         </Button>
@@ -287,7 +298,13 @@ function formatResetDate(isoDate: string): string {
             </AlertDescription>
           </Alert>
           <div class="flex justify-end">
-            <Button :disabled="!canGenerate" variant="outline" size="sm" @click="handleGenerate">
+            <Button
+              data-testid="regenerate-plan-btn"
+              :disabled="!canGenerate"
+              variant="outline"
+              size="sm"
+              @click="handleGenerate"
+            >
               <Sparkles v-if="!isGenerating" class="mr-2 h-4 w-4" />
               <Loader2 v-else class="mr-2 h-4 w-4 animate-spin" />
               {{ isGenerating ? 'Generating...' : 'Regenerate' }}

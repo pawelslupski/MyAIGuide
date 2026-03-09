@@ -62,21 +62,33 @@ const relativeDate = computed(() => {
 </script>
 
 <template>
-  <Card class="relative cursor-pointer transition-shadow hover:shadow-md" @click="navigateToTrip">
+  <Card
+    class="relative cursor-pointer transition-shadow hover:shadow-md"
+    data-testid="trip-card"
+    :data-trip-id="trip.id"
+    @click="navigateToTrip"
+  >
     <CardHeader class="pb-2">
       <div class="flex items-start justify-between gap-2">
-        <CardTitle class="line-clamp-2 text-base leading-snug">{{ trip.title }}</CardTitle>
+        <CardTitle data-testid="trip-card-title" class="line-clamp-2 text-base leading-snug">{{
+          trip.title
+        }}</CardTitle>
         <Button
           variant="ghost"
           size="icon"
           class="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
           aria-label="Delete trip"
+          data-testid="trip-card-delete-btn"
           @click="onDeleteClick"
         >
           <Trash2 class="h-4 w-4" />
         </Button>
       </div>
-      <Badge :variant="badgeConfig.variant" :class="badgeConfig.class">
+      <Badge
+        data-testid="trip-card-status"
+        :variant="badgeConfig.variant"
+        :class="badgeConfig.class"
+      >
         {{ badgeConfig.label }}
       </Badge>
     </CardHeader>
