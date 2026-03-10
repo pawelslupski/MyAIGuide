@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -17,6 +16,7 @@ import type {
   TypePreference,
   BudgetPreference
 } from '@/types'
+import { useTripEditorFields, type TripEditorFields } from '@/composables/useTripEditorFields'
 
 interface Props {
   trip: TripDTO
@@ -27,68 +27,34 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  'update:fields': [
-    fields: {
-      destination: string | null
-      note_body: string | null
-      what: WhatPreference[]
-      speed: SpeedPreference | null
-      type: TypePreference | null
-      budget: BudgetPreference | null
-      num_days: number | null
-      num_people: number | null
-    }
-  ]
+  'update:fields': [fields: TripEditorFields]
   'blur:note': []
 }>()
 
-// Local state for immediate UI updates
-// For preference fields, fall back to profile defaults when the trip has no value
-const localDestination = ref(props.trip.destination ?? '')
-const localNote = ref(props.trip.note_body ?? '')
-const localWhat = ref<WhatPreference[]>(
-  ((props.trip.what?.length ? props.trip.what : props.defaultPreferences?.what) ??
-    []) as WhatPreference[]
+const {
+  localDestination,
+  localNote,
+  localWhat,
+  localSpeed,
+  localType,
+  localBudget,
+  localNumDays,
+  localNumPeople,
+  noteLength,
+  noteValidationMessage,
+  noteValidationClass,
+  noteCounterClass,
+  MAX_NOTE_LENGTH,
+  toggleWhat,
+  isInherited,
+  isWhatInherited,
+  handleNumDaysInput,
+  handleNumPeopleInput
+} = useTripEditorFields(
+  () => props.trip,
+  () => props.defaultPreferences,
+  (fields) => emit('update:fields', fields)
 )
-const localSpeed = ref<SpeedPreference | null>(
-  (props.trip.speed ?? props.defaultPreferences?.speed ?? null) as SpeedPreference | null
-)
-const localType = ref<TypePreference | null>(
-  (props.trip.type ?? props.defaultPreferences?.type ?? null) as TypePreference | null
-)
-const localBudget = ref<BudgetPreference | null>(
-  (props.trip.budget ?? props.defaultPreferences?.budget ?? null) as BudgetPreference | null
-)
-const localNumDays = ref<number | null>(props.trip.num_days ?? null)
-const localNumPeople = ref<number | null>(props.trip.num_people ?? null)
-
-// Character count validation
-const MAX_NOTE_LENGTH = 10000
-const WARN_NOTE_LENGTH = 9000
-
-const noteLength = computed(() => localNote.value.length)
-
-const noteValidationMessage = computed(() => {
-  if (noteLength.value > MAX_NOTE_LENGTH) {
-    return `Maximum ${MAX_NOTE_LENGTH.toLocaleString()} characters exceeded`
-  }
-  if (noteLength.value > WARN_NOTE_LENGTH) {
-    return 'Approaching character limit'
-  }
-  return null
-})
-
-const noteValidationClass = computed(() => {
-  if (noteLength.value > MAX_NOTE_LENGTH) return 'text-destructive'
-  if (noteLength.value > WARN_NOTE_LENGTH) return 'text-amber-600 dark:text-amber-400'
-  return 'text-muted-foreground'
-})
-
-const noteCounterClass = computed(() => {
-  if (noteLength.value > MAX_NOTE_LENGTH) return 'text-destructive'
-  if (noteLength.value > WARN_NOTE_LENGTH) return 'text-amber-600 dark:text-amber-400'
-  return 'text-muted-foreground'
-})
 
 // Preference options
 const whatOptions: { value: WhatPreference; label: string }[] = [
@@ -124,125 +90,6 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
   { value: 'moderate', label: 'Moderate', description: 'Balanced comfort and cost' },
   { value: 'luxury', label: 'Luxury', description: 'Premium experiences' }
 ]
-
-// Emit current local state to parent whenever anything changes
-function emitFields() {
-  emit('update:fields', {
-    destination: localDestination.value.trim() || null,
-    note_body: localNote.value.trim() || null,
-    what: localWhat.value,
-    speed: localSpeed.value,
-    type: localType.value,
-    budget: localBudget.value,
-    num_days: localNumDays.value,
-    num_people: localNumPeople.value
-  })
-}
-
-watch(
-  [
-    localDestination,
-    localNote,
-    localWhat,
-    localSpeed,
-    localType,
-    localBudget,
-    localNumDays,
-    localNumPeople
-  ],
-  emitFields,
-  { deep: true }
-)
-
-// Emit initial state to parent so pendingFields reflects profile-prepopulated values from the start
-onMounted(() => {
-  emitFields()
-})
-
-// Toggle what preference (multi-select)
-function toggleWhat(value: WhatPreference) {
-  const index = localWhat.value.indexOf(value)
-  if (index > -1) {
-    localWhat.value = localWhat.value.filter((v) => v !== value)
-  } else {
-    localWhat.value = [...localWhat.value, value]
-  }
-}
-
-// Check if the current (local) preference value still matches the profile default.
-// Compares local state so the badge disappears immediately when the user changes the selection.
-function isInherited(field: 'speed' | 'type' | 'budget'): boolean {
-  if (!props.defaultPreferences) return false
-  const profileValue = props.defaultPreferences[field]
-  if (!profileValue) return false
-  const localValue =
-    field === 'speed' ? localSpeed.value : field === 'type' ? localType.value : localBudget.value
-  return localValue === profileValue
-}
-
-// True when the current what selection matches the profile default (order-independent).
-const isWhatInherited = computed(() => {
-  const profileWhat = props.defaultPreferences?.what
-  if (!profileWhat?.length) return false
-  if (localWhat.value.length !== profileWhat.length) return false
-  const sorted = (arr: WhatPreference[]) => [...arr].sort().join(',')
-  return sorted(localWhat.value) === sorted(profileWhat)
-})
-
-// Handlers for number inputs (convert string from model-value update → null or integer)
-function handleNumDaysInput(val: string | number | undefined) {
-  const num = val === '' || val === undefined || val === null ? null : Number(val)
-  localNumDays.value = num === null || Number.isNaN(num) ? null : num
-}
-
-function handleNumPeopleInput(val: string | number | undefined) {
-  const num = val === '' || val === undefined || val === null ? null : Number(val)
-  localNumPeople.value = num === null || Number.isNaN(num) ? null : num
-}
-
-// Apply profile defaults when defaultPreferences arrives or changes (e.g. profile loaded after mount)
-watch(
-  () => props.defaultPreferences,
-  (newDefaults) => {
-    if (!newDefaults) return
-    if (!props.trip.what?.length) {
-      localWhat.value = [...(newDefaults.what ?? [])] as WhatPreference[]
-    }
-    if (!props.trip.speed) {
-      localSpeed.value = (newDefaults.speed ?? null) as SpeedPreference | null
-    }
-    if (!props.trip.type) {
-      localType.value = (newDefaults.type ?? null) as TypePreference | null
-    }
-    if (!props.trip.budget) {
-      localBudget.value = (newDefaults.budget ?? null) as BudgetPreference | null
-    }
-  },
-  { deep: true }
-)
-
-// Sync local state when the saved trip changes externally (e.g. after successful save)
-watch(
-  () => props.trip,
-  (newTrip) => {
-    localDestination.value = newTrip.destination ?? ''
-    localNote.value = newTrip.note_body ?? ''
-    localWhat.value = ((newTrip.what?.length ? newTrip.what : props.defaultPreferences?.what) ??
-      []) as WhatPreference[]
-    localSpeed.value = (newTrip.speed ??
-      props.defaultPreferences?.speed ??
-      null) as SpeedPreference | null
-    localType.value = (newTrip.type ??
-      props.defaultPreferences?.type ??
-      null) as TypePreference | null
-    localBudget.value = (newTrip.budget ??
-      props.defaultPreferences?.budget ??
-      null) as BudgetPreference | null
-    localNumDays.value = newTrip.num_days ?? null
-    localNumPeople.value = newTrip.num_people ?? null
-  },
-  { deep: true }
-)
 </script>
 
 <template>
