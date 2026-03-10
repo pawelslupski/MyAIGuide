@@ -94,6 +94,16 @@ export class TripApiHelper {
     })
   }
 
+  async deleteProfile(): Promise<void> {
+    const userId = this.getUserId()
+    await this.request.delete(`${this.supabaseUrl}/rest/v1/profiles?user_id=eq.${userId}`, {
+      headers: {
+        apikey: this.anonKey,
+        Authorization: `Bearer ${this.accessToken}`
+      }
+    })
+  }
+
   async deleteAllTrips(): Promise<void> {
     const userId = this.getUserId()
     await this.request.delete(`${this.supabaseUrl}/rest/v1/trips?user_id=eq.${userId}`, {

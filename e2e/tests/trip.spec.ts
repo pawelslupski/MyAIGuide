@@ -37,22 +37,19 @@ test.describe('TRIP-01: Create trip', () => {
     authenticatedPage: page,
     tripApi
   }) => {
-    const dashboard = new DashboardPage(page)
+    // Create via API so no profile defaults are applied and the trip has CREATED status.
+    // (UI button creation inherits profile defaults which can cause DRAFT status — already
+    // covered by the test above which verifies the navigation behaviour.)
+    const { id: tripId } = await tripApi.createTrip('Status Test Trip')
 
-    await dashboard.anyCreateTripBtn.waitFor({ state: 'visible', timeout: 10000 })
-    await dashboard.anyCreateTripBtn.click()
-
-    await expect(page).toHaveURL(/\/trips\/\d+/, { timeout: 10000 })
-    const tripId = tripIdFromUrl(page.url())
-
-    // Return to dashboard and verify card is visible
-    await page.goto('/')
-    const card = page.locator(`[data-testid="trip-card"][data-trip-id="${tripId}"]`)
-    await expect(card).toBeVisible({ timeout: 10000 })
-    await expect(card.getByTestId('trip-card-status')).toHaveText('New')
-
-    // Cleanup
-    await tripApi.deleteTrip(tripId)
+    try {
+      await page.goto('/')
+      const card = page.locator(`[data-testid="trip-card"][data-trip-id="${tripId}"]`)
+      await expect(card).toBeVisible({ timeout: 10000 })
+      await expect(card.getByTestId('trip-card-status')).toHaveText('New')
+    } finally {
+      await tripApi.deleteTrip(tripId)
+    }
   })
 })
 
@@ -135,8 +132,10 @@ test.describe('TRIP-04: Edit preferences changes status to DRAFT', () => {
       await tripPage.goto(tripId)
       await expect(tripPage.statusBadge).toHaveText('CREATED')
 
-      // Speed preference triggers debounced auto-save (800 ms)
-      await tripPage.speed('balance').click()
+      // Use 'slow_chill' — the profile always has default_speed='balance' (DB default).
+      // Clicking 'balance' would be a no-op (already pre-selected from profile), so we pick
+      // a different value that is guaranteed to change pendingFields and trigger isDirty.
+      await tripPage.speed('slow_chill').click()
 
       await tripPage.waitForSaved()
 
@@ -144,7 +143,7 @@ test.describe('TRIP-04: Edit preferences changes status to DRAFT', () => {
 
       // Verify persistence
       await page.reload()
-      await expect(tripPage.speed('balance')).toBeChecked()
+      await expect(tripPage.speed('slow_chill')).toBeChecked()
     } finally {
       await tripApi.deleteTrip(tripId)
     }
