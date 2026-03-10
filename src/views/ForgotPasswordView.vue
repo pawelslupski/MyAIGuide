@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useForm } from 'vee-validate'
 import { Loader2, MailCheck } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   CardContent,
   CardFooter,
@@ -14,38 +14,28 @@ import {
   CardDescription
 } from '@/components/ui/card'
 import { forgotPasswordSchema } from '@/lib/validation/auth.schemas'
+import { toTypedSchema } from '@/lib/validation/zod-adapter'
 import AuthLayout from '@/layouts/AuthLayout.vue'
-
 import { useAuthStore } from '@/stores/auth.store'
+
 const authStore = useAuthStore()
 
-const form = reactive({ email: '' })
-const fieldErrors = reactive<{ email?: string }>({})
-const errorMessage = ref<string | null>(null)
-const isLoading = ref(false)
+const { handleSubmit, errors, isSubmitting, defineField } = useForm({
+  validationSchema: toTypedSchema(forgotPasswordSchema)
+})
+
+const [email, emailAttrs] = defineField('email')
 const submitted = ref(false)
 
-async function handleSubmit() {
-  errorMessage.value = null
-  fieldErrors.email = undefined
-
-  const result = forgotPasswordSchema.safeParse(form)
-  if (!result.success) {
-    fieldErrors.email = result.error.issues[0]?.message
-    return
-  }
-
-  isLoading.value = true
+const onSubmit = handleSubmit(async (values) => {
   try {
-    await authStore.resetPassword(form.email)
-    submitted.value = true
-  } catch (_err: any) {
-    // Always show success (security best practice — do not reveal if email exists)
-    submitted.value = true
+    await authStore.resetPassword(values.email)
+  } catch {
+    // Always show success — security best practice (do not reveal if email exists)
   } finally {
-    isLoading.value = false
+    submitted.value = true
   }
-}
+})
 </script>
 
 <template>
@@ -70,27 +60,24 @@ async function handleSubmit() {
       </div>
 
       <!-- Form state -->
-      <form v-else class="space-y-4" novalidate @submit.prevent="handleSubmit">
+      <form v-else class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="space-y-1.5">
           <Label for="email">Email</Label>
           <Input
             id="email"
-            v-model="form.email"
+            v-model="email"
+            v-bind="emailAttrs"
             type="email"
             autocomplete="email"
             placeholder="you@example.com"
-            :class="fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''"
+            :class="errors.email ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
-          <p v-if="fieldErrors.email" class="text-xs text-destructive">{{ fieldErrors.email }}</p>
+          <p v-if="errors.email" class="text-xs text-destructive">{{ errors.email }}</p>
         </div>
 
-        <Alert v-if="errorMessage" variant="destructive">
-          <AlertDescription>{{ errorMessage }}</AlertDescription>
-        </Alert>
-
-        <Button type="submit" class="w-full" :disabled="isLoading">
-          <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-          {{ isLoading ? 'Sending...' : 'Send reset link' }}
+        <Button type="submit" class="w-full" :disabled="isSubmitting">
+          <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+          {{ isSubmitting ? 'Sending...' : 'Send reset link' }}
         </Button>
       </form>
     </CardContent>

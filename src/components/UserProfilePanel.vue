@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useForm } from 'vee-validate'
+import { z } from 'zod'
 import {
   AlertCircle,
   Baby,
@@ -29,31 +31,49 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast/use-toast'
 import { useProfileStore } from '@/stores/profile.store'
+import { WhatPreferenceSchema } from '@/lib/validation/plan.schemas'
+import { toTypedSchema } from '@/lib/validation/zod-adapter'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
 
 const profileStore = useProfileStore()
 const { toast } = useToast()
 
-const isSaving = ref(false)
+// Form schema — mirrors UpdateProfileCommandSchema but allows null for
+// single-select fields so "no selection" is a valid UI state.
+const profileFormSchema = z
+  .object({
+    has_kids: z.boolean().optional(),
+    has_pets: z.boolean().optional(),
+    has_mobility_issues: z.boolean().optional(),
+    has_dietary_preferences: z.boolean().optional(),
+    dietary_preferences_description: z.string().nullable().optional(),
+    default_what: z.array(WhatPreferenceSchema).optional(),
+    default_speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable().optional(),
+    default_type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable().optional(),
+    default_budget: z.enum(['budget', 'moderate', 'luxury']).nullable().optional()
+  })
+  .superRefine((data, ctx) => {
+    if (data.has_dietary_preferences === true && !data.dietary_preferences_description?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dietary_preferences_description'],
+        message: 'Please describe your dietary preferences before saving.'
+      })
+    }
+  })
 
-// Local draft – all edits stay here until the user explicitly saves
-const local = ref({
-  has_kids: false,
-  has_pets: false,
-  has_mobility_issues: false,
-  has_dietary_preferences: false,
-  dietary_preferences_description: '',
-  default_what: [] as WhatPreference[],
-  default_speed: null as SpeedPreference | null,
-  default_type: null as TypePreference | null,
-  default_budget: null as BudgetPreference | null
-})
+const { handleSubmit, errors, isSubmitting, meta, resetForm, setFieldValue, values, defineField } =
+  useForm({
+    validationSchema: toTypedSchema(profileFormSchema)
+  })
+
+const [dietaryDescription, dietaryDescriptionAttrs] = defineField('dietary_preferences_description')
 
 const profile = computed(() => profileStore.profile)
 const isInitialised = ref(false)
 
-function initLocal(p: NonNullable<typeof profile.value>) {
-  local.value = {
+function profileToFormValues(p: NonNullable<typeof profile.value>) {
+  return {
     has_kids: p.has_kids ?? false,
     has_pets: p.has_pets ?? false,
     has_mobility_issues: p.has_mobility_issues ?? false,
@@ -66,33 +86,17 @@ function initLocal(p: NonNullable<typeof profile.value>) {
   }
 }
 
-// Initialise local draft once the profile arrives from the store
+// Initialise form once the profile arrives from the store
 watch(
   profile,
   (p) => {
     if (p && !isInitialised.value) {
-      initLocal(p)
+      resetForm({ values: profileToFormValues(p) })
       isInitialised.value = true
     }
   },
   { immediate: true }
 )
-
-const isDirty = computed(() => {
-  const p = profile.value
-  if (!p) return false
-  return (
-    local.value.has_kids !== (p.has_kids ?? false) ||
-    local.value.has_pets !== (p.has_pets ?? false) ||
-    local.value.has_mobility_issues !== (p.has_mobility_issues ?? false) ||
-    local.value.has_dietary_preferences !== (p.has_dietary_preferences ?? false) ||
-    local.value.dietary_preferences_description !== (p.dietary_preferences_description ?? '') ||
-    JSON.stringify(local.value.default_what) !== JSON.stringify(p.default_what ?? []) ||
-    local.value.default_speed !== (p.default_speed ?? null) ||
-    local.value.default_type !== (p.default_type ?? null) ||
-    local.value.default_budget !== (p.default_budget ?? null)
-  )
-})
 
 // ── Traveler flag toggles ──────────────────────────────────────────────────
 
@@ -105,17 +109,17 @@ const flags = [
 ]
 
 function toggleFlag(key: BoolFlag) {
-  local.value[key] = !local.value[key]
+  setFieldValue(key, !values[key])
 }
 
 // ── Dietary preferences ───────────────────────────────────────────────────
 
 function onDietaryToggle() {
-  if (local.value.has_dietary_preferences) {
-    local.value.has_dietary_preferences = false
-    local.value.dietary_preferences_description = ''
+  if (values.has_dietary_preferences) {
+    setFieldValue('has_dietary_preferences', false)
+    setFieldValue('dietary_preferences_description', '')
   } else {
-    local.value.has_dietary_preferences = true
+    setFieldValue('has_dietary_preferences', true)
   }
 }
 
@@ -130,10 +134,11 @@ const whatOptions: { value: WhatPreference; label: string; icon: any }[] = [
 ]
 
 function toggleWhat(value: WhatPreference) {
-  const current = local.value.default_what
-  local.value.default_what = current.includes(value)
-    ? current.filter((v) => v !== value)
-    : [...current, value]
+  const current = (values.default_what ?? []) as WhatPreference[]
+  setFieldValue(
+    'default_what',
+    current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
+  )
 }
 
 // ── Speed / Type / Budget (single-select) ─────────────────────────────────
@@ -157,41 +162,33 @@ const budgetOptions: { value: BudgetPreference; label: string; icon: any }[] = [
 ]
 
 function selectSpeed(value: SpeedPreference) {
-  local.value.default_speed = value
+  setFieldValue('default_speed', value)
 }
 
 function selectType(value: TypePreference) {
-  local.value.default_type = value
+  setFieldValue('default_type', value)
 }
 
 function selectBudget(value: BudgetPreference) {
-  local.value.default_budget = value
+  setFieldValue('default_budget', value)
 }
 
 // ── Save / Reset ──────────────────────────────────────────────────────────
 
 function resetProfile() {
-  if (profile.value) initLocal(profile.value)
+  if (profile.value) resetForm({ values: profileToFormValues(profile.value) })
 }
 
-async function saveProfile() {
-  if (local.value.has_dietary_preferences && !local.value.dietary_preferences_description.trim()) {
-    toast({
-      title: 'Description required',
-      description: 'Please describe your dietary preferences before saving.',
-      variant: 'destructive',
-      duration: 5000
-    })
-    return
-  }
-  isSaving.value = true
+const onSave = handleSubmit(async (formValues) => {
   try {
     await profileStore.updateProfile({
-      ...local.value,
-      dietary_preferences_description: local.value.has_dietary_preferences
-        ? local.value.dietary_preferences_description.trim()
+      ...formValues,
+      dietary_preferences_description: formValues.has_dietary_preferences
+        ? formValues.dietary_preferences_description?.trim() || null
         : null
     })
+    // Sync form baseline to newly saved profile so meta.dirty resets to false
+    if (profile.value) resetForm({ values: profileToFormValues(profile.value) })
     toast({
       title: 'Profile saved',
       description: 'Your travel profile has been updated.',
@@ -204,10 +201,8 @@ async function saveProfile() {
       variant: 'destructive',
       duration: 5000
     })
-  } finally {
-    isSaving.value = false
   }
-}
+})
 </script>
 
 <template>
@@ -219,7 +214,7 @@ async function saveProfile() {
           data-testid="profile-reset-btn"
           variant="outline"
           size="sm"
-          :disabled="!isDirty || isSaving"
+          :disabled="!meta.dirty || isSubmitting"
           @click="resetProfile"
         >
           Reset
@@ -227,10 +222,10 @@ async function saveProfile() {
         <Button
           data-testid="profile-save-btn"
           size="sm"
-          :disabled="!isDirty || isSaving"
-          @click="saveProfile"
+          :disabled="!meta.dirty || isSubmitting"
+          @click="onSave"
         >
-          {{ isSaving ? 'Saving…' : 'Save' }}
+          {{ isSubmitting ? 'Saving…' : 'Save' }}
         </Button>
       </div>
     </CardHeader>
@@ -268,12 +263,12 @@ async function saveProfile() {
               v-for="flag in flags"
               :key="flag.key"
               :data-testid="`profile-flag-${flag.key}`"
-              :disabled="isSaving"
+              :disabled="isSubmitting"
               :class="[
                 'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 'disabled:cursor-not-allowed disabled:opacity-50',
-                local[flag.key]
+                values[flag.key]
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
               ]"
@@ -286,12 +281,12 @@ async function saveProfile() {
             <!-- Dietary preferences pill -->
             <button
               data-testid="profile-flag-has_dietary_preferences"
-              :disabled="isSaving"
+              :disabled="isSubmitting"
               :class="[
                 'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 'disabled:cursor-not-allowed disabled:opacity-50',
-                local.has_dietary_preferences
+                values.has_dietary_preferences
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
               ]"
@@ -303,14 +298,18 @@ async function saveProfile() {
           </div>
 
           <!-- Dietary description textarea -->
-          <div v-if="local.has_dietary_preferences" class="mt-3">
+          <div v-if="values.has_dietary_preferences" class="mt-3">
             <Textarea
-              v-model="local.dietary_preferences_description"
+              v-model="dietaryDescription"
+              v-bind="dietaryDescriptionAttrs"
               data-testid="profile-dietary-textarea"
-              :disabled="isSaving"
+              :disabled="isSubmitting"
               placeholder="Describe your dietary preferences (e.g. vegetarian, gluten-free, nut allergy)…"
               class="min-h-[80px] resize-none"
             />
+            <p v-if="errors.dietary_preferences_description" class="mt-1 text-xs text-destructive">
+              {{ errors.dietary_preferences_description }}
+            </p>
           </div>
         </div>
 
@@ -330,12 +329,12 @@ async function saveProfile() {
                 v-for="opt in whatOptions"
                 :key="opt.value"
                 :data-testid="`profile-what-${opt.value}`"
-                :disabled="isSaving"
+                :disabled="isSubmitting"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  local.default_what.includes(opt.value)
+                  (values.default_what ?? []).includes(opt.value)
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"
@@ -357,12 +356,12 @@ async function saveProfile() {
                 v-for="opt in speedOptions"
                 :key="opt.value"
                 :data-testid="`profile-speed-${opt.value}`"
-                :disabled="isSaving"
+                :disabled="isSubmitting"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  local.default_speed === opt.value
+                  values.default_speed === opt.value
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"
@@ -384,12 +383,12 @@ async function saveProfile() {
                 v-for="opt in typeOptions"
                 :key="opt.value"
                 :data-testid="`profile-type-${opt.value}`"
-                :disabled="isSaving"
+                :disabled="isSubmitting"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  local.default_type === opt.value
+                  values.default_type === opt.value
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"
@@ -411,12 +410,12 @@ async function saveProfile() {
                 v-for="opt in budgetOptions"
                 :key="opt.value"
                 :data-testid="`profile-budget-${opt.value}`"
-                :disabled="isSaving"
+                :disabled="isSubmitting"
                 :class="[
                   'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  local.default_budget === opt.value
+                  values.default_budget === opt.value
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                 ]"

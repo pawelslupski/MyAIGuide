@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useForm } from 'vee-validate'
 import { Loader2, ShieldCheck } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,56 +15,37 @@ import {
   CardDescription
 } from '@/components/ui/card'
 import { resetPasswordSchema } from '@/lib/validation/auth.schemas'
+import { toTypedSchema } from '@/lib/validation/zod-adapter'
 import AuthLayout from '@/layouts/AuthLayout.vue'
-
 import { useAuthStore } from '@/stores/auth.store'
+
 const authStore = useAuthStore()
 // Note: user arrives via Supabase recovery email link; token is handled by onAuthStateChange
 
-const form = reactive({
-  password: '',
-  confirmPassword: ''
+const { handleSubmit, errors, isSubmitting, defineField } = useForm({
+  validationSchema: toTypedSchema(resetPasswordSchema)
 })
 
-const fieldErrors = reactive<{ password?: string; confirmPassword?: string }>({})
-const errorMessage = ref<string | null>(null)
-const isLoading = ref(false)
+const [password, passwordAttrs] = defineField('password')
+const [confirmPassword, confirmPasswordAttrs] = defineField('confirmPassword')
+
+const serverError = ref<string | null>(null)
 const success = ref(false)
 
-async function handleSubmit() {
-  errorMessage.value = null
-  fieldErrors.password = undefined
-  fieldErrors.confirmPassword = undefined
-
-  const result = resetPasswordSchema.safeParse(form)
-  if (!result.success) {
-    for (const issue of result.error.issues) {
-      const field = issue.path[0] as keyof typeof fieldErrors
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = issue.message
-      }
-    }
-    return
-  }
-
-  isLoading.value = true
+const onSubmit = handleSubmit(async (values) => {
+  serverError.value = null
   try {
-    await authStore.updatePassword(form.password)
+    await authStore.updatePassword(values.password)
     success.value = true
   } catch (err: any) {
-    errorMessage.value = mapResetError(err)
-  } finally {
-    isLoading.value = false
+    const msg = err?.message?.toLowerCase() ?? ''
+    if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) {
+      serverError.value = 'This reset link has expired or is invalid. Please request a new one.'
+    } else {
+      serverError.value = 'Could not update password. Please try again.'
+    }
   }
-}
-
-function mapResetError(err: any): string {
-  const msg = err?.message?.toLowerCase() ?? ''
-  if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) {
-    return 'This reset link has expired or is invalid. Please request a new one.'
-  }
-  return 'Could not update password. Please try again.'
-}
+})
 </script>
 
 <template>
@@ -86,46 +68,46 @@ function mapResetError(err: any): string {
       </div>
 
       <!-- Form state -->
-      <form v-else class="space-y-4" novalidate @submit.prevent="handleSubmit">
+      <form v-else class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="space-y-1.5">
           <Label for="password">New password</Label>
           <Input
             id="password"
-            v-model="form.password"
+            v-model="password"
+            v-bind="passwordAttrs"
             type="password"
             autocomplete="new-password"
             placeholder="••••••••"
-            :class="fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''"
+            :class="errors.password ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
-          <p v-if="fieldErrors.password" class="text-xs text-destructive">
-            {{ fieldErrors.password }}
-          </p>
+          <p v-if="errors.password" class="text-xs text-destructive">{{ errors.password }}</p>
         </div>
 
         <div class="space-y-1.5">
           <Label for="confirm-password">Confirm new password</Label>
           <Input
             id="confirm-password"
-            v-model="form.confirmPassword"
+            v-model="confirmPassword"
+            v-bind="confirmPasswordAttrs"
             type="password"
             autocomplete="new-password"
             placeholder="••••••••"
             :class="
-              fieldErrors.confirmPassword ? 'border-destructive focus-visible:ring-destructive' : ''
+              errors.confirmPassword ? 'border-destructive focus-visible:ring-destructive' : ''
             "
           />
-          <p v-if="fieldErrors.confirmPassword" class="text-xs text-destructive">
-            {{ fieldErrors.confirmPassword }}
+          <p v-if="errors.confirmPassword" class="text-xs text-destructive">
+            {{ errors.confirmPassword }}
           </p>
         </div>
 
-        <Alert v-if="errorMessage" variant="destructive">
-          <AlertDescription>{{ errorMessage }}</AlertDescription>
+        <Alert v-if="serverError" variant="destructive">
+          <AlertDescription>{{ serverError }}</AlertDescription>
         </Alert>
 
-        <Button type="submit" class="w-full" :disabled="isLoading">
-          <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-          {{ isLoading ? 'Updating...' : 'Update password' }}
+        <Button type="submit" class="w-full" :disabled="isSubmitting">
+          <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+          {{ isSubmitting ? 'Updating...' : 'Update password' }}
         </Button>
       </form>
     </CardContent>

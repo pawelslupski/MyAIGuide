@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useForm } from 'vee-validate'
 import { Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { loginSchema } from '@/lib/validation/auth.schemas'
+import { toTypedSchema } from '@/lib/validation/zod-adapter'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import { useAuthStore } from '@/stores/auth.store'
 
@@ -15,53 +17,33 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
-const form = reactive({
-  email: '',
-  password: ''
+const { handleSubmit, errors, isSubmitting, defineField } = useForm({
+  validationSchema: toTypedSchema(loginSchema)
 })
 
-const fieldErrors = reactive<{ email?: string; password?: string }>({})
-const errorMessage = ref<string | null>(null)
-const isLoading = ref(false)
+const [email, emailAttrs] = defineField('email')
+const [password, passwordAttrs] = defineField('password')
 
-async function handleSubmit() {
-  errorMessage.value = null
-  fieldErrors.email = undefined
-  fieldErrors.password = undefined
+const serverError = ref<string | null>(null)
 
-  const result = loginSchema.safeParse(form)
-  if (!result.success) {
-    for (const issue of result.error.issues) {
-      const field = issue.path[0] as keyof typeof fieldErrors
-      fieldErrors[field] = issue.message
-    }
-    return
-  }
-
-  isLoading.value = true
+const onSubmit = handleSubmit(async (values) => {
+  serverError.value = null
   try {
-    await authStore.login(form.email, form.password)
+    await authStore.login(values.email, values.password)
     await router.push((route.query.redirect as string) ?? '/')
   } catch (err: any) {
-    errorMessage.value = mapAuthError(err)
-  } finally {
-    isLoading.value = false
+    const msg = err?.message?.toLowerCase() ?? ''
+    if (msg.includes('invalid') || msg.includes('credentials')) {
+      serverError.value = 'Invalid email or password. Please try again.'
+    } else if (msg.includes('rate') || msg.includes('too many')) {
+      serverError.value = 'Too many login attempts. Please wait a moment and try again.'
+    } else if (msg.includes('network') || msg.includes('fetch')) {
+      serverError.value = 'Unable to connect. Please check your internet connection.'
+    } else {
+      serverError.value = 'An error occurred. Please try again.'
+    }
   }
-}
-
-function mapAuthError(err: any): string {
-  const msg = err?.message?.toLowerCase() ?? ''
-  if (msg.includes('invalid') || msg.includes('credentials')) {
-    return 'Invalid email or password. Please try again.'
-  }
-  if (msg.includes('rate') || msg.includes('too many')) {
-    return 'Too many login attempts. Please wait a moment and try again.'
-  }
-  if (msg.includes('network') || msg.includes('fetch')) {
-    return 'Unable to connect. Please check your internet connection.'
-  }
-  return 'An error occurred. Please try again.'
-}
+})
 </script>
 
 <template>
@@ -71,42 +53,42 @@ function mapAuthError(err: any): string {
     </CardHeader>
 
     <CardContent>
-      <form class="space-y-4" novalidate @submit.prevent="handleSubmit">
+      <form class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="space-y-1.5">
           <Label for="email">Email</Label>
           <Input
             id="email"
-            v-model="form.email"
+            v-model="email"
+            v-bind="emailAttrs"
             type="email"
             autocomplete="email"
             placeholder="you@example.com"
-            :class="fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''"
+            :class="errors.email ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
-          <p v-if="fieldErrors.email" class="text-xs text-destructive">{{ fieldErrors.email }}</p>
+          <p v-if="errors.email" class="text-xs text-destructive">{{ errors.email }}</p>
         </div>
 
         <div class="space-y-1.5">
           <Label for="password">Password</Label>
           <Input
             id="password"
-            v-model="form.password"
+            v-model="password"
+            v-bind="passwordAttrs"
             type="password"
             autocomplete="current-password"
             placeholder="••••••••"
-            :class="fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''"
+            :class="errors.password ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
-          <p v-if="fieldErrors.password" class="text-xs text-destructive">
-            {{ fieldErrors.password }}
-          </p>
+          <p v-if="errors.password" class="text-xs text-destructive">{{ errors.password }}</p>
         </div>
 
-        <Alert v-if="errorMessage" variant="destructive">
-          <AlertDescription>{{ errorMessage }}</AlertDescription>
+        <Alert v-if="serverError" variant="destructive">
+          <AlertDescription>{{ serverError }}</AlertDescription>
         </Alert>
 
-        <Button type="submit" class="w-full" :disabled="isLoading">
-          <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-          {{ isLoading ? 'Logging in...' : 'Log in' }}
+        <Button type="submit" class="w-full" :disabled="isSubmitting">
+          <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+          {{ isSubmitting ? 'Logging in...' : 'Log in' }}
         </Button>
       </form>
 
