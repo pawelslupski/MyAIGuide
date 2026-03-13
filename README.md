@@ -1,6 +1,6 @@
 # MyAIGuide
 
-> AI-powered travel planner that turns your rough notes into structured, day-by-day itineraries.
+> AI-powered travel planner that turns your rough notes into the structured, day-by-day itineraries.
 
 [![Vue 3](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vue.js)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org/)
