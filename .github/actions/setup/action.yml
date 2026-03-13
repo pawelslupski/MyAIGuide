@@ -1,12 +1,9 @@
 name: Setup
-description: Checkout repository, setup Node.js with cache and install dependencies
+description: Setup Node.js with cache and install dependencies
 
 runs:
   using: composite
   steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
