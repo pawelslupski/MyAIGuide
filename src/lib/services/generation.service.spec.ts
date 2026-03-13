@@ -126,7 +126,7 @@ describe('validatePlanResponse', () => {
   it('returns a valid PlanJson for a correct AI response', () => {
     const result = validatePlanResponse(validResponse)
     expect(result.days).toHaveLength(1)
-    expect(result.days[0].activities[0].locationName).toBe('Wawel Castle')
+    expect(result.days[0]!.activities[0]!.locationName).toBe('Wawel Castle')
   })
 
   it('throws when the "days" array is empty (ZOD-05)', () => {
@@ -136,14 +136,14 @@ describe('validatePlanResponse', () => {
   it('throws when an activity has an invalid categoryTag (ZOD-04)', () => {
     const invalid = structuredClone(validResponse)
 
-    ;(invalid.plan.days[0].activities[0] as any).categoryTag = 'invalid_tag'
+    ;(invalid.plan.days[0]!.activities[0]! as any).categoryTag = 'invalid_tag'
     expect(() => validatePlanResponse(invalid)).toThrow()
   })
 
   it('throws when an activity is missing the required timeOfDay field (ZOD-04)', () => {
     const invalid = structuredClone(validResponse)
 
-    delete (invalid.plan.days[0].activities[0] as any).timeOfDay
+    delete (invalid.plan.days[0]!.activities[0]! as any).timeOfDay
     expect(() => validatePlanResponse(invalid)).toThrow()
   })
 })

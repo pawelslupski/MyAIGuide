@@ -138,7 +138,7 @@ function updateActivityField(
   value: string
 ) {
   if (!localPlan.value) return
-  localPlan.value.days[dayIndex].activities[actIndex][field] = value
+  localPlan.value.days[dayIndex]!.activities[actIndex]![field] = value
   planStore.updateCandidatePlan(JSON.parse(JSON.stringify(localPlan.value)))
 }
 

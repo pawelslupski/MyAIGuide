@@ -16,7 +16,7 @@ export const WhatPreferenceSchema = z.enum([
 
 // Activity schema
 export const ActivitySchema = z.object({
-  timeOfDay: z.string().min(1, 'timeOfDay is required'),
+  timeOfDay: z.enum(['morning', 'afternoon', 'evening']),
   locationName: z.string().min(1, 'locationName is required'),
   description: z.string().min(1, 'description is required'),
   categoryTag: WhatPreferenceSchema

@@ -6,7 +6,7 @@ import { WhatPreferenceSchema } from './plan.schemas'
  * Use this in route handlers or server-side code that receives the id as a string.
  */
 export const tripIdSchema = z.coerce
-  .number({ invalid_type_error: 'Trip ID must be a number' })
+  .number({ error: 'Trip ID must be a number' })
   .int('Trip ID must be an integer')
   .positive('Trip ID must be a positive integer')
 

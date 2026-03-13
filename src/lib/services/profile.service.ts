@@ -66,7 +66,7 @@ export async function getProfile(userId: string): Promise<ProfileDTO> {
 export async function updateProfile(userId: string, updates: ProfileUpdates): Promise<ProfileDTO> {
   const { data, error } = await supabaseClient
     .from('profiles')
-    .update(updates)
+    .update(updates as any)
     .eq('user_id', userId)
     .select()
     .single()

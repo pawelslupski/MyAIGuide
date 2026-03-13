@@ -248,7 +248,7 @@ async function performSave() {
  * Debounced auto-save for every field except note_body.
  * Fires 800 ms after the last change so rapid typing doesn't flood the API.
  */
-const debouncedSave = useDebounceFn(performSave, 800)
+const debouncedSave = useDebounceFn(performSave, 800) as typeof performSave & { cancel(): void }
 
 // Trigger debounced save whenever any non-note field changes.
 watch(

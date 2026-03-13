@@ -26,7 +26,7 @@ function firstIssueOf(data: unknown) {
     throw new Error('Expected ZodError but none was thrown')
   } catch (err) {
     expect(err).toBeInstanceOf(ZodError)
-    return (err as ZodError).issues[0]
+    return (err as ZodError).issues[0]!
   }
 }
 

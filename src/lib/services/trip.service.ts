@@ -151,6 +151,10 @@ export async function getTripById(tripId: number, userId: string): Promise<TripD
 
   return {
     ...trip,
+    what: trip.what as WhatPreference[],
+    speed: trip.speed as SpeedPreference | null,
+    type: trip.type as TypePreference | null,
+    budget: trip.budget as BudgetPreference | null,
     plan_json: trip.plan_json as PlanJson | null,
     status
   }
@@ -409,6 +413,10 @@ export async function savePlanToTrip(
   // 6. Return typed DTO
   return {
     ...updatedTrip,
+    what: updatedTrip.what as WhatPreference[],
+    speed: updatedTrip.speed as SpeedPreference | null,
+    type: updatedTrip.type as TypePreference | null,
+    budget: updatedTrip.budget as BudgetPreference | null,
     plan_json: updatedTrip.plan_json as PlanJson | null,
     status
   }
