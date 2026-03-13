@@ -21,6 +21,7 @@ import TripHeader from '@/components/TripHeader.vue'
 import PlanPanel from '@/components/PlanPanel.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
+import { isFeatureEnabled } from '@/lib/features/flags'
 
 /**
  * TripDetailView
@@ -37,6 +38,8 @@ const tripStore = useTripStore()
 const planStore = usePlanStore()
 const profileStore = useProfileStore()
 const quotaStore = useQuotaStore()
+
+const isPlanGenerationEnabled = isFeatureEnabled('plan-generation')
 
 // Local state
 const isInitializing = ref(true)
@@ -322,10 +325,17 @@ async function handleNoteBlur() {
         <!-- Right Panel: Plan Panel (order-2, sticky on desktop) -->
         <div class="order-2 space-y-4 lg:sticky lg:top-4 lg:self-start">
           <PlanPanel
+            v-if="isPlanGenerationEnabled"
             :trip="tripStore.currentTrip"
             :destination="pendingFields?.destination ?? null"
             :is-note-over-limit="isNoteOverLimit"
           />
+          <div
+            v-else
+            class="flex flex-col items-center justify-center rounded-xl border p-12 text-center text-muted-foreground"
+          >
+            Plan generation is not available in the current environment.
+          </div>
         </div>
       </div>
     </div>

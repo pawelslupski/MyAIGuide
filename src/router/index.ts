@@ -1,10 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { FeatureName } from '@/lib/features/flags'
 
 declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     guestOnly?: boolean
     title?: string
+    requiresFeature?: FeatureName
   }
 }
 
@@ -52,6 +54,11 @@ const routes = [
     }
   },
   {
+    path: '/maintenance',
+    name: 'maintenance',
+    component: () => import('@/views/MaintenanceView.vue')
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFoundView.vue')
@@ -70,6 +77,13 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  const { isFeatureEnabled } = await import('@/lib/features/flags')
+
+  // Feature flag check — redirect to /maintenance if the required feature is disabled
+  if (to.meta.requiresFeature && !isFeatureEnabled(to.meta.requiresFeature)) {
+    return { name: 'maintenance' }
+  }
+
   const { watch } = await import('vue')
   const { useAuthStore } = await import('@/stores/auth.store')
   const authStore = useAuthStore()
@@ -91,11 +105,11 @@ router.beforeEach(async (to) => {
     })
   }
 
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+  if (to.meta.requiresAuth && !authStore.isAuthenticated && isFeatureEnabled('auth')) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
-  if (to.meta.guestOnly && authStore.isAuthenticated) {
+  if (to.meta.guestOnly && authStore.isAuthenticated && isFeatureEnabled('auth')) {
     return { name: 'dashboard' }
   }
 })

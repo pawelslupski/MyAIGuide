@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { ProfileDTO, ErrorResponse, TripPreferencesDto, UpdateProfileCommand } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
 import { createUnauthorizedError, createValidationError, toApiError } from '@/lib/errors/api.error'
+import { isFeatureEnabled } from '@/lib/features/flags'
 import { getProfile, updateProfile as updateProfileService } from '@/lib/services/profile.service'
 import { validateUpdateProfileCommand } from '@/lib/validation/profile.schemas'
 import { ZodError } from 'zod'
@@ -38,9 +39,13 @@ export const useProfileStore = defineStore('profile', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
-      if (!user) throw createUnauthorizedError()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
+      if (!user) {
+        if (!isFeatureEnabled('auth')) return // auth disabled, no session yet — skip silently
+        throw createUnauthorizedError()
+      }
 
       profile.value = await getProfile(user.id)
     } catch (err: unknown) {
@@ -62,8 +67,9 @@ export const useProfileStore = defineStore('profile', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw createUnauthorizedError()
 
       const validated = validateUpdateProfileCommand(command)

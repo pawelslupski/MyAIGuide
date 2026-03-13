@@ -24,6 +24,7 @@ import {
   createValidationError,
   toApiError
 } from '@/lib/errors/api.error'
+import { isFeatureEnabled } from '@/lib/features/flags'
 import {
   validateCreateTripCommand,
   validateUpdateTripCommand,
@@ -83,8 +84,9 @@ export const useTripStore = defineStore('trip', () => {
       const validatedId = validateTripId(tripId)
 
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw createUnauthorizedError()
 
       currentTrip.value = await getTripById(validatedId, user.id)
@@ -113,8 +115,9 @@ export const useTripStore = defineStore('trip', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw new Error('User not authenticated')
 
       const updated = await updateTripService(tripId, user.id, { title })
@@ -139,8 +142,9 @@ export const useTripStore = defineStore('trip', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw new Error('User not authenticated')
 
       const updated = await updateTripService(tripId, user.id, { destination })
@@ -165,8 +169,9 @@ export const useTripStore = defineStore('trip', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw new Error('User not authenticated')
 
       const updated = await updateTripService(tripId, user.id, { note_body: noteBody })
@@ -208,8 +213,9 @@ export const useTripStore = defineStore('trip', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw new Error('User not authenticated')
 
       const updated = await updateTripService(tripId, user.id, {
@@ -245,9 +251,13 @@ export const useTripStore = defineStore('trip', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
-      if (!user) throw createUnauthorizedError()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
+      if (!user) {
+        if (!isFeatureEnabled('auth')) return // auth disabled, no session yet — show empty list
+        throw createUnauthorizedError()
+      }
 
       const queryResult = getTripsQuerySchema.safeParse({ page, limit, status })
       if (!queryResult.success) {
@@ -285,8 +295,9 @@ export const useTripStore = defineStore('trip', () => {
   async function deleteTripById(tripId: number): Promise<void> {
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw createUnauthorizedError()
 
       await deleteTripService(tripId, user.id)
@@ -313,8 +324,9 @@ export const useTripStore = defineStore('trip', () => {
     isCreatingTrip.value = true
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw createUnauthorizedError()
 
       const validated = validateCreateTripCommand(command)
@@ -363,8 +375,9 @@ export const useTripStore = defineStore('trip', () => {
     isSaving.value = true
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw createUnauthorizedError()
 
       const updated = await updateTripService(tripId, user.id, fields)
@@ -390,8 +403,9 @@ export const useTripStore = defineStore('trip', () => {
 
     try {
       const {
-        data: { user }
-      } = await supabaseClient.auth.getUser()
+        data: { session }
+      } = await supabaseClient.auth.getSession()
+      const user = session?.user
       if (!user) throw createUnauthorizedError()
 
       const validatedId = validateTripId(tripId)

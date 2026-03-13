@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabaseClient } from '@/db/supabase.client'
+import { isFeatureEnabled } from '@/lib/features/flags'
 import router from '@/router'
 import { createValidationError, createInternalError, toApiError } from '@/lib/errors/api.error'
 
@@ -31,9 +32,19 @@ export const useAuthStore = defineStore('auth', () => {
       }
     })
 
-    supabaseClient.auth.getSession().then(({ data }) => {
-      session.value = data.session
-      user.value = data.session?.user ?? null
+    supabaseClient.auth.getSession().then(async ({ data }) => {
+      if (!isFeatureEnabled('auth') && !data.session) {
+        // Auth is disabled — sign in anonymously so RLS and DB queries work with a real user ID.
+        const { error: anonError } = await supabaseClient.auth.signInAnonymously()
+        if (anonError) console.error('[AuthStore] Anonymous sign-in failed:', anonError.message)
+      }
+
+      // Always re-read the authoritative session state after any potential sign-in attempt.
+      // This avoids races between the signInAnonymously promise resolving and onAuthStateChange
+      // updating Supabase's internal localStorage cache.
+      const { data: current } = await supabaseClient.auth.getSession()
+      session.value = current.session
+      user.value = current.session?.user ?? null
       isLoading.value = false
     })
   }

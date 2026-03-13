@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useForm } from 'vee-validate'
 import { Loader2 } from 'lucide-vue-next'
@@ -12,10 +12,17 @@ import { loginSchema } from '@/lib/validation/auth.schemas'
 import { toTypedSchema } from '@/lib/validation/zod-adapter'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { isFeatureEnabled } from '@/lib/features/flags'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+
+onMounted(() => {
+  if (!isFeatureEnabled('auth')) {
+    router.replace('/')
+  }
+})
 
 const { handleSubmit, errors, isSubmitting, defineField } = useForm({
   validationSchema: toTypedSchema(loginSchema)

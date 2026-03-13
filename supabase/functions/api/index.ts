@@ -8,6 +8,8 @@
 // POST http://localhost:54321/functions/v1/api/generations
 // Body: { "tripId": 1, "userId": "00000000-0000-0000-0000-000000000001" }
 
+import { isFeatureEnabled } from '../../../src/lib/features/flags.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
@@ -17,6 +19,14 @@ Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // Feature flag check — reject all requests when auth is disabled
+  if (!isFeatureEnabled('auth')) {
+    return new Response(
+      JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Auth feature is disabled in this environment' } }),
+      { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 
   try {

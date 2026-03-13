@@ -18,6 +18,7 @@ import type {
   OpenRouterResponse,
   ParsedResponse
 } from './openrouter.types.ts'
+import { isFeatureEnabled } from '../../../src/lib/features/flags.ts'
 
 // ============================================================================
 // CONSTANTS AND CONFIGURATION
@@ -46,6 +47,11 @@ Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // Feature flag check — reject all requests when plan-generation is disabled
+  if (!isFeatureEnabled('plan-generation')) {
+    return createErrorResponse(503, 'SERVICE_UNAVAILABLE', 'Plan generation is disabled in this environment')
   }
 
   // Only allow POST

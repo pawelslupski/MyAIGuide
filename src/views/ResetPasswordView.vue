@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import { useForm } from 'vee-validate'
 import { Loader2, ShieldCheck } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
@@ -18,9 +18,17 @@ import { resetPasswordSchema } from '@/lib/validation/auth.schemas'
 import { toTypedSchema } from '@/lib/validation/zod-adapter'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { isFeatureEnabled } from '@/lib/features/flags'
 
+const router = useRouter()
 const authStore = useAuthStore()
 // Note: user arrives via Supabase recovery email link; token is handled by onAuthStateChange
+
+onMounted(() => {
+  if (!isFeatureEnabled('auth')) {
+    router.replace('/')
+  }
+})
 
 const { handleSubmit, errors, isSubmitting, defineField } = useForm({
   validationSchema: toTypedSchema(resetPasswordSchema)

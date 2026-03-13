@@ -4,9 +4,12 @@ import { LogOut } from 'lucide-vue-next'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth.store'
+import { isFeatureEnabled } from '@/lib/features/flags'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+const isAuthEnabled = isFeatureEnabled('auth')
 
 async function handleLogout() {
   await authStore.logout()
@@ -23,7 +26,7 @@ async function handleLogout() {
         <div class="flex items-center gap-2">
           <ThemeToggle />
 
-          <div class="flex items-center gap-1">
+          <div v-if="isAuthEnabled" class="flex items-center gap-1">
             <span class="text-sm text-muted-foreground">{{ authStore.userEmail }}</span>
             <Button
               variant="ghost"
