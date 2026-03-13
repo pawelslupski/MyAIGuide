@@ -10,7 +10,7 @@ interface Props {
   isSaving?: boolean
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 
 const emit = defineEmits<{
   'update:title': [newTitle: string]
