@@ -19,15 +19,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
-      - name: Unit tests with coverage
-        run: npm run test:coverage
-      - name: Upload unit coverage
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: unit-coverage
-          path: coverage/
-          retention-days: 7
+      - name: Unit tests
+        run: npm run test
+      # - name: Unit tests with coverage
+      #   run: npm run test:coverage
+      # - name: Upload unit coverage
+      #   uses: actions/upload-artifact@v7
+      #   if: always()
+      #   with:
+      #     name: unit-coverage
+      #     path: coverage/
+      #     retention-days: 7
 
   test-e2e:
     needs: [ lint ]
