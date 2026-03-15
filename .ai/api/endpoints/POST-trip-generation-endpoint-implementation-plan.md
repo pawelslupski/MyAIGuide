@@ -219,8 +219,9 @@ planStore.generatePlan(tripId)           [src/stores/plan.store.ts]
   │
   ├─► fetchProfile(userId)              → get traveler flags for prompt
   │
-  ├─► detectLanguage(trip.note_body)   [generation.service.ts]
-  │     → returns ISO 639-1 code ('pl', 'en', ...)
+  ├─► language = i18n.global.locale      [plan.store.ts]
+  │     → active UI locale ('pl' | 'en') from vue-i18n singleton
+  │     (detectLanguage is used only for note-blur mismatch warning in TripView, not for generation)
   │
   ├─► callAIService(params)            [generation.service.ts]
   │     → supabaseClient.functions.invoke('generate-plan', { prompt, language })

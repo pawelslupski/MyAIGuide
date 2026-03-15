@@ -36,7 +36,9 @@ Key capabilities:
 - **Per-trip preferences** — override defaults with trip-specific details: destination, number of people, trip
   duration, travel style.
 - **AI plan generation** — one click sends notes + preferences to an AI model and returns a structured itinerary.
-  Language of the plan automatically matches the language of the note.
+  Plan language follows the active UI locale (EN/PL); a soft warning is shown if the note language differs.
+- **Regenerate with status reset** — clicking "Regenerate" immediately clears the saved plan from the database
+  (status reverts CONFIRMED → DRAFT) before generating a new candidate.
 - **UI language switching** — the entire app interface is available in English and Polish; locale is persisted in localStorage and switchable with a single click.
 - **Plan candidate workflow** — generated plans are held in memory for review and editing before being explicitly
   saved to the database.
@@ -223,8 +225,9 @@ npx playwright show-report
 - AI-powered plan generation with structured JSON output
 - Plan candidate workflow: generate → review → edit → save
 - Generation quota: 10 generations per user per rolling 24-hour window
-- Automatic plan language detection matching the note language (PL/EN)
+- Plan language driven by active UI locale (EN/PL); note-language mismatch shown as a soft warning on blur
 - Full UI internationalisation with EN/PL toggle (persisted in localStorage)
+- Regenerate resets trip status CONFIRMED → DRAFT before generating a new plan candidate
 
 ### Out of scope (post-MVP)
 

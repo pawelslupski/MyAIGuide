@@ -19,7 +19,7 @@ plan stored in JSON format.
 - **Dashboard at `/`** – the root path is the dashboard (authenticated default route).
 - **Note validation**: maximum 10,000 characters, **no minimum length** enforced anywhere.
 - **Plan candidate is ephemeral** – generated plan lives only in Pinia state; page refresh discards it.
-- **Language is auto-detected** from note content; no manual language selector.
+- **Plan language follows the active UI locale** (EN/PL switcher in the header); `detectLanguage` is used only for a soft mismatch warning shown on note blur — it does not affect generation language.
 
 ---
 
@@ -283,7 +283,7 @@ and refreshed after each successful generation.
 **Saved plan state:**
 
 - Primary-tinted `<Alert>` banner: "Plan saved · Last updated [relative timestamp]"
-- "Regenerate" button (outline, small, top-right)
+- "Regenerate" button (outline, small, top-right) — clicking immediately clears `plan_json` from DB, downgrades status CONFIRMED → DRAFT, then generates a new candidate
 - All fields **read-only** (rendered as `<h4>` / `<p>`) — no per-field inline edit affordance
 
 **No plan yet:**
@@ -586,8 +586,8 @@ All three are run in parallel via `Promise.all()`.
 
 1. Dashboard → click trip card → `/trips/:id`
 2. Edit note or per-trip preferences
-3. Click "Generate Plan" → new candidate replaces old display
-4. Save → overwrites previous confirmed plan
+3. Click "Regenerate" → `plan_json` cleared immediately (status badge: CONFIRMED → DRAFT), then new candidate generated
+4. Save → writes new plan to DB (status: DRAFT → CONFIRMED)
 5. Back to dashboard → updated timestamp
 
 ### 11.4 Quota Limit Handling
@@ -621,24 +621,24 @@ All three are run in parallel via `Promise.all()`.
 
 ## 12. User Story → UI Element Mapping
 
-| US     | Story                         | UI element                                                                         |
-| ------ | ----------------------------- | ---------------------------------------------------------------------------------- |
-| US-001 | Registration                  | `RegisterView` form + redirect to `/`                                              |
-| US-002 | Login / Logout / Auth guard   | `LoginView`, logout button in sidebar, `router.beforeEach` guard                   |
-| US-003 | Data isolation                | RLS on server; UI shows only own data                                              |
-| US-004 | Account deletion              | Delete Account modal in sidebar user menu                                          |
-| US-005 | Global profile flags          | `UserProfilePanel` Section A (traveler flag pills) in `DashboardView`              |
-| US-006 | Default travel preferences    | `UserProfilePanel` Section B (what/speed/type/budget pills)                        |
-| US-008 | Create trip + note            | "New Trip" button in `DashboardView` → inline creation → `TripView`                |
-| US-009 | Edit / delete trip            | Note editor + preferences in `TripView`; delete via card menu / detail page        |
-| US-010 | Trip list                     | `DashboardView` trip grid sorted by `updated_at` DESC with pagination              |
-| US-011 | Per-trip preferences          | `TripPreferences` panel in `TripView` (overridable, with read-only profile flags)  |
-| US-012 | Note length validation        | Character counter in `TripNoteEditor`; "Generate Plan" button disabled if > 10,000 |
-| US-013 | Generate plan + quota counter | "Generate Plan" button + `GenerationQuotaCounter`; 10/10 → button locked           |
-| US-014 | Review / edit candidate       | Editable fields in `PlanDayList` when plan is a candidate                          |
-| US-015 | Save plan                     | "Save Plan" button; confirmed plan shown on re-open                                |
-| US-016 | Regenerate + error handling   | "Regenerate" button; destructive toast + retry on error; candidate lost on refresh |
-| US-017 | Plan language from note       | Auto-detected server-side; `plan_language` shown in plan header (read-only)        |
+| US     | Story                         | UI element                                                                                                         |
+| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| US-001 | Registration                  | `RegisterView` form + redirect to `/`                                                                              |
+| US-002 | Login / Logout / Auth guard   | `LoginView`, logout button in sidebar, `router.beforeEach` guard                                                   |
+| US-003 | Data isolation                | RLS on server; UI shows only own data                                                                              |
+| US-004 | Account deletion              | Delete Account modal in sidebar user menu                                                                          |
+| US-005 | Global profile flags          | `UserProfilePanel` Section A (traveler flag pills) in `DashboardView`                                              |
+| US-006 | Default travel preferences    | `UserProfilePanel` Section B (what/speed/type/budget pills)                                                        |
+| US-008 | Create trip + note            | "New Trip" button in `DashboardView` → inline creation → `TripView`                                                |
+| US-009 | Edit / delete trip            | Note editor + preferences in `TripView`; delete via card menu / detail page                                        |
+| US-010 | Trip list                     | `DashboardView` trip grid sorted by `updated_at` DESC with pagination                                              |
+| US-011 | Per-trip preferences          | `TripPreferences` panel in `TripView` (overridable, with read-only profile flags)                                  |
+| US-012 | Note length validation        | Character counter in `TripNoteEditor`; "Generate Plan" button disabled if > 10,000                                 |
+| US-013 | Generate plan + quota counter | "Generate Plan" button + `GenerationQuotaCounter`; 10/10 → button locked                                           |
+| US-014 | Review / edit candidate       | Editable fields in `PlanDayList` when plan is a candidate                                                          |
+| US-015 | Save plan                     | "Save Plan" button; confirmed plan shown on re-open                                                                |
+| US-016 | Regenerate + error handling   | "Regenerate" clears `plan_json` → status CONFIRMED→DRAFT immediately; new candidate generated; error toast + retry |
+| US-017 | Plan language from UI locale  | Language = active EN/PL switcher; soft amber warning on note blur if note language differs from UI locale          |
 
 ---
 

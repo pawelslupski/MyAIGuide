@@ -58,7 +58,7 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
 - Plan generowany na podstawie: profilu globalnego, preferencji na poziomie wycieczki i notatki.
 - Struktura wyniku (JSON) zawiera m.in.: Day, TimeOfDay (Rano/Popołudnie/Wieczór), LocationName, Description,
   CategoryTag.
-- Język planu = język notatki (automatyczne wykrywanie).
+- Język planu = aktywny język interfejsu UI (przełącznik EN/PL w nagłówku); jeśli język notatki różni się od języka UI, wyświetlane jest miękkie ostrzeżenie przy polu notatki po opuszczeniu pola.
 - Walidacja długości notatki:
   - maksymalnie 10 000 znaków.
 - Dzienny limit generowania planów: 10 generacji na użytkownika w ruchomym oknie 24h z widocznym licznikiem.
@@ -68,7 +68,7 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
 - Wygenerowany plan trafia najpierw jako tymczasowy kandydat (tylko w pamięci aplikacji).
 - Użytkownik może edytować pola kandydata (np. opis, aktywności).
 - Akcja „Zapisz plan” utrwala kandydata w bazie i wiąże go 1:1 z notatką.
-- Ponowne wygenerowanie planu nadpisuje wcześniej zapisany plan.
+- Kliknięcie „Generuj ponownie" natychmiast usuwa zapisany plan z bazy (status wraca z CONFIRMED do DRAFT), po czym tworzony jest nowy kandydat.
 - Odświeżenie strony / zamknięcie przeglądarki usuwa niezapisanego kandydata.
 
 ### 3.7 Obsługa błędów i stany brzegowe
@@ -252,19 +252,19 @@ ID: US-016
 Opis: Jako użytkownik chcę ponownie wygenerować plan oraz rozumieć, co dzieje się w przypadku błędów.  
 Kryteria akceptacji:
 
-- Kolejne kliknięcie „Generuj plan” tworzy nowego kandydata; zapis nadpisuje poprzedni plan.
+- Kliknięcie „Generuj ponownie” natychmiast czyści zapisany plan (plan_json = null), status wycieczki cofa się do DRAFT, po czym tworzony jest nowy kandydat.
 - W przypadku błędu generowania użytkownik widzi komunikat i może ręcznie ponowić próbę.
 - Niezapisany kandydat nie jest przechowywany między odświeżeniami strony ani zamknięciem przeglądarki.
 
-### US-017 Język planu zgodny z notatką
+### US-017 Język planu zgodny z językiem interfejsu
 
-ID: US-017  
-Opis: Jako użytkownik chcę, aby plan był w języku notatki.  
+ID: US-017
+Opis: Jako użytkownik chcę, aby plan był generowany w języku wybranym w interfejsie aplikacji.
 Kryteria akceptacji:
 
-- System generuje plan w języku notatki (np. PL/EN)
-- W przypadku mieszanych treści wybierany jest dominujący język.
+- System generuje plan w języku aktywnego przełącznika UI (EN/PL), niezależnie od języka notatki.
 - Interfejs aplikacji jest dostępny w języku polskim i angielskim; użytkownik może przełączać język UI jednym kliknięciem (przełącznik EN/PL w nagłówku); wybór jest persystowany w localStorage.
+- Jeśli język wykryty w notatce różni się od języka UI, przy polu notatki (po opuszczeniu pola) wyświetlane jest miękkie ostrzeżenie informujące, że plan zostanie wygenerowany w języku interfejsu.
 
 ## 6. Metryki sukcesu
 
