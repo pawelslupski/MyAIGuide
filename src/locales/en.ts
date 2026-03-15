@@ -17,7 +17,7 @@ const en = {
   },
   auth: {
     emailLabel: 'Email',
-    emailPlaceholder: 'you@example.com',
+    emailPlaceholder: "you{'@'}example.com",
     passwordLabel: 'Password',
     confirmPasswordLabel: 'Confirm password',
     newPasswordLabel: 'New password',

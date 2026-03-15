@@ -19,7 +19,7 @@ const pl: MessageSchema = {
   },
   auth: {
     emailLabel: 'Email',
-    emailPlaceholder: 'ty@przykład.pl',
+    emailPlaceholder: "ty{'@'}przykład.pl",
     passwordLabel: 'Hasło',
     confirmPasswordLabel: 'Potwierdź hasło',
     newPasswordLabel: 'Nowe hasło',
