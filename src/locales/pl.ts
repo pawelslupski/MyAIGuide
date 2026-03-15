@@ -238,7 +238,7 @@ const pl: MessageSchema = {
     day: 'Dzień {n}',
     activities: '{count} aktywność | {count} aktywności | {count} aktywności',
     timeOfDay: {
-      morning: 'ranek',
+      morning: 'poranek',
       afternoon: 'południe',
       evening: 'wieczór'
     },

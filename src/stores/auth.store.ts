@@ -32,21 +32,28 @@ export const useAuthStore = defineStore('auth', () => {
       }
     })
 
-    supabaseClient.auth.getSession().then(async ({ data }) => {
-      if (!isFeatureEnabled('auth') && !data.session) {
-        // Auth is disabled — sign in anonymously so RLS and DB queries work with a real user ID.
-        const { error: anonError } = await supabaseClient.auth.signInAnonymously()
-        if (anonError) console.error('[AuthStore] Anonymous sign-in failed:', anonError.message)
-      }
+    supabaseClient.auth
+      .getSession()
+      .then(async ({ data }) => {
+        if (!isFeatureEnabled('auth') && !data.session) {
+          // Auth is disabled — sign in anonymously so RLS and DB queries work with a real user ID.
+          const { error: anonError } = await supabaseClient.auth.signInAnonymously()
+          if (anonError) console.error('[AuthStore] Anonymous sign-in failed:', anonError.message)
+        }
 
-      // Always re-read the authoritative session state after any potential sign-in attempt.
-      // This avoids races between the signInAnonymously promise resolving and onAuthStateChange
-      // updating Supabase's internal localStorage cache.
-      const { data: current } = await supabaseClient.auth.getSession()
-      session.value = current.session
-      user.value = current.session?.user ?? null
-      isLoading.value = false
-    })
+        // Always re-read the authoritative session state after any potential sign-in attempt.
+        // This avoids races between the signInAnonymously promise resolving and onAuthStateChange
+        // updating Supabase's internal localStorage cache.
+        const { data: current } = await supabaseClient.auth.getSession()
+        session.value = current.session
+        user.value = current.session?.user ?? null
+      })
+      .catch((err) => {
+        console.error('[AuthStore] Session initialization failed:', err)
+      })
+      .finally(() => {
+        isLoading.value = false
+      })
   }
 
   async function login(email: string, password: string): Promise<void> {

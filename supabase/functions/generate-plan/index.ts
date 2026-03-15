@@ -206,7 +206,13 @@ Deno.serve(async (req: Request) => {
  * @param prompt - User's travel notes combined with preferences
  * @param language - Detected language for response generation
  */
+const LOCALE_TO_LANGUAGE: Record<string, string> = {
+  en: 'English',
+  pl: 'Polish'
+}
+
 function buildOpenRouterRequest(prompt: string, language: string): OpenRouterRequest {
+  const languageName = LOCALE_TO_LANGUAGE[language] ?? language
   // System message - sets AI role and language
   const systemMessage = {
     role: 'system' as const,
@@ -215,7 +221,7 @@ function buildOpenRouterRequest(prompt: string, language: string): OpenRouterReq
 
     CRITICAL: You MUST return ONLY the exact JSON structure shown below. DO NOT add any extra fields.
 
-    REQUIRED JSON STRUCTURE (respond in ${language} language):
+    REQUIRED JSON STRUCTURE (respond in ${languageName} language):
     {
       "days": [
         {
