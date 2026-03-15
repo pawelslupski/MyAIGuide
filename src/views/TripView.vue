@@ -17,12 +17,13 @@ import { usePlanStore } from '@/stores/plan.store'
 import { useProfileStore } from '@/stores/profile.store'
 import { useQuotaStore } from '@/stores/quota.store'
 import { useToast } from '@/components/ui/toast/use-toast'
+import AppLayout from '@/layouts/AppLayout.vue'
 import TripEditor from '@/components/TripEditor.vue'
 import TripHeader from '@/components/TripHeader.vue'
 import PlanPanel from '@/components/PlanPanel.vue'
-import ThemeToggle from '@/components/ThemeToggle.vue'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
 import { isFeatureEnabled } from '@/lib/features/flags'
+import { detectLanguage } from '@/lib/services/generation.service'
 
 /**
  * TripDetailView
@@ -33,7 +34,7 @@ import { isFeatureEnabled } from '@/lib/features/flags'
 const route = useRoute()
 const router = useRouter()
 const { toast } = useToast()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 // Stores
 const tripStore = useTripStore()
@@ -45,6 +46,7 @@ const isPlanGenerationEnabled = isFeatureEnabled('plan-generation')
 
 // Local state
 const isInitializing = ref(true)
+const noteLanguageMismatch = ref(false)
 
 // Pending (unsaved) edit fields tracked from TripEditor
 type PendingFields = {
@@ -281,11 +283,19 @@ watch(
 async function handleNoteBlur() {
   debouncedSave.cancel()
   await performSave()
+
+  const noteBody = pendingFields.value?.note_body ?? ''
+  if (noteBody.trim().length > 0) {
+    const detectedLang = detectLanguage(noteBody)
+    noteLanguageMismatch.value = detectedLang !== locale.value
+  } else {
+    noteLanguageMismatch.value = false
+  }
 }
 </script>
 
 <template>
-  <div class="container mx-auto px-4 py-6 md:py-8">
+  <AppLayout>
     <!-- Loading State -->
     <div v-if="isInitializing" class="flex min-h-[400px] items-center justify-center">
       <div class="text-center">
@@ -305,11 +315,7 @@ async function handleNoteBlur() {
         :updated-at="tripStore.currentTrip.updated_at"
         :is-saving="tripStore.isSaving"
         @update:title="handleTitleChange"
-      >
-        <template #actions>
-          <ThemeToggle />
-        </template>
-      </TripHeader>
+      />
 
       <!-- Responsive Grid Layout -->
       <div class="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
@@ -319,6 +325,7 @@ async function handleNoteBlur() {
             :trip="tripStore.currentTrip"
             :default-preferences="profileStore.defaultPreferences"
             :profile="profileStore.profile"
+            :note-language-mismatch="noteLanguageMismatch"
             @update:fields="handleFieldsChange"
             @blur:note="handleNoteBlur"
           />
@@ -349,7 +356,7 @@ async function handleNoteBlur() {
         <p class="mt-2 text-sm text-muted-foreground">{{ t('tripView.loadFailedDesc') }}</p>
       </div>
     </div>
-  </div>
+  </AppLayout>
 
   <!-- Unsaved changes navigation guard dialog -->
   <Dialog

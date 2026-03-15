@@ -172,6 +172,8 @@ const pl: MessageSchema = {
     notesPlaceholder: 'Napisz notatki tutaj... (opcjonalnie)',
     noteOverLimit: 'Przekroczono limit {limit} znaków',
     noteApproachingLimit: 'Zbliżasz się do limitu znaków',
+    noteLanguageMismatch:
+      'Język notatki nie zgadza się z wybranym językiem interfejsu. Plan zostanie wygenerowany w języku interfejsu.',
     what: {
       nature: 'Natura i outdoors',
       beach_relax: 'Plaża i relaks',

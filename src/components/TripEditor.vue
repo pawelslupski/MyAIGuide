@@ -28,6 +28,7 @@ interface Props {
   trip: TripDTO
   defaultPreferences?: TripPreferencesDto
   profile?: ProfileDTO | null
+  noteLanguageMismatch?: boolean
 }
 
 const props = defineProps<Props>()
@@ -395,6 +396,13 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
             :aria-invalid="noteLength > MAX_NOTE_LENGTH"
             @blur="emit('blur:note')"
           />
+          <p
+            v-if="props.noteLanguageMismatch"
+            data-testid="note-language-mismatch-warning"
+            class="text-sm text-amber-600 dark:text-amber-400"
+          >
+            {{ t('tripEditor.noteLanguageMismatch') }}
+          </p>
           <div class="flex items-center justify-between text-sm">
             <span
               v-if="noteValidationMessage"

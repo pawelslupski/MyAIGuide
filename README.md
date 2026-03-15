@@ -37,6 +37,7 @@ Key capabilities:
   duration, travel style.
 - **AI plan generation** — one click sends notes + preferences to an AI model and returns a structured itinerary.
   Language of the plan automatically matches the language of the note.
+- **UI language switching** — the entire app interface is available in English and Polish; locale is persisted in localStorage and switchable with a single click.
 - **Plan candidate workflow** — generated plans are held in memory for review and editing before being explicitly
   saved to the database.
 - **Generation quota** — 10 AI generations per user per rolling 24-hour window with a live counter.
@@ -55,6 +56,7 @@ Key capabilities:
 | UI components        | shadcn-vue 2 (Radix Vue / Reka UI)                   |
 | Styling              | Tailwind CSS 3                                       |
 | Icons                | lucide-vue-next                                      |
+| Internationalisation | vue-i18n 9 (EN/PL, localStorage persistence)         |
 | Validation           | Zod 4                                                |
 | Backend              | Supabase (PostgreSQL 17 + Auth + Row Level Security) |
 | Serverless functions | Supabase Edge Functions (Deno 2)                     |
@@ -63,7 +65,7 @@ Key capabilities:
 | Unit testing         | Vitest 4, @vue/test-utils, @pinia/testing, msw       |
 | E2E testing          | Playwright 1.58 (Chromium), @axe-core/playwright     |
 | CI/CD                | GitHub Actions                                       |
-| Hosting              | DigitalOcean (Docker)                                |
+| Hosting              | Cloudflare Pages                                     |
 
 ---
 
@@ -221,7 +223,8 @@ npx playwright show-report
 - AI-powered plan generation with structured JSON output
 - Plan candidate workflow: generate → review → edit → save
 - Generation quota: 10 generations per user per rolling 24-hour window
-- Automatic plan language detection matching the note language _only PL/EN for now_
+- Automatic plan language detection matching the note language (PL/EN)
+- Full UI internationalisation with EN/PL toggle (persisted in localStorage)
 
 ### Out of scope (post-MVP)
 

@@ -263,7 +263,8 @@ Opis: Jako użytkownik chcę, aby plan był w języku notatki.
 Kryteria akceptacji:
 
 - System generuje plan w języku notatki (np. PL/EN)
-- W przypadku mieszanych treści wybierany jest dominujący język; brak ręcznego przełącznika języka w MVP.
+- W przypadku mieszanych treści wybierany jest dominujący język.
+- Interfejs aplikacji jest dostępny w języku polskim i angielskim; użytkownik może przełączać język UI jednym kliknięciem (przełącznik EN/PL w nagłówku); wybór jest persystowany w localStorage.
 
 ## 6. Metryki sukcesu
 

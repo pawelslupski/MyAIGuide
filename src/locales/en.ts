@@ -170,6 +170,8 @@ const en = {
     notesPlaceholder: 'Write your trip notes here... (optional)',
     noteOverLimit: 'Maximum {limit} characters exceeded',
     noteApproachingLimit: 'Approaching character limit',
+    noteLanguageMismatch:
+      'Note language does not match the selected UI language. The plan will be generated in the UI language.',
     what: {
       nature: 'Nature & Outdoors',
       beach_relax: 'Beach & Relaxation',

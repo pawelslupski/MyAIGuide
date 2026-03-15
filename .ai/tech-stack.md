@@ -9,6 +9,7 @@
 - **Pinia** – zarządzanie stanem (kandydat planu w pamięci, liczniki generacji)
 - **Tailwind CSS 3** – utility-first stylowanie (wersja 3 dla kompatybilności z shadcn-vue)
 - **shadcn-vue** – gotowe, dostępne komponenty UI
+- **vue-i18n 9** – internacjonalizacja UI (EN/PL), tryb Composition API, persystencja locale w localStorage
 
 ## Backend i baza danych
 

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, readonly } from 'vue'
+import { ref, computed, readonly, type Ref } from 'vue'
 import type {
   GeneratedPlanDTO,
   GenerationQuotaDTO,
@@ -12,7 +12,6 @@ import { supabaseClient } from '@/db/supabase.client'
 import { useTripStore } from './trip.store'
 import { useProfileStore } from './profile.store'
 import {
-  detectLanguage,
   callAIService,
   checkGenerationQuota,
   recordGenerationAttempt,
@@ -23,6 +22,7 @@ import {
   savePlanToTrip as savePlanService,
   clearPlanFromTrip
 } from '@/lib/services/trip.service'
+import { i18n } from '@/plugins/i18n'
 import {
   createValidationError,
   createUnauthorizedError,
@@ -133,8 +133,8 @@ export const usePlanStore = defineStore('plan', () => {
         throw createQuotaExceededError(quotaCheck.used, quotaCheck.limit, quotaCheck.resetAt)
       }
 
-      // 7. Detect language from note (default to 'en' if no note)
-      const language = detectLanguage(trip.note_body ?? '')
+      // 7. Use the active UI locale as the plan language
+      const language = (i18n.global.locale as unknown as Ref<string>).value
 
       // 8. Fetch user profile for personalization flags and preference fallbacks
       const profileStore = useProfileStore()
