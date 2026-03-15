@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: integration
     env:
+      VITE_ENV_NAME: integration
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       E2E_USERNAME: ${{ secrets.E2E_USERNAME }}

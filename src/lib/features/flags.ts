@@ -1,5 +1,6 @@
 export type FeatureName = 'auth' | 'plan-generation'
 export type EnvName = 'local' | 'integration' | 'prod'
+export type ResolvedEnv = EnvName | null
 
 type FeatureConfig = Record<FeatureName, Record<EnvName, boolean>>
 
@@ -16,7 +17,7 @@ const featureFlags: FeatureConfig = {
   }
 }
 
-function resolveEnv(): EnvName {
+function resolveEnv(): ResolvedEnv {
   // Vite/browser context — VITE_ENV_NAME injected at build time via import.meta.env
   const viteEnv = (import.meta as any).env?.VITE_ENV_NAME
   if (viteEnv === 'local' || viteEnv === 'integration' || viteEnv === 'prod') {
@@ -30,14 +31,15 @@ function resolveEnv(): EnvName {
       return denoEnv as EnvName
     }
   }
-  return 'local'
+  return null
 }
 
 // Resolved once at module load — never re-evaluated during the lifetime of the process
-const ENV: EnvName = resolveEnv()
+const ENV: ResolvedEnv = resolveEnv()
 console.log(`[FeatureFlags] Environment resolved: ${ENV}`)
 
 export function isFeatureEnabled(feature: FeatureName): boolean {
+  if (ENV === null) throw new Error('[FeatureFlags] VITE_ENV_NAME is not set')
   const result = featureFlags[feature][ENV]
   console.log(`[FeatureFlags] isFeatureEnabled('${feature}') → ${result} (env: ${ENV})`)
   return result
