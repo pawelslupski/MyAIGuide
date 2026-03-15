@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import type { PaginationDTO } from '@/types'
 
@@ -10,6 +11,8 @@ defineProps<{
 const emit = defineEmits<{
   'page-change': [page: number]
 }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -19,11 +22,13 @@ const emit = defineEmits<{
       :disabled="pagination.current_page === 1 || isLoading"
       @click="emit('page-change', pagination.current_page - 1)"
     >
-      Previous
+      {{ t('pagination.previous') }}
     </Button>
 
     <span class="text-sm text-muted-foreground">
-      Page {{ pagination.current_page }} of {{ pagination.total_pages }}
+      {{
+        t('pagination.pageOf', { current: pagination.current_page, total: pagination.total_pages })
+      }}
     </span>
 
     <Button
@@ -31,7 +36,7 @@ const emit = defineEmits<{
       :disabled="pagination.current_page === pagination.total_pages || isLoading"
       @click="emit('page-change', pagination.current_page + 1)"
     >
-      Next
+      {{ t('pagination.next') }}
     </Button>
   </div>
 </template>

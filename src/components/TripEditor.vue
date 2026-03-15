@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -16,7 +18,11 @@ import type {
   TypePreference,
   BudgetPreference
 } from '@/types'
-import { useTripEditorFields, type TripEditorFields } from '@/composables/useTripEditorFields'
+import {
+  useTripEditorFields,
+  type TripEditorFields,
+  WARN_NOTE_LENGTH
+} from '@/composables/useTripEditorFields'
 
 interface Props {
   trip: TripDTO
@@ -31,6 +37,8 @@ const emit = defineEmits<{
   'blur:note': []
 }>()
 
+const { t } = useI18n()
+
 const {
   localDestination,
   localNote,
@@ -41,7 +49,6 @@ const {
   localNumDays,
   localNumPeople,
   noteLength,
-  noteValidationMessage,
   noteValidationClass,
   noteCounterClass,
   MAX_NOTE_LENGTH,
@@ -56,40 +63,82 @@ const {
   (fields) => emit('update:fields', fields)
 )
 
-// Preference options
-const whatOptions: { value: WhatPreference; label: string }[] = [
-  { value: 'nature', label: 'Nature & Outdoors' },
-  { value: 'beach_relax', label: 'Beach & Relaxation' },
-  { value: 'culture_museums', label: 'Culture & Museums' },
-  { value: 'city_break', label: 'City Break' },
-  { value: 'foodie', label: 'Foodie Experience' }
-]
+// Translated note validation message (replaces composable's hardcoded English)
+const noteValidationMessage = computed(() => {
+  if (noteLength.value > MAX_NOTE_LENGTH)
+    return t('tripEditor.noteOverLimit', { limit: MAX_NOTE_LENGTH.toLocaleString() })
+  if (noteLength.value > WARN_NOTE_LENGTH) return t('tripEditor.noteApproachingLimit')
+  return null
+})
 
-const speedOptions: { value: SpeedPreference; label: string; description: string }[] = [
-  {
-    value: 'slow_chill',
-    label: 'Slow & Chill',
-    description: 'Relaxed pace with plenty of downtime'
-  },
-  { value: 'balance', label: 'Balanced', description: 'Mix of activities and relaxation' },
-  { value: 'intensive', label: 'Intensive', description: 'Packed schedule with many activities' }
-]
+// Preference options as computed so they react to locale changes
+const whatOptions = computed<{ value: WhatPreference; label: string }[]>(() => [
+  { value: 'nature', label: t('tripEditor.what.nature') },
+  { value: 'beach_relax', label: t('tripEditor.what.beach_relax') },
+  { value: 'culture_museums', label: t('tripEditor.what.culture_museums') },
+  { value: 'city_break', label: t('tripEditor.what.city_break') },
+  { value: 'foodie', label: t('tripEditor.what.foodie') }
+])
 
-const typeOptions: { value: TypePreference; label: string; description: string }[] = [
-  { value: 'base', label: 'Base', description: 'Stay in one location' },
-  {
-    value: 'base_with_trips',
-    label: 'Base with optional trips',
-    description: 'Stay in one location with day trips'
-  },
-  { value: 'roadtrip', label: 'Road trip', description: 'Travel between multiple locations' }
-]
+const speedOptions = computed<{ value: SpeedPreference; label: string; description: string }[]>(
+  () => [
+    {
+      value: 'slow_chill',
+      label: t('tripEditor.speed.slow_chill.label'),
+      description: t('tripEditor.speed.slow_chill.desc')
+    },
+    {
+      value: 'balance',
+      label: t('tripEditor.speed.balance.label'),
+      description: t('tripEditor.speed.balance.desc')
+    },
+    {
+      value: 'intensive',
+      label: t('tripEditor.speed.intensive.label'),
+      description: t('tripEditor.speed.intensive.desc')
+    }
+  ]
+)
 
-const budgetOptions: { value: BudgetPreference; label: string; description: string }[] = [
-  { value: 'budget', label: 'Budget', description: 'Cost-effective options' },
-  { value: 'moderate', label: 'Moderate', description: 'Balanced comfort and cost' },
-  { value: 'luxury', label: 'Luxury', description: 'Premium experiences' }
-]
+const typeOptions = computed<{ value: TypePreference; label: string; description: string }[]>(
+  () => [
+    {
+      value: 'base',
+      label: t('tripEditor.type.base.label'),
+      description: t('tripEditor.type.base.desc')
+    },
+    {
+      value: 'base_with_trips',
+      label: t('tripEditor.type.base_with_trips.label'),
+      description: t('tripEditor.type.base_with_trips.desc')
+    },
+    {
+      value: 'roadtrip',
+      label: t('tripEditor.type.roadtrip.label'),
+      description: t('tripEditor.type.roadtrip.desc')
+    }
+  ]
+)
+
+const budgetOptions = computed<{ value: BudgetPreference; label: string; description: string }[]>(
+  () => [
+    {
+      value: 'budget',
+      label: t('tripEditor.budget.budget.label'),
+      description: t('tripEditor.budget.budget.desc')
+    },
+    {
+      value: 'moderate',
+      label: t('tripEditor.budget.moderate.label'),
+      description: t('tripEditor.budget.moderate.desc')
+    },
+    {
+      value: 'luxury',
+      label: t('tripEditor.budget.luxury.label'),
+      description: t('tripEditor.budget.luxury.desc')
+    }
+  ]
+)
 </script>
 
 <template>
@@ -97,12 +146,12 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
     <div class="space-y-6">
       <!-- Destination -->
       <div class="space-y-2">
-        <Label for="trip-destination">Destination</Label>
+        <Label for="trip-destination">{{ t('tripEditor.destinationLabel') }}</Label>
         <Input
           id="trip-destination"
           v-model="localDestination"
           data-testid="trip-destination-input"
-          placeholder="e.g. Paris, France"
+          :placeholder="t('tripEditor.destinationPlaceholder')"
           maxlength="50"
         />
       </div>
@@ -110,15 +159,13 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
       <!-- Trip Preferences -->
       <Card>
         <CardHeader>
-          <CardTitle>Trip Preferences</CardTitle>
-          <CardDescription
-            >Customize your trip preferences or use defaults from your profile</CardDescription
-          >
+          <CardTitle>{{ t('tripEditor.preferencesTitle') }}</CardTitle>
+          <CardDescription>{{ t('tripEditor.preferencesDesc') }}</CardDescription>
         </CardHeader>
         <CardContent class="space-y-6">
           <!-- Trip Duration -->
           <div class="space-y-2">
-            <Label for="num-days">Trip Duration (days)</Label>
+            <Label for="num-days">{{ t('tripEditor.durationLabel') }}</Label>
             <Input
               id="num-days"
               data-testid="trip-num-days-input"
@@ -126,7 +173,7 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
               type="number"
               min="1"
               max="30"
-              placeholder="e.g. 7"
+              :placeholder="t('tripEditor.durationPlaceholder')"
               class="w-32"
               @update:model-value="handleNumDaysInput"
             />
@@ -134,7 +181,7 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
 
           <!-- Number of People -->
           <div class="space-y-2">
-            <Label for="num-people">Number of People</Label>
+            <Label for="num-people">{{ t('tripEditor.peopleLabel') }}</Label>
             <Input
               id="num-people"
               data-testid="trip-num-people-input"
@@ -142,7 +189,7 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
               type="number"
               min="1"
               max="20"
-              placeholder="e.g. 2"
+              :placeholder="t('tripEditor.peoplePlaceholder')"
               class="w-32"
               @update:model-value="handleNumPeopleInput"
             />
@@ -151,13 +198,15 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
           <!-- What Preferences (Multi-select) -->
           <div class="space-y-3">
             <div class="flex items-center gap-2">
-              <Label>What interests you?</Label>
+              <Label>{{ t('tripEditor.interestsLabel') }}</Label>
               <Tooltip v-if="isWhatInherited">
                 <TooltipTrigger as-child>
-                  <Badge variant="outline" class="cursor-default text-xs">From profile</Badge>
+                  <Badge variant="outline" class="cursor-default text-xs">{{
+                    t('tripEditor.fromProfile')
+                  }}</Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>This value is inherited from your profile preferences</p>
+                  <p>{{ t('tripEditor.fromProfileTooltip') }}</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -183,13 +232,15 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
           <!-- Speed Preference (Radio) -->
           <div class="space-y-3">
             <div class="flex items-center gap-2">
-              <Label>Travel Speed</Label>
+              <Label>{{ t('tripEditor.travelSpeedLabel') }}</Label>
               <Tooltip v-if="isInherited('speed')">
                 <TooltipTrigger as-child>
-                  <Badge variant="outline" class="cursor-default text-xs">From profile</Badge>
+                  <Badge variant="outline" class="cursor-default text-xs">{{
+                    t('tripEditor.fromProfile')
+                  }}</Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>This value is inherited from your profile preferences</p>
+                  <p>{{ t('tripEditor.fromProfileTooltip') }}</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -217,13 +268,15 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
           <!-- Type Preference (Radio) -->
           <div class="space-y-3">
             <div class="flex items-center gap-2">
-              <Label>Trip Type</Label>
+              <Label>{{ t('tripEditor.tripTypeLabel') }}</Label>
               <Tooltip v-if="isInherited('type')">
                 <TooltipTrigger as-child>
-                  <Badge variant="outline" class="cursor-default text-xs">From profile</Badge>
+                  <Badge variant="outline" class="cursor-default text-xs">{{
+                    t('tripEditor.fromProfile')
+                  }}</Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>This value is inherited from your profile preferences</p>
+                  <p>{{ t('tripEditor.fromProfileTooltip') }}</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -251,13 +304,15 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
           <!-- Budget Preference (Radio) -->
           <div class="space-y-3">
             <div class="flex items-center gap-2">
-              <Label>Budget</Label>
+              <Label>{{ t('tripEditor.budgetLabel') }}</Label>
               <Tooltip v-if="isInherited('budget')">
                 <TooltipTrigger as-child>
-                  <Badge variant="outline" class="cursor-default text-xs">From profile</Badge>
+                  <Badge variant="outline" class="cursor-default text-xs">{{
+                    t('tripEditor.fromProfile')
+                  }}</Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>This value is inherited from your profile preferences</p>
+                  <p>{{ t('tripEditor.fromProfileTooltip') }}</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -281,20 +336,23 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
               </div>
             </RadioGroup>
           </div>
+
           <!-- Traveler Profile Flags (read-only, from global profile) -->
           <div v-if="profile" class="space-y-2">
-            <Label class="text-muted-foreground"
-              >Traveler profile (from your profile settings)</Label
-            >
+            <Label class="text-muted-foreground">{{ t('tripEditor.travelerProfileLabel') }}</Label>
             <div class="flex flex-wrap gap-2 text-sm">
-              <Badge v-if="profile.has_kids" variant="outline">Traveling with kids</Badge>
-              <Badge v-if="profile.has_pets" variant="outline">Traveling with pets</Badge>
-              <Badge v-if="profile.has_mobility_issues" variant="outline"
-                >Mobility considerations</Badge
-              >
-              <Badge v-if="profile.has_dietary_preferences" variant="outline"
-                >Dietary preferences</Badge
-              >
+              <Badge v-if="profile.has_kids" variant="outline">{{
+                t('tripEditor.travelerFlags.has_kids')
+              }}</Badge>
+              <Badge v-if="profile.has_pets" variant="outline">{{
+                t('tripEditor.travelerFlags.has_pets')
+              }}</Badge>
+              <Badge v-if="profile.has_mobility_issues" variant="outline">{{
+                t('tripEditor.travelerFlags.has_mobility_issues')
+              }}</Badge>
+              <Badge v-if="profile.has_dietary_preferences" variant="outline">{{
+                t('tripEditor.travelerFlags.has_dietary_preferences')
+              }}</Badge>
               <span
                 v-if="
                   !profile.has_kids &&
@@ -303,14 +361,19 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
                   !profile.has_dietary_preferences
                 "
                 class="text-muted-foreground"
-                >No special traveler flags set</span
               >
+                {{ t('tripEditor.noFlags') }}
+              </span>
             </div>
             <p
               v-if="profile.has_dietary_preferences && profile.dietary_preferences_description"
               class="text-xs text-muted-foreground"
             >
-              Dietary: {{ profile.dietary_preferences_description }}
+              {{
+                t('tripEditor.dietaryNote', {
+                  description: profile.dietary_preferences_description
+                })
+              }}
             </p>
           </div>
         </CardContent>
@@ -319,16 +382,14 @@ const budgetOptions: { value: BudgetPreference; label: string; description: stri
       <!-- Trip Note -->
       <Card>
         <CardHeader>
-          <CardTitle>Trip Notes</CardTitle>
-          <CardDescription
-            >Describe your trip plans, preferences, and any special requirements</CardDescription
-          >
+          <CardTitle>{{ t('tripEditor.notesTitle') }}</CardTitle>
+          <CardDescription>{{ t('tripEditor.notesDesc') }}</CardDescription>
         </CardHeader>
         <CardContent class="space-y-2">
           <Textarea
             v-model="localNote"
             data-testid="trip-note-textarea"
-            placeholder="Write your trip notes here... (optional)"
+            :placeholder="t('tripEditor.notesPlaceholder')"
             class="min-h-[200px] resize-y"
             aria-label="Trip note content"
             :aria-invalid="noteLength > MAX_NOTE_LENGTH"

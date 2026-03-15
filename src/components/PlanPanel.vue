@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { usePlanStore } from '@/stores/plan.store'
 import { useQuotaStore } from '@/stores/quota.store'
 import { Button } from '@/components/ui/button'
@@ -43,6 +44,7 @@ const props = defineProps<Props>()
 const planStore = usePlanStore()
 const quotaStore = useQuotaStore()
 const { toast } = useToast()
+const { t } = useI18n()
 
 const isPlanGenerationEnabled = isFeatureEnabled('plan-generation')
 
@@ -123,7 +125,7 @@ async function handleGenerate() {
 async function handleSave() {
   try {
     await planStore.savePlanToTrip(props.trip.id)
-    toast({ title: 'Plan saved', description: 'Your itinerary has been confirmed.' })
+    toast({ title: t('plan.toast.saved'), description: t('plan.toast.savedDesc') })
   } catch {
     // saveError reactive state is set by the store; no extra handling needed here
   }
@@ -150,13 +152,13 @@ function formatRelativeTime(isoDate: string): string {
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffSeconds = Math.floor(diffMs / 1000)
-  if (diffSeconds < 60) return 'just now'
+  if (diffSeconds < 60) return t('relativeTime.justNow')
   const diffMinutes = Math.floor(diffSeconds / 60)
-  if (diffMinutes < 60) return `${diffMinutes}m ago`
+  if (diffMinutes < 60) return t('relativeTime.minutesAgo', { n: diffMinutes })
   const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffHours < 24) return t('relativeTime.hoursAgo', { n: diffHours })
   const diffDays = Math.floor(diffHours / 24)
-  return `${diffDays}d ago`
+  return t('relativeTime.daysAgoShort', { n: diffDays })
 }
 
 // Format reset date as relative time
@@ -166,9 +168,9 @@ function formatResetDate(isoDate: string): string {
   const diffMs = date.getTime() - now.getTime()
   const diffHours = Math.ceil(diffMs / (1000 * 60 * 60))
 
-  if (diffHours < 1) return 'less than 1 hour'
-  if (diffHours === 1) return '1 hour'
-  return `${diffHours} hours`
+  if (diffHours < 1) return t('plan.resetLessThanHour')
+  if (diffHours === 1) return t('plan.resetOneHour')
+  return t('plan.resetHours', { n: diffHours })
 }
 </script>
 
@@ -180,30 +182,28 @@ function formatResetDate(isoDate: string): string {
       class="flex flex-col items-center justify-center py-12"
     >
       <Sparkles class="mb-4 h-12 w-12 text-muted-foreground" />
-      <p class="text-center text-muted-foreground">
-        Plan generation is not available in the current environment.
-      </p>
+      <p class="text-center text-muted-foreground">{{ t('plan.featureDisabled') }}</p>
     </CardContent>
 
     <template v-else>
       <CardHeader>
         <div class="flex items-start justify-between gap-4">
           <div>
-            <CardTitle>Travel Plan</CardTitle>
-            <CardDescription>AI-generated day-by-day itinerary</CardDescription>
+            <CardTitle>{{ t('plan.title') }}</CardTitle>
+            <CardDescription>{{ t('plan.description') }}</CardDescription>
           </div>
           <!-- Generation Quota Counter -->
           <div v-if="quota" class="w-40 space-y-1" aria-live="polite">
-            <span class="text-xs text-muted-foreground"
-              >{{ quota.used }} / {{ quota.limit }} used</span
-            >
+            <span class="text-xs text-muted-foreground">
+              {{ t('plan.quotaUsed', { used: quota.used, limit: quota.limit }) }}
+            </span>
             <div class="relative h-2 w-full overflow-hidden rounded-full bg-primary/20">
               <div class="h-full bg-primary transition-all" :style="`width: ${quotaPercentage}%`" />
             </div>
             <div v-if="quotaExceeded" class="flex justify-end">
-              <span class="text-xs text-destructive"
-                >Resets in {{ formatResetDate(quota.reset_at) }}</span
-              >
+              <span class="text-xs text-destructive">
+                {{ t('plan.resetsIn', { time: formatResetDate(quota.reset_at) }) }}
+              </span>
             </div>
           </div>
         </div>
@@ -212,46 +212,46 @@ function formatResetDate(isoDate: string): string {
         <!-- Quota Exceeded Warning -->
         <Alert v-if="quotaExceeded" variant="destructive">
           <AlertCircle class="h-4 w-4" />
-          <AlertTitle>Generation Limit Reached</AlertTitle>
+          <AlertTitle>{{ t('plan.quotaExceededTitle') }}</AlertTitle>
           <AlertDescription>
-            You've used all {{ quota?.limit }} generations. Quota resets in
-            {{ quota ? formatResetDate(quota.reset_at) : 'N/A' }}.
+            {{
+              t('plan.quotaExceededDesc', {
+                limit: quota?.limit,
+                time: quota ? formatResetDate(quota.reset_at) : 'N/A'
+              })
+            }}
           </AlertDescription>
         </Alert>
 
         <!-- Generation Error -->
         <Alert v-if="generationError" variant="destructive">
           <AlertCircle class="h-4 w-4" />
-          <AlertTitle>Generation Failed</AlertTitle>
-          <AlertDescription>
-            {{ generationError.error.message }}
-          </AlertDescription>
+          <AlertTitle>{{ t('plan.generationFailedTitle') }}</AlertTitle>
+          <AlertDescription>{{ generationError.error.message }}</AlertDescription>
         </Alert>
 
         <!-- Save Error -->
         <Alert v-if="saveError" variant="destructive">
           <AlertCircle class="h-4 w-4" />
-          <AlertTitle>Save Failed</AlertTitle>
-          <AlertDescription>
-            {{ saveError.error.message }}
-          </AlertDescription>
+          <AlertTitle>{{ t('plan.saveFailedTitle') }}</AlertTitle>
+          <AlertDescription>{{ saveError.error.message }}</AlertDescription>
         </Alert>
 
         <!-- Empty state: no plan and no candidate -->
         <div v-if="!hasPlan" class="flex flex-col items-center justify-center py-12">
           <Sparkles class="mb-4 h-12 w-12 text-muted-foreground" />
-          <p class="mb-4 text-center text-muted-foreground">
-            No plan generated yet. Click below to create your personalized travel itinerary.
-          </p>
+          <p class="mb-4 text-center text-muted-foreground">{{ t('plan.noPlanText') }}</p>
           <!-- Pre-generation checklist when destination is missing -->
           <div
             v-if="!destination"
             class="mb-6 w-full rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30"
           >
-            <p class="mb-1 font-medium text-amber-800 dark:text-amber-300">Before generating:</p>
+            <p class="mb-1 font-medium text-amber-800 dark:text-amber-300">
+              {{ t('plan.beforeGenerating') }}
+            </p>
             <ul class="space-y-1 text-amber-700 dark:text-amber-400">
               <li class="flex items-center gap-2">
-                <span class="text-destructive">✗</span> Add a destination (required)
+                <span class="text-destructive">✗</span> {{ t('plan.addDestination') }}
               </li>
             </ul>
           </div>
@@ -263,7 +263,7 @@ function formatResetDate(isoDate: string): string {
           >
             <Sparkles v-if="!isGenerating" class="mr-2 h-4 w-4" />
             <Loader2 v-else class="mr-2 h-4 w-4 animate-spin" />
-            {{ isGenerating ? 'Generating...' : 'Generate Plan' }}
+            {{ isGenerating ? t('plan.generating') : t('plan.generate') }}
           </Button>
         </div>
 
@@ -273,11 +273,8 @@ function formatResetDate(isoDate: string): string {
           class="border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary"
         >
           <AlertTriangle class="h-4 w-4" />
-          <AlertTitle>Unsaved Plan</AlertTitle>
-          <AlertDescription>
-            You have a generated plan that hasn't been saved. It will be lost if you leave this
-            page.
-          </AlertDescription>
+          <AlertTitle>{{ t('plan.unsavedTitle') }}</AlertTitle>
+          <AlertDescription>{{ t('plan.unsavedDesc') }}</AlertDescription>
         </Alert>
 
         <!-- Candidate Actions -->
@@ -290,7 +287,7 @@ function formatResetDate(isoDate: string): string {
           >
             <Check v-if="!isSaving" class="mr-2 h-4 w-4" />
             <Loader2 v-else class="mr-2 h-4 w-4 animate-spin" />
-            {{ isSaving ? 'Saving...' : 'Save Plan' }}
+            {{ isSaving ? t('plan.saving') : t('plan.save') }}
           </Button>
           <Button
             data-testid="discard-plan-btn"
@@ -300,7 +297,7 @@ function formatResetDate(isoDate: string): string {
             @click="handleDiscard"
           >
             <X class="mr-2 h-4 w-4" />
-            Discard
+            {{ t('plan.discard') }}
           </Button>
         </div>
 
@@ -312,9 +309,9 @@ function formatResetDate(isoDate: string): string {
           <div v-if="hasSavedPlan && !hasCandidate" class="space-y-2">
             <Alert class="border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary">
               <Check class="h-4 w-4" />
-              <AlertTitle class="text-primary">Plan saved</AlertTitle>
+              <AlertTitle class="text-primary">{{ t('plan.savedTitle') }}</AlertTitle>
               <AlertDescription>
-                Last updated {{ formatRelativeTime(trip.updated_at) }}
+                {{ t('plan.savedUpdatedAt', { time: formatRelativeTime(trip.updated_at) }) }}
               </AlertDescription>
             </Alert>
             <div class="flex justify-end">
@@ -327,7 +324,7 @@ function formatResetDate(isoDate: string): string {
               >
                 <Sparkles v-if="!isGenerating" class="mr-2 h-4 w-4" />
                 <Loader2 v-else class="mr-2 h-4 w-4 animate-spin" />
-                {{ isGenerating ? 'Generating...' : 'Regenerate' }}
+                {{ isGenerating ? t('plan.regenerating') : t('plan.regenerate') }}
               </Button>
             </div>
           </div>
@@ -335,7 +332,7 @@ function formatResetDate(isoDate: string): string {
           <!-- Generating Loading State -->
           <div v-if="isGenerating" class="flex items-center justify-center py-8">
             <Loader2 class="mr-2 h-6 w-6 animate-spin text-muted-foreground" />
-            <span class="text-muted-foreground">Generating your plan…</span>
+            <span class="text-muted-foreground">{{ t('plan.generatingSpinner') }}</span>
           </div>
 
           <!-- Days Cards -->
@@ -348,10 +345,9 @@ function formatResetDate(isoDate: string): string {
               <!-- Day header -->
               <div class="flex items-center gap-3 border-b bg-muted/40 px-5 py-3">
                 <Calendar class="h-4 w-4 text-primary" />
-                <span class="font-semibold">Day {{ day.day }}</span>
+                <span class="font-semibold">{{ t('plan.day', { n: day.day }) }}</span>
                 <span class="text-xs text-muted-foreground">
-                  {{ day.activities.length }}
-                  {{ day.activities.length === 1 ? 'activity' : 'activities' }}
+                  {{ t('plan.activities', { count: day.activities.length }) }}
                 </span>
               </div>
 
@@ -371,7 +367,7 @@ function formatResetDate(isoDate: string): string {
                     />
                     <Moon v-else class="h-4 w-4 text-primary" />
                     <span class="text-xs font-semibold uppercase tracking-widest text-primary">
-                      {{ activity.timeOfDay }}
+                      {{ t(`plan.timeOfDay.${activity.timeOfDay}`) }}
                     </span>
                   </div>
 
@@ -380,7 +376,7 @@ function formatResetDate(isoDate: string): string {
                     <Input
                       :model-value="activity.locationName"
                       class="mb-2 border-0 bg-transparent p-0 font-semibold shadow-none focus-visible:ring-0"
-                      placeholder="Location name"
+                      :placeholder="t('plan.locationPlaceholder')"
                       @update:model-value="
                         updateActivityField(dayIndex, actIndex, 'locationName', String($event))
                       "
@@ -388,7 +384,7 @@ function formatResetDate(isoDate: string): string {
                     <textarea
                       :value="activity.description"
                       class="plan-description-textarea mb-3 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-relaxed text-muted-foreground outline-none focus:outline-none"
-                      placeholder="Activity description"
+                      :placeholder="t('plan.descriptionPlaceholder')"
                       rows="1"
                       @input="handleDescriptionInput($event, dayIndex, actIndex)"
                     />

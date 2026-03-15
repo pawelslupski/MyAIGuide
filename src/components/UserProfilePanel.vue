@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useForm } from 'vee-validate'
+import { useI18n } from 'vue-i18n'
 import { z } from 'zod'
 import {
   AlertCircle,
@@ -37,6 +38,7 @@ import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference 
 
 const profileStore = useProfileStore()
 const { toast } = useToast()
+const { t } = useI18n()
 
 // Form schema — mirrors UpdateProfileCommandSchema but allows null for
 // single-select fields so "no selection" is a valid UI state.
@@ -57,7 +59,7 @@ const profileFormSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['dietary_preferences_description'],
-        message: 'Please describe your dietary preferences before saving.'
+        message: t('profile.dietaryRequired')
       })
     }
   })
@@ -102,11 +104,15 @@ watch(
 
 type BoolFlag = 'has_kids' | 'has_pets' | 'has_mobility_issues'
 
-const flags = [
-  { key: 'has_kids' as BoolFlag, label: 'Traveling with kids', icon: Baby },
-  { key: 'has_pets' as BoolFlag, label: 'Traveling with pets', icon: PawPrint },
-  { key: 'has_mobility_issues' as BoolFlag, label: 'Mobility considerations', icon: Accessibility }
-]
+const flags = computed(() => [
+  { key: 'has_kids' as BoolFlag, label: t('profile.flags.has_kids'), icon: Baby },
+  { key: 'has_pets' as BoolFlag, label: t('profile.flags.has_pets'), icon: PawPrint },
+  {
+    key: 'has_mobility_issues' as BoolFlag,
+    label: t('profile.flags.has_mobility_issues'),
+    icon: Accessibility
+  }
+])
 
 function toggleFlag(key: BoolFlag) {
   setFieldValue(key, !values[key])
@@ -125,13 +131,13 @@ function onDietaryToggle() {
 
 // ── What preferences ──────────────────────────────────────────────────────
 
-const whatOptions: { value: WhatPreference; label: string; icon: any }[] = [
-  { value: 'nature', label: 'Nature', icon: TreePine },
-  { value: 'culture_museums', label: 'Culture & Museums', icon: Landmark },
-  { value: 'beach_relax', label: 'Beach & Relax', icon: Waves },
-  { value: 'city_break', label: 'City Break', icon: Building2 },
-  { value: 'foodie', label: 'Foodie', icon: UtensilsCrossed }
-]
+const whatOptions = computed<{ value: WhatPreference; label: string; icon: any }[]>(() => [
+  { value: 'nature', label: t('profile.what.nature'), icon: TreePine },
+  { value: 'culture_museums', label: t('profile.what.culture_museums'), icon: Landmark },
+  { value: 'beach_relax', label: t('profile.what.beach_relax'), icon: Waves },
+  { value: 'city_break', label: t('profile.what.city_break'), icon: Building2 },
+  { value: 'foodie', label: t('profile.what.foodie'), icon: UtensilsCrossed }
+])
 
 function toggleWhat(value: WhatPreference) {
   const current = (values.default_what ?? []) as WhatPreference[]
@@ -143,23 +149,23 @@ function toggleWhat(value: WhatPreference) {
 
 // ── Speed / Type / Budget (single-select) ─────────────────────────────────
 
-const speedOptions: { value: SpeedPreference; label: string; icon: any }[] = [
-  { value: 'slow_chill', label: 'Slow & Chill', icon: Snail },
-  { value: 'balance', label: 'Balanced', icon: Scale },
-  { value: 'intensive', label: 'Intensive', icon: Zap }
-]
+const speedOptions = computed<{ value: SpeedPreference; label: string; icon: any }[]>(() => [
+  { value: 'slow_chill', label: t('profile.speed.slow_chill'), icon: Snail },
+  { value: 'balance', label: t('profile.speed.balance'), icon: Scale },
+  { value: 'intensive', label: t('profile.speed.intensive'), icon: Zap }
+])
 
-const typeOptions: { value: TypePreference; label: string; icon: any }[] = [
-  { value: 'base', label: 'Base', icon: MapPin },
-  { value: 'base_with_trips', label: 'Base + Day Trips', icon: Map },
-  { value: 'roadtrip', label: 'Road Trip', icon: Car }
-]
+const typeOptions = computed<{ value: TypePreference; label: string; icon: any }[]>(() => [
+  { value: 'base', label: t('profile.type.base'), icon: MapPin },
+  { value: 'base_with_trips', label: t('profile.type.base_with_trips'), icon: Map },
+  { value: 'roadtrip', label: t('profile.type.roadtrip'), icon: Car }
+])
 
-const budgetOptions: { value: BudgetPreference; label: string; icon: any }[] = [
-  { value: 'budget', label: 'Budget', icon: PiggyBank },
-  { value: 'moderate', label: 'Moderate', icon: Wallet },
-  { value: 'luxury', label: 'Luxury', icon: Gem }
-]
+const budgetOptions = computed<{ value: BudgetPreference; label: string; icon: any }[]>(() => [
+  { value: 'budget', label: t('profile.budgetOptions.budget'), icon: PiggyBank },
+  { value: 'moderate', label: t('profile.budgetOptions.moderate'), icon: Wallet },
+  { value: 'luxury', label: t('profile.budgetOptions.luxury'), icon: Gem }
+])
 
 function selectSpeed(value: SpeedPreference) {
   setFieldValue('default_speed', value)
@@ -190,14 +196,14 @@ const onSave = handleSubmit(async (formValues) => {
     // Sync form baseline to newly saved profile so meta.dirty resets to false
     if (profile.value) resetForm({ values: profileToFormValues(profile.value) })
     toast({
-      title: 'Profile saved',
-      description: 'Your travel profile has been updated.',
+      title: t('profile.toast.saved'),
+      description: t('profile.toast.savedDesc'),
       duration: 3000
     })
   } catch {
     toast({
-      title: 'Save failed',
-      description: 'Could not update profile. Please try again.',
+      title: t('profile.toast.saveFailed'),
+      description: t('profile.toast.saveFailedDesc'),
       variant: 'destructive',
       duration: 5000
     })
@@ -208,7 +214,7 @@ const onSave = handleSubmit(async (formValues) => {
 <template>
   <Card>
     <CardHeader class="flex flex-row items-center justify-between pb-4">
-      <CardTitle>Your Travel Profile</CardTitle>
+      <CardTitle>{{ t('profile.title') }}</CardTitle>
       <div v-if="profile" class="flex gap-2">
         <Button
           data-testid="profile-reset-btn"
@@ -217,7 +223,7 @@ const onSave = handleSubmit(async (formValues) => {
           :disabled="!meta.dirty || isSubmitting"
           @click="resetProfile"
         >
-          Reset
+          {{ t('profile.reset') }}
         </Button>
         <Button
           data-testid="profile-save-btn"
@@ -225,7 +231,7 @@ const onSave = handleSubmit(async (formValues) => {
           :disabled="!meta.dirty || isSubmitting"
           @click="onSave"
         >
-          {{ isSubmitting ? 'Saving…' : 'Save' }}
+          {{ isSubmitting ? t('profile.saving') : t('profile.save') }}
         </Button>
       </div>
     </CardHeader>
@@ -248,7 +254,7 @@ const onSave = handleSubmit(async (formValues) => {
       <template v-else-if="profileStore.error">
         <Alert variant="destructive">
           <AlertCircle class="h-4 w-4" />
-          <AlertTitle>Could not load profile</AlertTitle>
+          <AlertTitle>{{ t('profile.loadFailedTitle') }}</AlertTitle>
           <AlertDescription>{{ profileStore.error.error.message }}</AlertDescription>
         </Alert>
       </template>
@@ -256,7 +262,7 @@ const onSave = handleSubmit(async (formValues) => {
       <template v-else-if="profile">
         <!-- Section A: About you -->
         <div class="mb-6">
-          <p class="mb-3 text-sm font-medium text-muted-foreground">About you</p>
+          <p class="mb-3 text-sm font-medium text-muted-foreground">{{ t('profile.aboutYou') }}</p>
           <div class="flex flex-wrap gap-2">
             <!-- Boolean flags -->
             <button
@@ -293,7 +299,7 @@ const onSave = handleSubmit(async (formValues) => {
               @click="onDietaryToggle"
             >
               <Utensils class="h-4 w-4" />
-              Dietary preferences
+              {{ t('profile.dietaryPreferencesLabel') }}
             </button>
           </div>
 
@@ -304,7 +310,7 @@ const onSave = handleSubmit(async (formValues) => {
               v-bind="dietaryDescriptionAttrs"
               data-testid="profile-dietary-textarea"
               :disabled="isSubmitting"
-              placeholder="Describe your dietary preferences (e.g. vegetarian, gluten-free, nut allergy)…"
+              :placeholder="t('profile.dietaryPlaceholder')"
               class="min-h-[80px] resize-none"
             />
             <p v-if="errors.dietary_preferences_description" class="mt-1 text-xs text-destructive">
@@ -317,12 +323,12 @@ const onSave = handleSubmit(async (formValues) => {
 
         <!-- Section B: Default travel style -->
         <div class="space-y-5">
-          <p class="text-sm font-medium text-muted-foreground">Default travel style</p>
+          <p class="text-sm font-medium text-muted-foreground">{{ t('profile.travelStyle') }}</p>
 
           <!-- Interests (multi-select) -->
           <div>
             <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Interests
+              {{ t('profile.interests') }}
             </p>
             <div class="flex flex-wrap gap-2">
               <button
@@ -349,7 +355,7 @@ const onSave = handleSubmit(async (formValues) => {
           <!-- Pace (single-select) -->
           <div>
             <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Pace
+              {{ t('profile.pace') }}
             </p>
             <div class="flex flex-wrap gap-2">
               <button
@@ -376,7 +382,7 @@ const onSave = handleSubmit(async (formValues) => {
           <!-- Trip type (single-select) -->
           <div>
             <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Trip type
+              {{ t('profile.tripType') }}
             </p>
             <div class="flex flex-wrap gap-2">
               <button
@@ -403,7 +409,7 @@ const onSave = handleSubmit(async (formValues) => {
           <!-- Budget (single-select) -->
           <div>
             <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Budget
+              {{ t('profile.budget') }}
             </p>
             <div class="flex flex-wrap gap-2">
               <button

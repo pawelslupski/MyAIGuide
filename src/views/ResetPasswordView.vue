@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useForm } from 'vee-validate'
+import { useI18n } from 'vue-i18n'
 import { Loader2, ShieldCheck } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +23,7 @@ import { isFeatureEnabled } from '@/lib/features/flags'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 // Note: user arrives via Supabase recovery email link; token is handled by onAuthStateChange
 
 onMounted(() => {
@@ -48,9 +50,9 @@ const onSubmit = handleSubmit(async (values) => {
   } catch (err: any) {
     const msg = err?.message?.toLowerCase() ?? ''
     if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) {
-      serverError.value = 'This reset link has expired or is invalid. Please request a new one.'
+      serverError.value = t('auth.errors.expiredLink')
     } else {
-      serverError.value = 'Could not update password. Please try again.'
+      serverError.value = t('auth.errors.passwordUpdateFailed')
     }
   }
 })
@@ -59,26 +61,24 @@ const onSubmit = handleSubmit(async (values) => {
 <template>
   <AuthLayout>
     <CardHeader>
-      <CardTitle class="text-xl">Set new password</CardTitle>
-      <CardDescription v-if="!success">
-        Choose a strong password for your account.
-      </CardDescription>
+      <CardTitle class="text-xl">{{ t('auth.resetPassword.title') }}</CardTitle>
+      <CardDescription v-if="!success">{{ t('auth.resetPassword.description') }}</CardDescription>
     </CardHeader>
 
     <CardContent>
       <!-- Success state -->
       <div v-if="success" class="flex flex-col items-center gap-4 py-4 text-center">
         <ShieldCheck class="h-12 w-12 text-muted-foreground" />
-        <p class="text-sm text-muted-foreground">Your password has been updated successfully.</p>
+        <p class="text-sm text-muted-foreground">{{ t('auth.resetPassword.successMessage') }}</p>
         <RouterLink to="/login" class="w-full">
-          <Button class="w-full">Go to login</Button>
+          <Button class="w-full">{{ t('auth.resetPassword.goToLogin') }}</Button>
         </RouterLink>
       </div>
 
       <!-- Form state -->
       <form v-else class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="space-y-1.5">
-          <Label for="password">New password</Label>
+          <Label for="password">{{ t('auth.newPasswordLabel') }}</Label>
           <Input
             id="password"
             v-model="password"
@@ -92,7 +92,7 @@ const onSubmit = handleSubmit(async (values) => {
         </div>
 
         <div class="space-y-1.5">
-          <Label for="confirm-password">Confirm new password</Label>
+          <Label for="confirm-password">{{ t('auth.confirmNewPasswordLabel') }}</Label>
           <Input
             id="confirm-password"
             v-model="confirmPassword"
@@ -115,7 +115,7 @@ const onSubmit = handleSubmit(async (values) => {
 
         <Button type="submit" class="w-full" :disabled="isSubmitting">
           <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-          {{ isSubmitting ? 'Updating...' : 'Update password' }}
+          {{ isSubmitting ? t('auth.resetPassword.submitting') : t('auth.resetPassword.submit') }}
         </Button>
       </form>
     </CardContent>
@@ -125,7 +125,7 @@ const onSubmit = handleSubmit(async (values) => {
         to="/forgot-password"
         class="text-sm text-muted-foreground underline-offset-4 hover:underline"
       >
-        Request a new reset link
+        {{ t('auth.resetPassword.requestNewLink') }}
       </RouterLink>
     </CardFooter>
   </AuthLayout>

@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useForm } from 'vee-validate'
+import { useI18n } from 'vue-i18n'
 import { Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,7 @@ import { isFeatureEnabled } from '@/lib/features/flags'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 onMounted(() => {
   if (!isFeatureEnabled('auth')) {
@@ -41,13 +43,13 @@ const onSubmit = handleSubmit(async (values) => {
   } catch (err: any) {
     const msg = err?.message?.toLowerCase() ?? ''
     if (msg.includes('invalid') || msg.includes('credentials')) {
-      serverError.value = 'Invalid email or password. Please try again.'
+      serverError.value = t('auth.errors.invalidCredentials')
     } else if (msg.includes('rate') || msg.includes('too many')) {
-      serverError.value = 'Too many login attempts. Please wait a moment and try again.'
+      serverError.value = t('auth.errors.tooManyAttempts')
     } else if (msg.includes('network') || msg.includes('fetch')) {
-      serverError.value = 'Unable to connect. Please check your internet connection.'
+      serverError.value = t('auth.errors.networkError')
     } else {
-      serverError.value = 'An error occurred. Please try again.'
+      serverError.value = t('auth.errors.generic')
     }
   }
 })
@@ -56,27 +58,27 @@ const onSubmit = handleSubmit(async (values) => {
 <template>
   <AuthLayout>
     <CardHeader>
-      <CardTitle class="text-xl">Log in</CardTitle>
+      <CardTitle class="text-xl">{{ t('auth.login.title') }}</CardTitle>
     </CardHeader>
 
     <CardContent>
       <form class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="space-y-1.5">
-          <Label for="email">Email</Label>
+          <Label for="email">{{ t('auth.emailLabel') }}</Label>
           <Input
             id="email"
             v-model="email"
             v-bind="emailAttrs"
             type="email"
             autocomplete="email"
-            placeholder="you@example.com"
+            :placeholder="t('auth.emailPlaceholder')"
             :class="errors.email ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
           <p v-if="errors.email" class="text-xs text-destructive">{{ errors.email }}</p>
         </div>
 
         <div class="space-y-1.5">
-          <Label for="password">Password</Label>
+          <Label for="password">{{ t('auth.passwordLabel') }}</Label>
           <Input
             id="password"
             v-model="password"
@@ -95,7 +97,7 @@ const onSubmit = handleSubmit(async (values) => {
 
         <Button type="submit" class="w-full" :disabled="isSubmitting">
           <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-          {{ isSubmitting ? 'Logging in...' : 'Log in' }}
+          {{ isSubmitting ? t('auth.login.submitting') : t('auth.login.submit') }}
         </Button>
       </form>
 
@@ -104,19 +106,19 @@ const onSubmit = handleSubmit(async (values) => {
           to="/forgot-password"
           class="text-muted-foreground underline-offset-4 hover:underline"
         >
-          Forgot password?
+          {{ t('auth.login.forgotPassword') }}
         </RouterLink>
       </div>
     </CardContent>
 
     <CardFooter class="justify-center border-t pt-4">
       <p class="text-sm text-muted-foreground">
-        Don't have an account?
+        {{ t('auth.login.noAccount') }}
         <RouterLink
           to="/register"
           class="font-medium text-foreground underline-offset-4 hover:underline"
         >
-          Register
+          {{ t('auth.login.register') }}
         </RouterLink>
       </p>
     </CardFooter>

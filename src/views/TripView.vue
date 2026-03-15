@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ import { isFeatureEnabled } from '@/lib/features/flags'
 const route = useRoute()
 const router = useRouter()
 const { toast } = useToast()
+const { t } = useI18n()
 
 // Stores
 const tripStore = useTripStore()
@@ -142,8 +144,8 @@ async function initializeView() {
     // Handle specific errors by code (set by createNotFoundError / createInvalidTripIdError)
     if (error.code === 'NOT_FOUND' || error.code === 'INVALID_TRIP_ID') {
       toast({
-        title: 'Trip not found',
-        description: 'The trip you are looking for does not exist.',
+        title: t('tripView.notFoundTitle'),
+        description: t('tripView.notFoundDesc'),
         variant: 'destructive'
       })
       router.push('/')
@@ -151,8 +153,8 @@ async function initializeView() {
       router.push('/login')
     } else {
       toast({
-        title: 'Error loading trip',
-        description: error.message || 'Failed to load trip data',
+        title: t('tripView.loadFailed'),
+        description: error.message || t('tripView.loadFailedDesc'),
         variant: 'destructive'
       })
     }
@@ -226,21 +228,21 @@ async function performSave() {
   try {
     const tripId = parseInt(route.params.id as string, 10)
     await tripStore.saveAllFields(tripId, pendingFields.value)
-    const t = tripStore.currentTrip!
+    const tr = tripStore.currentTrip!
     pendingFields.value = {
-      title: t.title,
-      destination: t.destination ?? null,
-      note_body: t.note_body ?? null,
-      what: [...(t.what ?? [])] as WhatPreference[],
-      speed: t.speed as SpeedPreference | null,
-      type: t.type as TypePreference | null,
-      budget: t.budget as BudgetPreference | null,
-      num_days: t.num_days ?? null,
-      num_people: t.num_people ?? null
+      title: tr.title,
+      destination: tr.destination ?? null,
+      note_body: tr.note_body ?? null,
+      what: [...(tr.what ?? [])] as WhatPreference[],
+      speed: tr.speed as SpeedPreference | null,
+      type: tr.type as TypePreference | null,
+      budget: tr.budget as BudgetPreference | null,
+      num_days: tr.num_days ?? null,
+      num_people: tr.num_people ?? null
     }
   } catch (error: any) {
     toast({
-      title: 'Failed to save trip',
+      title: t('tripView.saveFailedTitle'),
       description: error.message || 'An error occurred',
       variant: 'destructive'
     })
@@ -290,7 +292,7 @@ async function handleNoteBlur() {
         <div
           class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-primary"
         ></div>
-        <p class="text-muted-foreground">Loading trip...</p>
+        <p class="text-muted-foreground">{{ t('tripView.loading') }}</p>
       </div>
     </div>
 
@@ -334,7 +336,7 @@ async function handleNoteBlur() {
             v-else
             class="flex flex-col items-center justify-center rounded-xl border p-12 text-center text-muted-foreground"
           >
-            Plan generation is not available in the current environment.
+            {{ t('tripView.featureDisabled') }}
           </div>
         </div>
       </div>
@@ -343,8 +345,8 @@ async function handleNoteBlur() {
     <!-- Error State -->
     <div v-else class="flex min-h-[400px] items-center justify-center">
       <div class="text-center">
-        <p class="text-lg font-semibold text-destructive">Failed to load trip</p>
-        <p class="mt-2 text-sm text-muted-foreground">Please try again later</p>
+        <p class="text-lg font-semibold text-destructive">{{ t('tripView.loadFailed') }}</p>
+        <p class="mt-2 text-sm text-muted-foreground">{{ t('tripView.loadFailedDesc') }}</p>
       </div>
     </div>
   </div>
@@ -360,14 +362,12 @@ async function handleNoteBlur() {
   >
     <DialogContent class="sm:max-w-sm">
       <DialogHeader>
-        <DialogTitle>Leave without saving?</DialogTitle>
-        <DialogDescription>
-          You have unsaved changes. If you leave now, they will be lost.
-        </DialogDescription>
+        <DialogTitle>{{ t('tripView.leaveDialog.title') }}</DialogTitle>
+        <DialogDescription>{{ t('tripView.leaveDialog.description') }}</DialogDescription>
       </DialogHeader>
       <DialogFooter class="gap-3">
-        <Button variant="outline" @click="cancelLeave">Stay</Button>
-        <Button @click="confirmLeave">Leave</Button>
+        <Button variant="outline" @click="cancelLeave">{{ t('tripView.leaveDialog.stay') }}</Button>
+        <Button @click="confirmLeave">{{ t('tripView.leaveDialog.leave') }}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

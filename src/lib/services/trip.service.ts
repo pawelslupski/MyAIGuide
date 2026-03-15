@@ -421,3 +421,50 @@ export async function savePlanToTrip(
     status
   }
 }
+
+/**
+ * Clear the saved plan from a trip, downgrading its status from CONFIRMED to DRAFT.
+ *
+ * @param tripId - Trip identifier (positive integer)
+ * @param userId - Authenticated user ID (UUID)
+ * @returns Promise<TripDTO> - Updated trip with plan_json = null (status = DRAFT or CREATED)
+ * @throws ApiError - 404 if not found, 403 if unauthorized
+ */
+export async function clearPlanFromTrip(tripId: number, userId: string): Promise<TripDTO> {
+  const { data: trip, error: fetchError } = await supabaseClient
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .single()
+
+  if (fetchError || !trip) {
+    throw createNotFoundError()
+  }
+
+  if (trip.user_id !== userId) {
+    throw createForbiddenError()
+  }
+
+  const { data: updatedTrip, error: updateError } = await supabaseClient
+    .from('trips')
+    .update({ plan_json: null, plan_language: null })
+    .eq('id', tripId)
+    .select()
+    .single()
+
+  if (updateError || !updatedTrip) {
+    throw createInternalError(`Failed to clear plan: ${updateError?.message || 'Unknown error'}`)
+  }
+
+  const status = deriveTripStatus(updatedTrip)
+
+  return {
+    ...updatedTrip,
+    what: updatedTrip.what as WhatPreference[],
+    speed: updatedTrip.speed as SpeedPreference | null,
+    type: updatedTrip.type as TypePreference | null,
+    budget: updatedTrip.budget as BudgetPreference | null,
+    plan_json: null,
+    status
+  }
+}

@@ -18,7 +18,11 @@ import {
   recordGenerationAttempt,
   getTripGenerations
 } from '@/lib/services/generation.service'
-import { getTripById, savePlanToTrip as savePlanService } from '@/lib/services/trip.service'
+import {
+  getTripById,
+  savePlanToTrip as savePlanService,
+  clearPlanFromTrip
+} from '@/lib/services/trip.service'
 import {
   createValidationError,
   createUnauthorizedError,
@@ -88,6 +92,13 @@ export const usePlanStore = defineStore('plan', () => {
       // Keep the trip store in sync with the fresh DB data
       const tripStore = useTripStore()
       tripStore.currentTrip = trip
+
+      // 3b. If the trip already has a saved plan, clear it so the status
+      //     downgrades from CONFIRMED → DRAFT before the new plan is generated.
+      if (trip.plan_json !== null && trip.plan_json !== undefined) {
+        const clearedTrip = await clearPlanFromTrip(validTripId, userId)
+        tripStore.currentTrip = clearedTrip
+      }
 
       // 4. Guard: destination must be set before generating a plan
       if (!trip.destination || trip.destination.trim() === '') {

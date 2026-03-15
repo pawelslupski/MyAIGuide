@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Trash2 } from 'lucide-vue-next'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +17,7 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const { t, locale } = useI18n()
 
 function navigateToTrip() {
   router.push({ name: 'trip-detail', params: { id: props.trip.id } })
@@ -29,23 +31,16 @@ function onDeleteClick(event: MouseEvent) {
 interface BadgeConfig {
   variant: 'secondary' | 'default' | 'destructive' | 'outline'
   class?: string
-  label: string
 }
 
-const STATUS_BADGE: Record<TripStatus, BadgeConfig> = {
-  CREATED: { variant: 'secondary', label: 'New' },
-  DRAFT: {
-    variant: 'outline',
-    class: 'bg-primary/20 text-primary border-transparent',
-    label: 'In Progress'
-  },
-  CONFIRMED: {
-    variant: 'default',
-    label: 'Planned'
-  }
+const STATUS_BADGE_STYLE: Record<TripStatus, BadgeConfig> = {
+  CREATED: { variant: 'secondary' },
+  DRAFT: { variant: 'outline', class: 'bg-primary/20 text-primary border-transparent' },
+  CONFIRMED: { variant: 'default' }
 }
 
-const badgeConfig = computed(() => STATUS_BADGE[props.trip.status])
+const badgeConfig = computed(() => STATUS_BADGE_STYLE[props.trip.status])
+const badgeLabel = computed(() => t(`tripCard.status.${props.trip.status}`))
 
 const relativeDate = computed(() => {
   const date = new Date(props.trip.updatedAt)
@@ -53,11 +48,18 @@ const relativeDate = computed(() => {
   const diffMs = now.getTime() - date.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${diffDays >= 14 ? 's' : ''} ago`
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  if (diffDays === 0) return t('relativeTime.today')
+  if (diffDays === 1) return t('relativeTime.yesterday')
+  if (diffDays < 7) return t('relativeTime.daysAgo', { n: diffDays })
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7)
+    return t(weeks === 1 ? 'relativeTime.weekAgo' : 'relativeTime.weeksAgo', { n: weeks })
+  }
+  return date.toLocaleDateString(locale.value === 'pl' ? 'pl-PL' : 'en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
 })
 </script>
 
@@ -70,14 +72,16 @@ const relativeDate = computed(() => {
   >
     <CardHeader class="pb-2">
       <div class="flex items-start justify-between gap-2">
-        <CardTitle data-testid="trip-card-title" class="line-clamp-2 text-base leading-snug">{{
-          trip.title
-        }}</CardTitle>
+        <CardTitle
+          data-testid="trip-card-title"
+          class="line-clamp-2 text-lg leading-snug sm:text-base"
+          >{{ trip.title }}</CardTitle
+        >
         <Button
           variant="ghost"
           size="icon"
           class="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-          aria-label="Delete trip"
+          :aria-label="t('tripCard.deleteAriaLabel')"
           data-testid="trip-card-delete-btn"
           @click="onDeleteClick"
         >
@@ -89,7 +93,7 @@ const relativeDate = computed(() => {
         :variant="badgeConfig.variant"
         :class="badgeConfig.class"
       >
-        {{ badgeConfig.label }}
+        {{ badgeLabel }}
       </Badge>
     </CardHeader>
 
@@ -97,8 +101,10 @@ const relativeDate = computed(() => {
       <p v-if="trip.notePreview" class="line-clamp-3 text-sm text-muted-foreground">
         {{ trip.notePreview }}
       </p>
-      <p v-else class="text-sm italic text-muted-foreground">No notes yet</p>
-      <p class="mt-3 text-xs text-muted-foreground">Updated {{ relativeDate }}</p>
+      <p v-else class="text-sm italic text-muted-foreground">{{ t('tripCard.noNotes') }}</p>
+      <p class="mt-3 text-xs text-muted-foreground">
+        {{ t('tripCard.updatedAt', { date: relativeDate }) }}
+      </p>
     </CardContent>
   </Card>
 </template>

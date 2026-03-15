@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Plus, AlertCircle } from 'lucide-vue-next'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,7 @@ const router = useRouter()
 const tripStore = useTripStore()
 const profileStore = useProfileStore()
 const { toast } = useToast()
+const { t } = useI18n()
 
 const currentPage = ref<number>(1)
 const showDeleteDialog = ref(false)
@@ -47,14 +49,14 @@ async function confirmDelete() {
   try {
     await tripStore.deleteTripById(deletingTripId.value)
     toast({
-      title: 'Trip deleted',
-      description: 'The trip has been permanently removed.',
+      title: t('dashboard.toast.deleted'),
+      description: t('dashboard.toast.deletedDesc'),
       duration: 3000
     })
   } catch {
     toast({
-      title: 'Error',
-      description: 'Failed to delete trip. Please try again.',
+      title: t('dashboard.toast.deleteFailed'),
+      description: t('dashboard.toast.deleteFailedDesc'),
       variant: 'destructive',
       duration: 5000
     })
@@ -71,8 +73,8 @@ async function createAndNavigate() {
     router.push({ name: 'trip-detail', params: { id: trip.id } })
   } catch {
     toast({
-      title: 'Error',
-      description: 'Failed to create trip. Please try again.',
+      title: t('dashboard.toast.deleteFailed'),
+      description: t('dashboard.toast.createFailedDesc'),
       variant: 'destructive',
       duration: 5000
     })
@@ -92,8 +94,8 @@ onMounted(async () => {
   await Promise.all([
     profileStore.fetchProfile().catch(() => {
       toast({
-        title: 'Profile unavailable',
-        description: 'Could not load your profile. Please refresh.',
+        title: t('dashboard.profileUnavailable'),
+        description: t('dashboard.profileUnavailableDesc'),
         variant: 'destructive',
         duration: 5000
       })
@@ -110,7 +112,7 @@ onMounted(async () => {
 
     <!-- Page header -->
     <div class="mb-6 flex items-center justify-between">
-      <h2 class="text-2xl font-bold">My Trips</h2>
+      <h2 class="text-2xl font-bold">{{ t('dashboard.title') }}</h2>
       <Button
         v-if="tripStore.trips.length > 0"
         data-testid="new-trip-btn"
@@ -118,7 +120,7 @@ onMounted(async () => {
         @click="createAndNavigate"
       >
         <Plus class="mr-2 h-4 w-4" />
-        {{ tripStore.isCreatingTrip ? 'Creating…' : 'New Trip' }}
+        {{ tripStore.isCreatingTrip ? t('dashboard.creatingTrip') : t('dashboard.newTrip') }}
       </Button>
     </div>
 
@@ -138,9 +140,11 @@ onMounted(async () => {
     <!-- Error state -->
     <Alert v-else-if="tripStore.tripsError" variant="destructive">
       <AlertCircle class="h-4 w-4" />
-      <AlertTitle>Failed to load trips</AlertTitle>
-      <AlertDescription>Failed to load your trips</AlertDescription>
-      <Button variant="outline" size="sm" class="mt-3" @click="retryFetch">Try again</Button>
+      <AlertTitle>{{ t('dashboard.loadFailed') }}</AlertTitle>
+      <AlertDescription>{{ t('dashboard.loadFailedDesc') }}</AlertDescription>
+      <Button variant="outline" size="sm" class="mt-3" @click="retryFetch">
+        {{ t('dashboard.tryAgain') }}
+      </Button>
     </Alert>
 
     <!-- Empty state -->
@@ -148,14 +152,16 @@ onMounted(async () => {
       v-else-if="tripStore.trips.length === 0"
       class="flex flex-col items-center gap-4 pt-6 text-center"
     >
-      <p class="text-muted-foreground">You don't have any trips yet.</p>
+      <p class="text-muted-foreground">{{ t('dashboard.noTrips') }}</p>
       <Button
         data-testid="create-first-trip-btn"
         :disabled="tripStore.isCreatingTrip"
         @click="createAndNavigate"
       >
         <Plus class="mr-2 h-4 w-4" />
-        {{ tripStore.isCreatingTrip ? 'Creating…' : 'Create your first trip' }}
+        {{
+          tripStore.isCreatingTrip ? t('dashboard.creatingTrip') : t('dashboard.createFirstTrip')
+        }}
       </Button>
     </div>
 
@@ -188,10 +194,8 @@ onMounted(async () => {
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete trip?</DialogTitle>
-          <DialogDescription>
-            This action cannot be undone. The trip and all its data will be permanently removed.
-          </DialogDescription>
+          <DialogTitle>{{ t('dashboard.deleteDialog.title') }}</DialogTitle>
+          <DialogDescription>{{ t('dashboard.deleteDialog.description') }}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button
@@ -199,15 +203,20 @@ onMounted(async () => {
             variant="outline"
             :disabled="isDeleting"
             @click="cancelDelete"
-            >Cancel</Button
           >
+            {{ t('dashboard.deleteDialog.cancel') }}
+          </Button>
           <Button
             data-testid="delete-dialog-confirm"
             variant="destructive"
             :disabled="isDeleting"
             @click="confirmDelete"
           >
-            {{ isDeleting ? 'Deleting…' : 'Delete' }}
+            {{
+              isDeleting
+                ? t('dashboard.deleteDialog.deleting')
+                : t('dashboard.deleteDialog.confirm')
+            }}
           </Button>
         </DialogFooter>
       </DialogContent>

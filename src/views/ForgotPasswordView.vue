@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useForm } from 'vee-validate'
+import { useI18n } from 'vue-i18n'
 import { Loader2, MailCheck } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +20,7 @@ import AuthLayout from '@/layouts/AuthLayout.vue'
 import { useAuthStore } from '@/stores/auth.store'
 
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 const { handleSubmit, errors, isSubmitting, defineField } = useForm({
   validationSchema: toTypedSchema(forgotPasswordSchema)
@@ -41,10 +43,8 @@ const onSubmit = handleSubmit(async (values) => {
 <template>
   <AuthLayout>
     <CardHeader>
-      <CardTitle class="text-xl">Reset your password</CardTitle>
-      <CardDescription>
-        Enter your email address and we'll send you a link to reset your password.
-      </CardDescription>
+      <CardTitle class="text-xl">{{ t('auth.forgotPassword.title') }}</CardTitle>
+      <CardDescription>{{ t('auth.forgotPassword.description') }}</CardDescription>
     </CardHeader>
 
     <CardContent>
@@ -52,24 +52,26 @@ const onSubmit = handleSubmit(async (values) => {
       <div v-if="submitted" class="flex flex-col items-center gap-4 py-4 text-center">
         <MailCheck class="h-12 w-12 text-muted-foreground" />
         <p class="text-sm text-muted-foreground">
-          If an account with that email exists, we've sent a password reset link. Check your inbox.
+          {{ t('auth.forgotPassword.successMessage') }}
         </p>
         <RouterLink to="/login">
-          <Button variant="outline" class="w-full">Back to login</Button>
+          <Button variant="outline" class="w-full">{{
+            t('auth.forgotPassword.backToLogin')
+          }}</Button>
         </RouterLink>
       </div>
 
       <!-- Form state -->
       <form v-else class="space-y-4" novalidate @submit.prevent="onSubmit">
         <div class="space-y-1.5">
-          <Label for="email">Email</Label>
+          <Label for="email">{{ t('auth.emailLabel') }}</Label>
           <Input
             id="email"
             v-model="email"
             v-bind="emailAttrs"
             type="email"
             autocomplete="email"
-            placeholder="you@example.com"
+            :placeholder="t('auth.emailPlaceholder')"
             :class="errors.email ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
           <p v-if="errors.email" class="text-xs text-destructive">{{ errors.email }}</p>
@@ -77,7 +79,7 @@ const onSubmit = handleSubmit(async (values) => {
 
         <Button type="submit" class="w-full" :disabled="isSubmitting">
           <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-          {{ isSubmitting ? 'Sending...' : 'Send reset link' }}
+          {{ isSubmitting ? t('auth.forgotPassword.submitting') : t('auth.forgotPassword.submit') }}
         </Button>
       </form>
     </CardContent>
@@ -87,7 +89,7 @@ const onSubmit = handleSubmit(async (values) => {
         to="/login"
         class="text-sm text-muted-foreground underline-offset-4 hover:underline"
       >
-        Back to login
+        {{ t('auth.forgotPassword.backToLogin') }}
       </RouterLink>
     </CardFooter>
   </AuthLayout>
