@@ -180,7 +180,9 @@ npm run test:e2e
 npm run test:e2e:ui
 ```
 
-Playwright automatically starts the Vite dev server (`--mode test`) on port 5174 before running tests. Authentication is performed via the Supabase API (not the UI) and injected into `localStorage`, so no login form interaction is needed per test.
+Playwright **always starts a fresh Vite dev server** (`npm run dev:e2e`, which runs `vite --mode test`) on port 5174 before each test run — even if another dev server is already running on that port. This ensures the app always connects to the E2E Supabase project defined in `.env.test`, not to your local Supabase instance from `.env`.
+
+> **Do not run `npm run test:e2e` while the regular dev server (`npm run dev`) is occupying port 5174.** Playwright will start its own server on the same port, which will fail. Stop the dev server first.
 
 ### View the HTML report
 
