@@ -79,57 +79,59 @@ export function useTripEditorFields(
     })
   }
 
-  // Emit whenever any local value changes
+  // Emit whenever any local value changes (destination excluded — saved on blur only)
   watch(
-    [
-      localDestination,
-      localNote,
-      localWhat,
-      localSpeed,
-      localType,
-      localBudget,
-      localNumDays,
-      localNumPeople
-    ],
-    emitFields,
-    { deep: true }
+    [localNote, localWhat, localSpeed, localType, localBudget, localNumDays, localNumPeople],
+    emitFields
   )
+
+  function handleDestinationBlur() {
+    emitFields()
+  }
 
   // Emit initial state on mount so pendingFields reflects profile-prepopulated values
   onMounted(emitFields)
 
   // ── Profile defaults sync (when prop arrives after mount) ──────────────────
 
-  watch(
-    getDefaultsProp,
-    (newDefaults) => {
-      if (!newDefaults) return
-      const t = getTripProp()
-      if (!t.what?.length) localWhat.value = [...(newDefaults.what ?? [])] as WhatPreference[]
-      if (!t.speed) localSpeed.value = (newDefaults.speed ?? null) as SpeedPreference | null
-      if (!t.type) localType.value = (newDefaults.type ?? null) as TypePreference | null
-      if (!t.budget) localBudget.value = (newDefaults.budget ?? null) as BudgetPreference | null
-    },
-    { deep: true }
-  )
+  watch(getDefaultsProp, (newDefaults) => {
+    if (!newDefaults) return
+    const t = getTripProp()
+    if (!t.what?.length) localWhat.value = [...(newDefaults.what ?? [])] as WhatPreference[]
+    if (!t.speed) localSpeed.value = (newDefaults.speed ?? null) as SpeedPreference | null
+    if (!t.type) localType.value = (newDefaults.type ?? null) as TypePreference | null
+    if (!t.budget) localBudget.value = (newDefaults.budget ?? null) as BudgetPreference | null
+  })
 
   // ── Trip prop sync (after external save) ──────────────────────────────────
 
-  watch(
-    getTripProp,
-    (newTrip) => {
-      const d = getDefaultsProp()
-      localDestination.value = newTrip.destination ?? ''
-      localNote.value = newTrip.note_body ?? ''
-      localWhat.value = ((newTrip.what?.length ? newTrip.what : d?.what) ?? []) as WhatPreference[]
-      localSpeed.value = (newTrip.speed ?? d?.speed ?? null) as SpeedPreference | null
-      localType.value = (newTrip.type ?? d?.type ?? null) as TypePreference | null
-      localBudget.value = (newTrip.budget ?? d?.budget ?? null) as BudgetPreference | null
-      localNumDays.value = newTrip.num_days ?? null
-      localNumPeople.value = newTrip.num_people ?? null
-    },
-    { deep: true }
-  )
+  watch(getTripProp, (newTrip) => {
+    const d = getDefaultsProp()
+
+    const newDest = newTrip.destination ?? ''
+    if (localDestination.value !== newDest) localDestination.value = newDest
+
+    const newNote = newTrip.note_body ?? ''
+    if (localNote.value !== newNote) localNote.value = newNote
+
+    const newWhat = ((newTrip.what?.length ? newTrip.what : d?.what) ?? []) as WhatPreference[]
+    if (JSON.stringify(localWhat.value) !== JSON.stringify(newWhat)) localWhat.value = newWhat
+
+    const newSpeed = (newTrip.speed ?? d?.speed ?? null) as SpeedPreference | null
+    if (localSpeed.value !== newSpeed) localSpeed.value = newSpeed
+
+    const newType = (newTrip.type ?? d?.type ?? null) as TypePreference | null
+    if (localType.value !== newType) localType.value = newType
+
+    const newBudget = (newTrip.budget ?? d?.budget ?? null) as BudgetPreference | null
+    if (localBudget.value !== newBudget) localBudget.value = newBudget
+
+    const newNumDays = newTrip.num_days ?? null
+    if (localNumDays.value !== newNumDays) localNumDays.value = newNumDays
+
+    const newNumPeople = newTrip.num_people ?? null
+    if (localNumPeople.value !== newNumPeople) localNumPeople.value = newNumPeople
+  })
 
   // ── Toggle / select helpers ────────────────────────────────────────────────
 
@@ -194,6 +196,7 @@ export function useTripEditorFields(
     isInherited,
     isWhatInherited,
     handleNumDaysInput,
-    handleNumPeopleInput
+    handleNumPeopleInput,
+    handleDestinationBlur
   }
 }

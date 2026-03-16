@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { CircleArrowLeft } from 'lucide-vue-next'
@@ -17,8 +18,16 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  'update:title': [newTitle: string]
+  'blur:title': [newTitle: string]
 }>()
+
+const localTitle = ref(props.title)
+watch(
+  () => props.title,
+  (val) => {
+    localTitle.value = val
+  }
+)
 
 const { t } = useI18n()
 
@@ -59,12 +68,12 @@ function formatRelativeTime(isoDate: string): string {
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div class="flex min-w-0 flex-1 items-center gap-3">
           <Input
+            v-model="localTitle"
             data-testid="trip-title-input"
-            :model-value="title"
             :disabled="props.isGenerating"
             class="flex-1 text-2xl font-bold sm:text-xl"
             :placeholder="t('tripHeader.titlePlaceholder')"
-            @update:model-value="emit('update:title', String($event))"
+            @blur="emit('blur:title', localTitle)"
           />
           <Badge data-testid="trip-status-badge" variant="outline" :class="statusClass(status)">
             {{ t(`tripCard.status.${status}`) }}

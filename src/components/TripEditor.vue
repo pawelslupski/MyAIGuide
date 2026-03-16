@@ -37,6 +37,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:fields': [fields: TripEditorFields]
   'blur:note': []
+  'blur:destination': []
 }>()
 
 const { t } = useI18n()
@@ -58,7 +59,8 @@ const {
   isInherited,
   isWhatInherited,
   handleNumDaysInput,
-  handleNumPeopleInput
+  handleNumPeopleInput,
+  handleDestinationBlur
 } = useTripEditorFields(
   () => props.trip,
   () => props.defaultPreferences,
@@ -156,6 +158,10 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
           :placeholder="t('tripEditor.destinationPlaceholder')"
           :disabled="props.isGenerating"
           maxlength="50"
+          @blur="
+            handleDestinationBlur()
+            emit('blur:destination')
+          "
         />
       </div>
 

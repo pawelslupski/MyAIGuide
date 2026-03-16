@@ -85,16 +85,36 @@ watch(
 )
 
 function handleFieldsChange(fields: Omit<PendingFields, 'title'>) {
+  const current = pendingFields.value
+  if (
+    current &&
+    current.destination === fields.destination &&
+    current.note_body === fields.note_body &&
+    current.speed === fields.speed &&
+    current.type === fields.type &&
+    current.budget === fields.budget &&
+    current.num_days === fields.num_days &&
+    current.num_people === fields.num_people &&
+    JSON.stringify(current.what) === JSON.stringify(fields.what)
+  )
+    return
   pendingFields.value = {
-    title: pendingFields.value?.title ?? tripStore.currentTrip?.title ?? '',
+    title: current?.title ?? tripStore.currentTrip?.title ?? '',
     ...fields
   }
 }
 
-function handleTitleChange(newTitle: string) {
+async function handleTitleBlur(newTitle: string) {
   if (pendingFields.value) {
     pendingFields.value = { ...pendingFields.value, title: newTitle }
   }
+  debouncedSave.cancel()
+  await performSave()
+}
+
+async function handleDestinationBlur() {
+  debouncedSave.cancel()
+  await performSave()
 }
 
 const isNoteOverLimit = computed(() => (pendingFields.value?.note_body?.length ?? 0) > 10000)
@@ -114,6 +134,7 @@ const isDirty = computed(() => {
     p.title !== t.title ||
     p.destination !== (t.destination ?? null) ||
     p.note_body !== (t.note_body ?? null) ||
+    p.what.length !== effectiveWhat.length ||
     JSON.stringify(p.what) !== JSON.stringify(effectiveWhat) ||
     p.speed !== effectiveSpeed ||
     p.type !== effectiveType ||
@@ -233,6 +254,10 @@ onMounted(() => {
  */
 async function performSave() {
   if (!pendingFields.value || !isDirty.value) return
+  if (tripStore.isSaving) {
+    debouncedSave()
+    return
+  }
   try {
     const tripId = parseInt(route.params.id as string, 10)
     await tripStore.saveAllFields(tripId, pendingFields.value)
@@ -258,16 +283,14 @@ async function performSave() {
 }
 
 /**
- * Debounced auto-save for every field except note_body.
- * Fires 800 ms after the last change so rapid typing doesn't flood the API.
+ * Debounced auto-save for select/checkbox fields.
+ * Title and destination are saved immediately on blur instead.
  */
 const debouncedSave = useDebounceFn(performSave, 800) as typeof performSave & { cancel(): void }
 
-// Trigger debounced save whenever any non-note field changes.
+// Trigger debounced save for select/number fields (title and destination handled on blur).
 watch(
   () => [
-    pendingFields.value?.title,
-    pendingFields.value?.destination,
     JSON.stringify(pendingFields.value?.what),
     pendingFields.value?.speed,
     pendingFields.value?.type,
@@ -321,7 +344,7 @@ async function handleNoteBlur() {
         :updated-at="tripStore.currentTrip.updated_at"
         :is-saving="tripStore.isSaving"
         :is-generating="isGenerating"
-        @update:title="handleTitleChange"
+        @blur:title="handleTitleBlur"
       />
 
       <!-- Responsive Grid Layout -->
@@ -336,6 +359,7 @@ async function handleNoteBlur() {
             :is-generating="isGenerating"
             @update:fields="handleFieldsChange"
             @blur:note="handleNoteBlur"
+            @blur:destination="handleDestinationBlur"
           />
         </div>
 

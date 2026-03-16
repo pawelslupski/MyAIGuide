@@ -188,7 +188,7 @@ const pl: MessageSchema = {
     notesDesc:
       'Dodaj szczegóły, które pozwolą doprecyzować plan — miejsca które chcesz zwiedzić, rzeczy do unikania, ograniczenia czasowe w konkretnych dniach, potrzeby specjalne i inne.',
     notesPlaceholder:
-      'np. W 2. dniu mogę wychodzić tylko do 15:00. Chcę zobaczyć stare miasto. Unikaj zatłoczonych atrakcji turystycznych jeśli to możliwe...',
+      'np. w 2. dniu mogę wychodzić tylko do 15:00. Chcę zobaczyć stare miasto. Unikaj zatłoczonych atrakcji turystycznych jeśli to możliwe...',
     noteOverLimit: 'Przekroczono limit {limit} znaków',
     noteApproachingLimit: 'Zbliżasz się do limitu znaków',
     noteLanguageMismatch:
