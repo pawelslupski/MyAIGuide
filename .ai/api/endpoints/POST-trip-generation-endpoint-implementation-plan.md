@@ -211,43 +211,62 @@ planStore.generatePlan(tripId)           [src/stores/plan.store.ts]
   ├─► Guard: trip.note_body length ≤ 10,000 chars
   │     └─ throw VALIDATION_ERROR (400) if exceeded
   │
-  ├─► checkGenerationQuota(userId)      [generation.service.ts]
-  │     Fixed-batch logic (newest LIMIT rows DESC):
-  │       • < 10 rows → no cooldown
-  │       • row[9].created_at + 24h > now → blocked (429)
-  │       • row[9].created_at + 24h ≤ now → cooldown expired, count new batch
+  ├─► checkGenerationQuota(userId)      [generation.service.ts] — client-side pre-check (informational)
   │     └─ throw QUOTA_EXCEEDED (429) if used ≥ 10
   │
   ├─► fetchProfile(userId)              → get traveler flags for prompt
   │
   ├─► language = i18n.global.locale      [plan.store.ts]
   │     → active UI locale ('pl' | 'en') from vue-i18n singleton
-  │     (detectLanguage is used only for note-blur mismatch warning in TripView, not for generation)
   │
-  ├─► callAIService(params)            [generation.service.ts]
-  │     → supabaseClient.functions.invoke('generate-plan', { prompt, language })
-  │     → Edge Function calls OpenRouter.ai (server-side API key)
-  │     └─ on error: throw → recordGenerationAttempt(api_error), return 502
+  ▼
+  callAIService(params)                 → supabaseClient.functions.invoke('generate-plan', …)
   │
-  ├─► validateAIResponse(data)         [plan.schemas.ts / EdgeFunctionResponseSchema]
-  │     └─ on ZodError: recordGenerationAttempt(validation_error), return 422
+  ▼
+Edge Function: generate-plan           [supabase/functions/generate-plan/index.ts]
   │
-  ├─► recordGenerationAttempt(success) [generation.service.ts]
-  │     INSERT INTO plan_generations (user_id, trip_id, status, model_name)
+  ├─► auth.getUser()                    → validates JWT server-side
+  ├─► Parse + validate body (tripId, prompt, language)
   │
-  └─► return GeneratedPlanDTO          → planStore.planCandidate = result
-        (plan + language + model_used + generated_at + quota snapshot)
+  ├─► rpc('try_reserve_generation_slot', { p_trip_id })   ← ATOMIC via advisory lock
+  │     DB function acquires pg_advisory_xact_lock(hashtext(user_id))
+  │     Counts status IN ('success','api_error') + non-stale 'pending' (< 90 s)
+  │     Applies fixed-batch cooldown logic
+  │     If within limit: INSERT pending → returns reservation_id
+  │     └─ raises P0429 QUOTA_EXCEEDED → return 429 to client
+  │
+  ├─► callOpenRouterAPI(request)        → OpenRouter.ai (server-side API key)
+  │     └─ on error: rpc('finalize_generation_slot', { reservation_id, 'api_error', … })
+  │                  return 502 / 401 / 429 / 504 / 503
+  │
+  ├─► parseOpenRouterResponse(response)
+  │     └─ on parse error: rpc('finalize_generation_slot', { reservation_id, 'api_error', … })
+  │                        return 502
+  │
+  ├─► rpc('finalize_generation_slot', { reservation_id, 'success', model_used })
+  │
+  └─► return { plan, model_used }
+        │
+        ▼
+  planStore: validateAIResponse(data)  [plan.schemas.ts]
+    └─ on ZodError: recordGenerationAttempt(validation_error), throw 422
+  planStore: fetchGenerationQuota()    → refresh quota display
+  planStore.planCandidate = GeneratedPlanDTO
 ```
 
 ### plan_generations Recording Rules
 
-| `status`           | When recorded                              | `model_name` | `error_message` | Counts toward quota? |
-| ------------------ | ------------------------------------------ | ------------ | --------------- | -------------------- |
-| `success`          | AI responded with valid plan               | Set          | null            | ✅ Yes               |
-| `api_error`        | Edge Function / OpenRouter call failed     | Set          | Error details   | ✅ Yes               |
-| `validation_error` | Pre-validation failed (destination/length) | null         | Validation msg  | ❌ No                |
+| `status`           | When recorded                                      | `model_name` | `error_message` | Counts toward quota?  |
+| ------------------ | -------------------------------------------------- | ------------ | --------------- | --------------------- |
+| `pending`          | Slot reserved atomically before AI call starts     | null         | null            | ✅ Yes (while active) |
+| `success`          | AI responded with valid plan (pending → finalized) | Set          | null            | ✅ Yes                |
+| `api_error`        | OpenRouter call failed (pending → finalized)       | null/set     | Error details   | ✅ Yes                |
+| `validation_error` | Pre-validation failed (destination/length)         | null         | Validation msg  | ❌ No                 |
 
 **Not recorded:** auth failures (401), ownership failures (403), trip-not-found (404), quota-exceeded (429), invalid tripId (400).
+
+**Stale pending:** A `pending` record that is never finalized (e.g. Edge Function crash) stops counting toward the
+quota after 90 seconds and is effectively ignored in all subsequent quota checks.
 
 ---
 
@@ -272,8 +291,10 @@ planStore.generatePlan(tripId)           [src/stores/plan.store.ts]
 ### Rate Limiting
 
 - 10 generations per user; 24-hour cooldown starts at the 10th attempt — all slots reset at once after it expires (fixed-batch, not rolling)
-- Counted from `plan_generations` where `status IN ('success', 'api_error')` — pure validation failures do NOT count
+- Counted from `plan_generations` where `status IN ('success', 'api_error')` plus non-stale `pending` (< 90 s old)
 - Aborted generations (user navigates away mid-generation) are recorded as `api_error` and **do** count toward the quota
+- Quota enforcement is **atomic**: `try_reserve_generation_slot()` uses `pg_advisory_xact_lock` to serialise
+  concurrent requests for the same user — eliminates the TOCTOU race that existed when check and insert were separate
 - Rejected with `429` before AI is invoked
 
 ### Threat Mitigation
@@ -317,145 +338,36 @@ planStore.generatePlan(tripId)           [src/stores/plan.store.ts]
 
 ---
 
-## 9. Implementation Steps
+## 9. Implementation Status
 
-> Many services already exist. Steps below note which are gaps vs. verification tasks.
+> All steps below are **implemented**. This section is kept as a reference and verification checklist.
 
-### Step 1 — Fix quota query to filter by status (GAP)
+### What was implemented
 
-**File:** `src/lib/services/generation.service.ts`
+| Area                                           | File                                    | Status  |
+| ---------------------------------------------- | --------------------------------------- | ------- |
+| Quota status filter (`success`, `api_error`)   | `generation.service.ts`                 | ✅ Done |
+| `destination` pre-validation guard             | `plan.store.ts`                         | ✅ Done |
+| `destination` passed to `callAIService`        | `plan.store.ts`                         | ✅ Done |
+| Quota snapshot in `GeneratedPlanDTO`           | `plan.store.ts`                         | ✅ Done |
+| Generation attempt recording                   | Edge Function (server-side)             | ✅ Done |
+| Edge Function with 60 s timeout                | `generate-plan/index.ts`                | ✅ Done |
+| **Atomic quota reservation via advisory lock** | `generate-plan/index.ts` + DB migration | ✅ Done |
+| RLS on `plan_generations`                      | migrations                              | ✅ Done |
 
-The current `checkGenerationQuota()` counts **all** generations regardless of status. Per spec, only `success` and `api_error` count toward the quota. `validation_error` records must be excluded:
+### Atomic quota implementation detail
 
-```typescript
-// Current (incorrect — counts all statuses):
-const { data, error } = await supabaseClient
-  .from('plan_generations')
-  .select('created_at')
-  .eq('user_id', userId)
-  .gte('created_at', cutoff)
-  .order('created_at', { ascending: true })
+The original TOCTOU race (read quota → check → insert, non-atomic) was replaced with:
 
-// Correct — add status filter:
-const { data, error } = await supabaseClient
-  .from('plan_generations')
-  .select('created_at')
-  .eq('user_id', userId)
-  .in('status', ['success', 'api_error']) // ← add this line
-  .gte('created_at', cutoff)
-  .order('created_at', { ascending: true })
-```
+1. **`try_reserve_generation_slot(tripId)`** RPC called from Edge Function — acquires advisory lock per user,
+   counts quota (including non-stale `pending`), inserts `pending` record if allowed, returns `reservation_id`
+2. AI call proceeds
+3. **`finalize_generation_slot(reservationId, status, model, error)`** RPC finalises the record
 
-### Step 2 — Add `destination` pre-validation in plan store (GAP)
+The Edge Function no longer does direct `INSERT INTO plan_generations` — all DB writes go through these
+SECURITY DEFINER functions.
 
-**File:** `src/stores/plan.store.ts`
-
-After fetching the trip, validate `destination` before calling the AI:
-
-```typescript
-// Guard clause — add after getTripById():
-if (!trip.destination || trip.destination.trim() === '') {
-  throw createValidationError('destination must be set before generating a plan', {
-    field: 'destination'
-  })
-}
-```
-
-### Step 3 — Pass `destination` to `callAIService` (GAP)
-
-**File:** `src/stores/plan.store.ts`
-
-`AIPlanParams` requires `destination: string` but it is not currently passed. Update the `callAIService` call:
-
-```typescript
-const response = await callAIService({
-  language,
-  noteBody: trip.note_body ?? '',
-  destination: trip.destination, // ← add this field
-  userProfile,
-  tripPreferences
-})
-```
-
-**File:** `src/lib/services/generation.service.ts`
-
-Ensure `buildAIPrompt` uses `params.destination` in the prompt context.
-
-### Step 4 — Add quota snapshot to `GeneratedPlanDTO` (GAP)
-
-**File:** `src/stores/plan.store.ts`
-
-After successful generation, fetch the updated quota and include it in `planCandidate`:
-
-```typescript
-// After successful callAIService():
-const quotaResult = await checkGenerationQuota(userId)
-
-planCandidate.value = {
-  plan: response.plan,
-  language,
-  model_used: response.model_used,
-  generated_at: new Date().toISOString(),
-  quota: {
-    // ← currently missing
-    used: quotaResult.used,
-    limit: quotaResult.limit,
-    remaining: quotaResult.limit - quotaResult.used,
-    reset_at: quotaResult.resetAt
-  }
-}
-```
-
-### Step 5 — Add `recordGenerationAttempt` calls (GAP)
-
-**File:** `src/stores/plan.store.ts`
-
-The current implementation does not record generation attempts. Add recording around the AI call:
-
-```typescript
-try {
-  const response = await callAIService(...)
-  await recordGenerationAttempt({
-    userId: user.id,
-    tripId,
-    status: 'success',
-    modelName: response.model_used
-  })
-} catch (aiError) {
-  await recordGenerationAttempt({
-    userId: user.id,
-    tripId,
-    status: 'api_error',
-    errorMessage: aiError instanceof Error ? aiError.message : 'Unknown error'
-  })
-  throw createAIApiError(aiError instanceof Error ? aiError.message : undefined)
-}
-```
-
-For pre-validation failures (destination, note_body), record `validation_error` before throwing.
-
-### Step 6 — Verify Edge Function exists and handles errors
-
-**File:** `supabase/functions/generate-plan/index.ts`
-
-Confirm the Edge Function:
-
-- Sets a 60-second timeout on the OpenRouter.ai HTTP call
-- Returns `{ plan: PlanJson, model_used: string }` on success
-- Returns a structured error response on failure (not a raw exception)
-
-### Step 7 — Verify RLS on `plan_generations`
-
-```sql
--- Users can only insert their own records
-CREATE POLICY "Users can insert own generations"
-  ON plan_generations FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-```
-
-No UPDATE policy (table is append-only by design).
-
-### Step 8 — Manual verification checklist
+### Manual verification checklist
 
 - [ ] Trip with destination and valid note generates a plan (200)
 - [ ] Trip with missing destination returns 400
@@ -464,8 +376,10 @@ No UPDATE policy (table is append-only by design).
 - [ ] Another user's tripId returns 403/404
 - [ ] Non-existent tripId returns 404
 - [ ] After 10 successful generations, next request returns 429 with `reset_at`
+- [ ] Two simultaneous generation requests from the same user: only one succeeds, second gets 429
 - [ ] `validation_error` generation records do NOT count toward quota
 - [ ] Generated plan NOT saved to `trips.plan_json` (verify DB)
 - [ ] `planStore.planCandidate` is populated after generation
 - [ ] `planCandidate.quota` reflects updated quota
 - [ ] AI Edge Function error returns 502 (not 500)
+- [ ] Stale `pending` record (> 90 s old) does not block future generation

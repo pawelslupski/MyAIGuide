@@ -114,10 +114,16 @@ TripDetailView.vue (Main Container)
 **Handled Interactions:**
 
 - Route parameter change (fetch new trip, cancel pending debounced save)
-- **Auto-save non-note fields** – `useDebounceFn(performSave, 800)` triggered by a `watch` on
-  `[title, destination, what, speed, type, budget, num_days, num_people]` in `pendingFields`
+- **Auto-save select/number fields** – `useDebounceFn(performSave, 800)` triggered by a `watch` on
+  `[what, speed, type, budget, num_days, num_people]` in `pendingFields`
+- **Auto-save title** – `handleTitleBlur()` called on `@blur:title` from `TripHeader`;
+  cancels any pending debounce and calls `performSave()` immediately
+- **Auto-save destination** – `handleDestinationBlur()` called on `@blur:destination` from `TripEditor`;
+  cancels any pending debounce and calls `performSave()` immediately
 - **Auto-save note** – `handleNoteBlur()` called on `@blur:note` event from `TripEditor`;
   cancels the debounced save first to avoid double request
+- **Concurrent save guard** – `performSave()` checks `tripStore.isSaving`; if a save is already
+  in progress it reschedules via `debouncedSave()` instead of running concurrently
 - Generate plan action
 - Save plan action
 - Discard plan candidate action
@@ -191,7 +197,7 @@ TripDetailView.vue (Main Container)
 
 ```typescript
 {
-  'update:title': (newTitle: string) => void
+  'blur:title': (newTitle: string) => void  // saves on field blur, not on every keystroke
 }
 ```
 
@@ -211,8 +217,12 @@ TripDetailView.vue (Main Container)
 ### 4.3 TripNoteEditor.vue / TripEditor.vue (note section)
 
 **Description:** Textarea for trip note content with character counter and validation feedback.
-The note does **not** auto-save on every keystroke – instead the `Textarea` emits a `blur` event
-that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView`.
+Neither the note nor the destination auto-save on every keystroke. Both use blur-based saving:
+
+- `Textarea` emits `blur:note` on blur → `handleNoteBlur()` in `TripView`
+- Destination `Input` calls `handleDestinationBlur()` composable + emits `blur:destination` → `handleDestinationBlur()` in `TripView`
+
+Title field in `TripHeader` also uses blur-based saving via `blur:title` event.
 
 **Main Elements:**
 
@@ -326,8 +336,9 @@ that bubbles up as `blur:note` from `TripEditor`, triggering a save in `TripView
 - Allow override of inherited values
 - Visual distinction for inherited vs. custom values
 - **Profile default prepopulation:** `TripEditor` initialises local state from
-  `props.defaultPreferences` when the trip field is empty (`ref()` init + a `watch` on
-  `props.defaultPreferences` with `{ deep: true }` as a safety net for late-arriving profile data).
+  `props.defaultPreferences` when the trip field is empty (`ref()` init + a shallow `watch` on
+  `props.defaultPreferences` for late-arriving profile data — deep watch not needed since the
+  object is always replaced, never mutated in place).
   The "From profile" `<Badge>` appears when the current local value equals the profile default.
 
 ---

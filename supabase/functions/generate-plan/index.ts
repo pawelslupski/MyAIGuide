@@ -30,9 +30,6 @@ const REQUEST_TIMEOUT_MS = 60000 // 60 seconds
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 8000 // Increased for longer plans and non-English languages
 
-const QUOTA_LIMIT = 10
-const QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000
-
 // CORS headers for frontend communication
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,59 +69,7 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(401, 'UNAUTHORIZED', 'Authentication required')
     }
 
-    // 2. Server-side quota check — fixed-batch model, cannot be bypassed by the client.
-    //    Fetch the most recent QUOTA_LIMIT counted rows (newest first).
-    const { data: recentRows, error: quotaError } = await supabase
-      .from('plan_generations')
-      .select('created_at')
-      .eq('user_id', user.id)
-      .in('status', ['success', 'api_error'])
-      .order('created_at', { ascending: false })
-      .limit(QUOTA_LIMIT)
-
-    if (quotaError) {
-      console.error('[ERROR] Quota check failed:', quotaError.message)
-      return createErrorResponse(500, 'INTERNAL_ERROR', 'Failed to verify generation quota')
-    }
-
-    const quotaRows = recentRows ?? []
-    const now = Date.now()
-    let quotaUsed = quotaRows.length
-
-    if (quotaRows.length >= QUOTA_LIMIT) {
-      // The last row in DESC order is the one that filled the quota
-      const limitRow = quotaRows[QUOTA_LIMIT - 1]!
-      const cooldownEndsAt = new Date(limitRow.created_at).getTime() + QUOTA_WINDOW_MS
-
-      if (now < cooldownEndsAt) {
-        // Still in cooldown — blocked
-        return createErrorResponse(429, 'QUOTA_EXCEEDED', 'Generation quota exceeded. Try again in 24 hours.')
-      }
-
-      // Cooldown expired — count only rows created after cooldown end
-      const batchStart = new Date(cooldownEndsAt).toISOString()
-      const { data: batchRows, error: batchError } = await supabase
-        .from('plan_generations')
-        .select('created_at')
-        .eq('user_id', user.id)
-        .in('status', ['success', 'api_error'])
-        .gte('created_at', batchStart)
-        .order('created_at', { ascending: false })
-        .limit(QUOTA_LIMIT)
-
-      if (batchError) {
-        console.error('[ERROR] Batch quota check failed:', batchError.message)
-        return createErrorResponse(500, 'INTERNAL_ERROR', 'Failed to verify generation quota')
-      }
-
-      quotaUsed = (batchRows ?? []).length
-    }
-
-    if (quotaUsed >= QUOTA_LIMIT) {
-      return createErrorResponse(429, 'QUOTA_EXCEEDED', 'Generation quota exceeded. Try again in 24 hours.')
-    }
-
-    // 3. Parse request body
+    // 2. Parse request body — must come before quota reservation so we have tripId
     let body: any
     try {
       body = await req.json()
@@ -132,13 +77,13 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(400, 'VALIDATION_ERROR', 'Invalid JSON in request body')
     }
 
-    // 4. Validate tripId
+    // 3. Validate tripId
     const tripId = body?.tripId
     if (!tripId || typeof tripId !== 'number' || !Number.isInteger(tripId) || tripId <= 0) {
       return createErrorResponse(400, 'VALIDATION_ERROR', 'Field "tripId" is required and must be a positive integer')
     }
 
-    // 5. Validate prompt + language
+    // 4. Validate prompt + language
     let validatedInput: ValidatedInput
     try {
       validatedInput = validateInput(body)
@@ -151,6 +96,23 @@ Deno.serve(async (req: Request) => {
 
     const { prompt, language } = validatedInput
 
+    // 5. Atomically reserve a quota slot.
+    //    try_reserve_generation_slot acquires a per-user advisory lock, replicates
+    //    the fixed-batch quota logic (including non-stale 'pending' records), and
+    //    inserts a 'pending' row if the user is within their limit.
+    //    This eliminates the TOCTOU race that existed when check and insert were
+    //    two separate, uncoordinated statements.
+    const { data: reservationId, error: reservationError } = await supabase
+      .rpc('try_reserve_generation_slot', { p_trip_id: tripId })
+
+    if (reservationError) {
+      if (reservationError.message === 'QUOTA_EXCEEDED' || reservationError.code === 'P0429') {
+        return createErrorResponse(429, 'QUOTA_EXCEEDED', 'Generation quota exceeded. Try again in 24 hours.')
+      }
+      console.error('[ERROR] Quota reservation failed:', reservationError.message)
+      return createErrorResponse(500, 'INTERNAL_ERROR', 'Failed to reserve generation quota slot')
+    }
+
     console.log(`[INFO] Generating plan - Language: ${language}, Model: ${DEFAULT_MODEL}`)
 
     // 6. Build OpenRouter request
@@ -161,12 +123,11 @@ Deno.serve(async (req: Request) => {
     try {
       openRouterResponse = await callOpenRouterAPI(openRouterRequest)
     } catch (error) {
-      // Record api_error before returning
-      await supabase.from('plan_generations').insert({
-        user_id: user.id,
-        trip_id: tripId,
-        status: 'api_error',
-        error_message: error instanceof Error ? error.message : 'Unknown error'
+      // Finalize the reserved slot as api_error before returning
+      await supabase.rpc('finalize_generation_slot', {
+        p_reservation_id: reservationId,
+        p_status: 'api_error',
+        p_error_message: error instanceof Error ? error.message : 'Unknown error'
       })
 
       if (error instanceof Error) {
@@ -193,11 +154,11 @@ Deno.serve(async (req: Request) => {
     try {
       parsedResponse = parseOpenRouterResponse(openRouterResponse)
     } catch (error) {
-      await supabase.from('plan_generations').insert({
-        user_id: user.id,
-        trip_id: tripId,
-        status: 'api_error',
-        error_message: error instanceof Error ? error.message : 'Invalid response from AI'
+      // Finalize the reserved slot as api_error before returning
+      await supabase.rpc('finalize_generation_slot', {
+        p_reservation_id: reservationId,
+        p_status: 'api_error',
+        p_error_message: error instanceof Error ? error.message : 'Invalid response from AI'
       })
 
       if (error instanceof Error && error.message.startsWith('AI_API_ERROR:')) {
@@ -207,16 +168,15 @@ Deno.serve(async (req: Request) => {
       throw error
     }
 
-    // 9. Record successful generation
+    // 9. Finalize the reserved slot as success
     console.log(`[INFO] Plan generated successfully - Model: ${parsedResponse.model_used}`)
-    const { error: insertError } = await supabase.from('plan_generations').insert({
-      user_id: user.id,
-      trip_id: tripId,
-      status: 'success',
-      model_name: parsedResponse.model_used
+    const { error: finalizeError } = await supabase.rpc('finalize_generation_slot', {
+      p_reservation_id: reservationId,
+      p_status: 'success',
+      p_model_name: parsedResponse.model_used
     })
-    if (insertError) {
-      console.error('[ERROR] Failed to record generation:', insertError.message)
+    if (finalizeError) {
+      console.error('[ERROR] Failed to finalize generation slot:', finalizeError.message)
     }
 
     // 10. Return success response

@@ -95,6 +95,9 @@ tables reference `users(id)` via foreign keys.
   - **DRAFT**: `note_body` has content, `plan_json` is NULL
   - **CONFIRMED**: `plan_json` is NOT NULL
 - Preference fields (`what`, `speed`, `type`, `budget`) override global defaults from `profiles`
+- **Realtime:** `REPLICA IDENTITY FULL` is set on this table and it is added to the `supabase_realtime` publication
+  (migration `20260316000000`). The frontend subscribes to row-level UPDATE events per trip so all open browser tabs
+  stay in sync without polling.
 - `plan_json` structure (example):
 
 ```json
@@ -121,26 +124,30 @@ tables reference `users(id)` via foreign keys.
 
 **Purpose:** Track AI plan generation attempts for rate limiting and diagnostics.
 
-| Column          | Type         | Constraints                                                              | Description                                           |
-| --------------- | ------------ | ------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `id`            | bigserial    | PRIMARY KEY                                                              | Generation record identifier                          |
-| `user_id`       | uuid         | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                    | User who triggered generation                         |
-| `trip_id`       | bigint       | NOT NULL                                                                 | Trip for which plan was generated (no FK — see §6.13) |
-| `status`        | varchar(20)  | NOT NULL, CHECK (status IN ('success', 'api_error', 'validation_error')) | Generation outcome                                    |
-| `model_name`    | varchar(100) |                                                                          | AI model used (NULL for validation_error)             |
-| `error_message` | text         |                                                                          | Error details (NULL for successful runs)              |
-| `created_at`    | timestamptz  | NOT NULL DEFAULT now()                                                   | Generation attempt timestamp                          |
+| Column          | Type         | Constraints                                                                        | Description                                           |
+| --------------- | ------------ | ---------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `id`            | bigserial    | PRIMARY KEY                                                                        | Generation record identifier                          |
+| `user_id`       | uuid         | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                              | User who triggered generation                         |
+| `trip_id`       | bigint       | NOT NULL                                                                           | Trip for which plan was generated (no FK — see §6.13) |
+| `status`        | varchar(20)  | NOT NULL, CHECK (status IN ('success', 'api_error', 'validation_error','pending')) | Generation outcome                                    |
+| `model_name`    | varchar(100) |                                                                                    | AI model used (NULL for validation_error / pending)   |
+| `error_message` | text         |                                                                                    | Error details (NULL for successful runs)              |
+| `created_at`    | timestamptz  | NOT NULL DEFAULT now()                                                             | Generation attempt timestamp                          |
 
 **Notes:**
 
 - Only AI-invoking attempts (success or API errors) are recorded; pure client-side validation failures are NOT recorded
 - Used to enforce 10 generations per user in a rolling 24-hour window
 - `status` values:
+  - `pending`: Quota slot reserved atomically before the AI call starts; updated to a final status when the call
+    completes. Records older than 90 s are treated as stale and excluded from quota counts.
   - `success`: Plan generated successfully → `model_name` is set, `error_message` is NULL
   - `api_error`: AI API call failed (timeout, rate limit, etc.) → `model_name` is set, `error_message` contains error
     details
   - `validation_error`: Server-side validation failed (note too short/long, etc.) → `model_name` is NULL (AI not
     invoked), `error_message` contains validation error
+- The `pending` status is managed exclusively by the `try_reserve_generation_slot` / `finalize_generation_slot`
+  SECURITY DEFINER functions (see §5.3). Direct UPDATE via RLS is not granted.
 - Append-only table designed for potential future partitioning by `created_at`
 
 ---
@@ -287,8 +294,9 @@ POLICY "Users can insert own generations"
   ON plan_generations FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- Users cannot update generation records (append-only)
--- No UPDATE policy
+-- Users cannot update generation records directly (append-only via RLS)
+-- UPDATE is performed only by finalize_generation_slot() SECURITY DEFINER function
+-- No direct UPDATE policy
 
 -- Users can delete only their own generation records (via trip cascade)
 CREATE
@@ -300,7 +308,8 @@ USING (auth.uid() = user_id);
 **Notes:**
 
 - RLS ensures users can only access their own data
-- `plan_generations` is designed as append-only (no UPDATE policy)
+- Direct UPDATE is not allowed via RLS; the `finalize_generation_slot()` SECURITY DEFINER function updates `pending`
+  records to their final status, bypassing RLS safely under controlled conditions (see §5.3)
 - All policies use `auth.uid()` to get the current authenticated user's ID
 
 ---
@@ -369,6 +378,38 @@ CREATE TRIGGER on_user_created
 **Defaults align with PRD §3.2:** "Profil tworzony automatycznie przy rejestracji z domyślnymi wartościami: Co?
 Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie."
 
+### 5.3 Atomic Quota Reservation Functions
+
+Two SECURITY DEFINER functions handle the atomic quota check + reservation pattern (migration `20260316000000`):
+
+#### `try_reserve_generation_slot(p_trip_id BIGINT) → BIGINT`
+
+Atomically checks the caller's quota and, if within the limit, inserts a `pending` record and returns its `id`
+(the `reservation_id`).
+
+**Concurrency safety:** `pg_advisory_xact_lock(hashtext(user_id))` serialises all concurrent calls for the same user.
+Two simultaneous requests both see each other's `pending` record and the second correctly gets blocked.
+
+**Stale-pending handling:** `pending` records older than 90 s are excluded from the quota count (Edge Function timeout
+is 60 s, so any older record is from a crashed invocation).
+
+**Raises:**
+
+- `P0429 QUOTA_EXCEEDED` — user is at their limit and cooldown has not expired
+- `P0401 UNAUTHORIZED` — called without an active session
+
+#### `finalize_generation_slot(p_reservation_id BIGINT, p_status VARCHAR, p_model_name VARCHAR, p_error_message TEXT)`
+
+Updates a `pending` record to its final status (`success`, `api_error`, or `validation_error`) once the AI call
+completes. Verifies ownership via `auth.uid()`. If the record is not found (already finalised or wrong id) a WARNING
+is emitted but no exception is raised, so the caller is never interrupted.
+
+**Call sequence in the Edge Function:**
+
+1. `try_reserve_generation_slot(tripId)` → `reservationId` (or 429)
+2. Call OpenRouter AI
+3. `finalize_generation_slot(reservationId, 'success'|'api_error', ...)` → void
+
 ---
 
 ## 6. Design Decisions and Rationale
@@ -423,7 +464,8 @@ Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie."
   - Provides diagnostics and observability (model used, errors)
   - Append-only design supports future partitioning/pruning
 - **What's counted:** Only attempts that invoke AI (success or API errors); client-side validation failures are NOT
-  recorded.
+  recorded. Active `pending` records (< 90 s old) also count toward the quota to prevent double-spend during
+  concurrent requests.
 
 ### 6.7 Hard Deletes with Cascades
 
@@ -504,6 +546,8 @@ Przyroda, Jak szybko? Balans, Jaki typ? Road trip, Budżet? Umiarkowanie."
 6. RLS disable/enable policies
 7. Profile preference column defaults
 8. `20260306000000_fix_plan_generations_trip_cascade` — drop `plan_generations.trip_id` FK to prevent quota bypass
+9. `20260316000000_quota_reservation_and_realtime` — add `pending` status; add `try_reserve_generation_slot` and
+   `finalize_generation_slot` SECURITY DEFINER functions; enable Realtime on `trips`
 
 ---
 
@@ -579,9 +623,11 @@ This schema provides a solid foundation for MyAIGuide MVP with:
 - ✅ Support for global and per-trip preferences
 - ✅ Dietary preferences with mandatory description enforced at DB level
 - ✅ Efficient rate limiting for AI generations
+- ✅ **Atomic quota reservation** via advisory-lock SECURITY DEFINER functions — eliminates TOCTOU race
 - ✅ Flexible plan storage with JSONB
 - ✅ Complete data deletion on account removal
 - ✅ Minimal but targeted indexing for performance
+- ✅ **Realtime sync** — open browser tabs receive trip UPDATE events without polling
 - ✅ Room for future enhancements without breaking changes
 
 The design prioritizes simplicity and correctness for MVP while maintaining extensibility for future features.

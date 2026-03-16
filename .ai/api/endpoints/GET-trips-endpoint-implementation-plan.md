@@ -200,6 +200,19 @@ getTrips(userId, { page, limit, status? })       [src/lib/services/trip.service.
   tripStore.tripsPagination = result.pagination
 ```
 
+### createTrip list refresh behaviour
+
+`tripStore.createTrip()` no longer optimistically prepends the new trip to the local list. After the server confirms
+the create, it calls `fetchTrips(1, limit)` to reload page 1 from the DB. This ensures the list always reflects the
+true server order, including trips created from other tabs.
+
+### Realtime subscription (trip detail view)
+
+`tripStore.fetchTrip(tripId)` subscribes to Supabase Realtime `postgres_changes` events (`UPDATE`) for the opened
+trip row. When another tab saves the same trip, `currentTrip` is updated in all open tabs automatically.
+The subscription is torn down in `clearTrip()`. Requires `REPLICA IDENTITY FULL` on the `trips` table (set in
+migration `20260316000000`).
+
 ### Status Derivation (server-side, per row)
 
 | Status      | Condition                                                   |
@@ -374,7 +387,7 @@ export async function getTrips(userId: string, query: GetTripsQuery): Promise<Tr
 }
 ```
 
-### Step 3 — Refactor `fetchTrips` in `trip.store.ts`
+### Step 3 — Refactor `fetchTrips` in `trip.store.ts` ✅ Done
 
 **File:** `src/stores/trip.store.ts`
 

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import type {
   TripDTO,
   TripPreferencesDto,
@@ -8,7 +9,11 @@ import type {
   PaginationDTO,
   CreateTripCommand,
   UpdateTripCommand,
-  TripStatus
+  TripStatus,
+  WhatPreference,
+  SpeedPreference,
+  TypePreference,
+  BudgetPreference
 } from '@/types'
 import { supabaseClient } from '@/db/supabase.client'
 import {
@@ -16,7 +21,9 @@ import {
   updateTrip as updateTripService,
   createTrip as createTripService,
   deleteTrip as deleteTripService,
-  getTrips as getTripsService
+  getTrips as getTripsService,
+  deriveTripStatus,
+  type TripStatusFields
 } from '@/lib/services/trip.service'
 import {
   createUnauthorizedError,
@@ -52,6 +59,41 @@ export const useTripStore = defineStore('trip', () => {
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<ErrorResponse | null>(null)
+
+  // Realtime subscription for the currently open trip
+  let tripRealtimeChannel: RealtimeChannel | null = null
+
+  function subscribeToTrip(tripId: number) {
+    unsubscribeFromTrip()
+    tripRealtimeChannel = supabaseClient
+      .channel(`trip-${tripId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'trips', filter: `id=eq.${tripId}` },
+        (payload) => {
+          if (currentTrip.value?.id !== tripId) return
+          // Map raw DB row → TripDTO (mirrors the service layer mapping)
+          const raw = payload.new as Record<string, unknown>
+          currentTrip.value = {
+            ...raw,
+            what: (raw.what as WhatPreference[]) ?? [],
+            plan_json: raw.plan_json ?? null,
+            speed: raw.speed as SpeedPreference | null,
+            type: raw.type as TypePreference | null,
+            budget: raw.budget as BudgetPreference | null,
+            status: deriveTripStatus(raw as unknown as TripStatusFields)
+          } as TripDTO
+        }
+      )
+      .subscribe()
+  }
+
+  function unsubscribeFromTrip() {
+    if (tripRealtimeChannel) {
+      supabaseClient.removeChannel(tripRealtimeChannel)
+      tripRealtimeChannel = null
+    }
+  }
 
   // State — trips list (dashboard view)
   const trips = ref<DashboardTripViewModel[]>([])
@@ -90,6 +132,7 @@ export const useTripStore = defineStore('trip', () => {
       if (!user) throw createUnauthorizedError()
 
       currentTrip.value = await getTripById(validatedId, user.id)
+      subscribeToTrip(validatedId)
     } catch (err: any) {
       error.value = {
         error: {
@@ -344,17 +387,9 @@ export const useTripStore = defineStore('trip', () => {
 
       const newTrip = await createTripService(resolved, user.id)
 
-      // Prepend to dashboard list so it appears at the top without a full refetch
-      const viewModel: DashboardTripViewModel = {
-        id: newTrip.id,
-        title: newTrip.title,
-        status: newTrip.status,
-        notePreview: newTrip.note_body
-          ? newTrip.note_body.slice(0, 100) + (newTrip.note_body.length > 100 ? '…' : '')
-          : '',
-        updatedAt: newTrip.updated_at
-      }
-      trips.value = [viewModel, ...trips.value]
+      // Re-fetch page 1 from the server so the list reflects the true server order.
+      // This prevents stale ordering when another tab created a trip concurrently.
+      await fetchTrips(1, tripsPagination.value.limit)
 
       return newTrip
     } catch (err: unknown) {
@@ -425,6 +460,7 @@ export const useTripStore = defineStore('trip', () => {
    * Clear current trip
    */
   function clearTrip(): void {
+    unsubscribeFromTrip()
     currentTrip.value = null
     error.value = null
   }
