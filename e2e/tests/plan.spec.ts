@@ -69,8 +69,8 @@ test.describe('GEN-01 setup: Generate Plan button enabled after filling trip dat
       await tripPage.waitForSaved()
 
       // ── Assert ────────────────────────────────────────────────────────
-      // Trip should be in DRAFT state after saving content
-      await expect(tripPage.statusBadge).toHaveText('DRAFT')
+      // Trip should be in DRAFT state after saving content (displayed as translated label)
+      await expect(tripPage.statusBadge).toHaveText('In Progress')
 
       // Generate Plan button must be visible and enabled
       await expect(tripPage.generatePlanBtn).toBeVisible()

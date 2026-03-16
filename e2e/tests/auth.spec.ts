@@ -39,6 +39,16 @@ test.describe('Login form', () => {
     await loginPage.submitButton.click()
     await expect(loginPage.fieldErrors.first()).toBeVisible()
   })
+
+  test('AUTH-04: short password shows translated validation error', async ({ page }) => {
+    const loginPage = new LoginPage(page)
+    await loginPage.goto()
+    await loginPage.emailInput.fill('test@example.com')
+    await loginPage.passwordInput.fill('abc')
+    await loginPage.submitButton.click()
+    await expect(loginPage.fieldErrors.first()).toBeVisible()
+    await expect(loginPage.fieldErrors.first()).toContainText('at least 6 characters')
+  })
 })
 
 test.describe('Session management', () => {
