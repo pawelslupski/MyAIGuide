@@ -29,6 +29,7 @@ interface Props {
   defaultPreferences?: TripPreferencesDto
   profile?: ProfileDTO | null
   noteLanguageMismatch?: boolean
+  isGenerating?: boolean
 }
 
 const props = defineProps<Props>()
@@ -153,6 +154,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
           v-model="localDestination"
           data-testid="trip-destination-input"
           :placeholder="t('tripEditor.destinationPlaceholder')"
+          :disabled="props.isGenerating"
           maxlength="50"
         />
       </div>
@@ -175,6 +177,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
               min="1"
               max="30"
               :placeholder="t('tripEditor.durationPlaceholder')"
+              :disabled="props.isGenerating"
               class="w-32"
               @update:model-value="handleNumDaysInput"
             />
@@ -191,6 +194,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
               min="1"
               max="20"
               :placeholder="t('tripEditor.peoplePlaceholder')"
+              :disabled="props.isGenerating"
               class="w-32"
               @update:model-value="handleNumPeopleInput"
             />
@@ -221,6 +225,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
                   :id="`what-${option.value}`"
                   :data-testid="`trip-what-checkbox-${option.value}`"
                   :model-value="localWhat.includes(option.value)"
+                  :disabled="props.isGenerating"
                   @update:model-value="toggleWhat(option.value)"
                 />
                 <Label :for="`what-${option.value}`" class="cursor-pointer text-sm font-normal">
@@ -245,7 +250,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
                 </TooltipContent>
               </Tooltip>
             </div>
-            <RadioGroup v-model="localSpeed">
+            <RadioGroup v-model="localSpeed" :disabled="props.isGenerating">
               <div
                 v-for="option in speedOptions"
                 :key="option.value"
@@ -281,7 +286,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
                 </TooltipContent>
               </Tooltip>
             </div>
-            <RadioGroup v-model="localType">
+            <RadioGroup v-model="localType" :disabled="props.isGenerating">
               <div
                 v-for="option in typeOptions"
                 :key="option.value"
@@ -317,7 +322,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
                 </TooltipContent>
               </Tooltip>
             </div>
-            <RadioGroup v-model="localBudget">
+            <RadioGroup v-model="localBudget" :disabled="props.isGenerating">
               <div
                 v-for="option in budgetOptions"
                 :key="option.value"
@@ -391,6 +396,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
             v-model="localNote"
             data-testid="trip-note-textarea"
             :placeholder="t('tripEditor.notesPlaceholder')"
+            :disabled="props.isGenerating"
             class="min-h-[200px] resize-y"
             aria-label="Trip note content"
             :aria-invalid="noteLength > MAX_NOTE_LENGTH"

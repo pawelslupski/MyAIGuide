@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
+import { CircleArrowLeft } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import type { TripStatus } from '@/types'
@@ -9,9 +11,10 @@ interface Props {
   status: TripStatus
   updatedAt: string
   isSaving?: boolean
+  isGenerating?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:title': [newTitle: string]
@@ -41,26 +44,39 @@ function formatRelativeTime(isoDate: string): string {
 </script>
 
 <template>
-  <div class="rounded-lg border bg-card p-4">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <div class="flex min-w-0 flex-1 items-center gap-3">
-        <Input
-          data-testid="trip-title-input"
-          :model-value="title"
-          class="flex-1 text-2xl font-bold sm:text-xl"
-          :placeholder="t('tripHeader.titlePlaceholder')"
-          @update:model-value="emit('update:title', String($event))"
-        />
-        <Badge data-testid="trip-status-badge" variant="outline" :class="statusClass(status)">
-          {{ t(`tripCard.status.${status}`) }}
-        </Badge>
-      </div>
-      <div class="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-        <span v-if="isSaving" data-testid="trip-saving-indicator">{{
-          t('tripHeader.saving')
-        }}</span>
-        <span>{{ t('tripHeader.updatedAt', { time: formatRelativeTime(updatedAt) }) }}</span>
-        <slot name="actions" />
+  <div class="space-y-3">
+    <div class="flex items-center rounded-lg border bg-card px-4 py-3">
+      <RouterLink
+        to="/"
+        class="inline-flex items-center gap-2 text-base font-medium text-primary transition-colors hover:text-primary/70"
+      >
+        <CircleArrowLeft class="h-5 w-5" />
+        {{ t('tripHeader.backToDashboard') }}
+      </RouterLink>
+    </div>
+
+    <div class="rounded-lg border bg-card p-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div class="flex min-w-0 flex-1 items-center gap-3">
+          <Input
+            data-testid="trip-title-input"
+            :model-value="title"
+            :disabled="props.isGenerating"
+            class="flex-1 text-2xl font-bold sm:text-xl"
+            :placeholder="t('tripHeader.titlePlaceholder')"
+            @update:model-value="emit('update:title', String($event))"
+          />
+          <Badge data-testid="trip-status-badge" variant="outline" :class="statusClass(status)">
+            {{ t(`tripCard.status.${status}`) }}
+          </Badge>
+        </div>
+        <div class="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+          <span v-if="isSaving" data-testid="trip-saving-indicator">{{
+            t('tripHeader.saving')
+          }}</span>
+          <span>{{ t('tripHeader.updatedAt', { time: formatRelativeTime(updatedAt) }) }}</span>
+          <slot name="actions" />
+        </div>
       </div>
     </div>
   </div>

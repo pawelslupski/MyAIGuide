@@ -18,6 +18,14 @@ const pl: MessageSchema = {
     switchToLight: 'Włącz tryb jasny'
   },
   auth: {
+    validation: {
+      emailRequired: 'Email jest wymagany',
+      emailInvalid: 'Podaj poprawny adres email',
+      passwordRequired: 'Hasło jest wymagane',
+      passwordTooShort: 'Hasło musi mieć co najmniej 6 znaków',
+      confirmPasswordRequired: 'Potwierdź hasło',
+      passwordsMismatch: 'Hasła nie są identyczne'
+    },
     emailLabel: 'Email',
     emailPlaceholder: "ty{'@'}przykład.pl",
     passwordLabel: 'Hasło',
@@ -132,7 +140,8 @@ const pl: MessageSchema = {
   tripHeader: {
     titlePlaceholder: 'Wprowadź tytuł podróży',
     saving: 'Zapisywanie…',
-    updatedAt: 'Zaktualizowano {time}'
+    updatedAt: 'Zaktualizowano {time}',
+    backToDashboard: 'Wróć na stronę główną'
   },
   tripView: {
     loading: 'Ładowanie podróży...',
@@ -145,8 +154,12 @@ const pl: MessageSchema = {
     leaveDialog: {
       title: 'Wyjść bez zapisywania?',
       description: 'Masz niezapisane zmiany. Jeśli wyjdziesz teraz, zostaną utracone.',
+      titleGenerating: 'Generowanie w toku',
+      descriptionGenerating:
+        'Trwa generowanie planu. Opuszczenie strony teraz przerwie ten proces i żaden plan nie zostanie zapisany.',
       stay: 'Zostań',
-      leave: 'Wyjdź'
+      leave: 'Wyjdź',
+      leaveGenerating: 'Wyjdź mimo to'
     }
   },
   tripEditor: {
@@ -165,7 +178,7 @@ const pl: MessageSchema = {
     tripTypeLabel: 'Rodzaj podróży',
     budgetLabel: 'Budżet',
     travelerProfileLabel: 'Profil podróżnika (z ustawień profilu)',
-    noFlags: 'Brak specjalnych oznczeń podróżnika',
+    noFlags: 'Brak specjalnych oznaczeń podróżnika',
     dietaryNote: 'Dieta: {description}',
     notesTitle: 'Notatki',
     notesDesc: 'Opisz plany podróży, preferencje i specjalne wymagania',
@@ -215,6 +228,12 @@ const pl: MessageSchema = {
     quotaExceededDesc: 'Wykorzystałeś wszystkie {limit} generowania. Limit odnowi się za {time}.',
     generationFailedTitle: 'Błąd generowania',
     saveFailedTitle: 'Błąd zapisywania',
+    errors: {
+      aiApiError: 'Nie udało się wygenerować planu. Spróbuj ponownie.',
+      destinationRequired: 'Cel podróży jest wymagany przed wygenerowaniem planu.',
+      noteTooLong: 'Notatki nie mogą przekraczać 10 000 znaków.',
+      generic: 'Wystąpił nieoczekiwany błąd. Spróbuj ponownie.'
+    },
     noPlanText:
       'Nie wygenerowano jeszcze planu. Kliknij poniżej, aby utworzyć spersonalizowane itinerarium.',
     beforeGenerating: 'Przed generowaniem:',
@@ -232,6 +251,9 @@ const pl: MessageSchema = {
     regenerating: 'Generowanie...',
     regenerate: 'Wygeneruj ponownie',
     generatingSpinner: 'Generowanie planu…',
+    patienceTitle: 'Uzbrój się w cierpliwość',
+    patienceDesc:
+      'Trwa generowanie planu. Może to potrwać nawet minutę, w zależności od złożoności podróży.',
     featureDisabled: 'Generowanie planu nie jest dostępne w bieżącym środowisku.',
     locationPlaceholder: 'Nazwa miejsca',
     descriptionPlaceholder: 'Opis aktywności',

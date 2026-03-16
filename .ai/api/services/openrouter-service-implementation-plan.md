@@ -59,10 +59,12 @@ A "critical requirements" block is appended to the user prompt:
 - Avoid zigzagging between distant locations
 - Provide exhaustive descriptions with specific details
 
-The **Preferences block** now includes two new fields:
+The **Preferences block** now includes two new fields with fallback defaults:
 
-- `Duration: N days` (or "not specified" if `num_days` is null)
-- `Group size: N people` (or "not specified" if `num_people` is null)
+- `Duration: N days` — defaults to **3 days** if `num_days` is null
+- `Group size: N people` — defaults to **1 person** if `num_people` is null
+
+The CRITICAL REQUIREMENTS block instructs the model to generate **exactly `num_days ?? 3` day entries**.
 
 ### 2.4 OpenRouter Integration (`src/lib/services/generation.service.ts`)
 

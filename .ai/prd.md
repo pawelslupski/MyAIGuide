@@ -56,6 +56,7 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
 ### 3.5 Generowanie planu z AI
 
 - Plan generowany na podstawie: profilu globalnego, preferencji na poziomie wycieczki i notatki.
+- Domyślne wartości w prompcie gdy pola nie zostały uzupełnione: **3 dni** (`num_days`), **1 osoba** (`num_people`).
 - Struktura wyniku (JSON) zawiera m.in.: Day, TimeOfDay (Rano/Popołudnie/Wieczór), LocationName, Description,
   CategoryTag.
 - Język planu = aktywny język interfejsu UI (przełącznik EN/PL w nagłówku); jeśli język notatki różni się od języka UI, wyświetlane jest miękkie ostrzeżenie przy polu notatki po opuszczeniu pola.

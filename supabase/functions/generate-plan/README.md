@@ -1,46 +1,44 @@
-# Generate Travel Plan - Supabase Edge Function
+# generate-plan — Supabase Edge Function
 
-This Edge Function calls the OpenRouter.ai API to generate structured travel plans using various AI models (GPT-4, Claude, etc.).
+Generates a structured AI travel itinerary via OpenRouter.ai and records the attempt in `plan_generations`.
 
-## Overview
+- **Route:** `POST /functions/v1/generate-plan`
+- **Runtime:** Deno (Supabase Edge Functions)
+- **Model:** `anthropic/claude-sonnet-4-6` (hardcoded, not overridable by the client)
+- **Timeout:** 60 seconds
+- **Feature flag:** returns `503 SERVICE_UNAVAILABLE` when `plan-generation` flag is disabled
 
-- **Route**: `POST /functions/v1/generate-travel-plan`
-- **Runtime**: Deno (Supabase Edge Functions)
-- **Purpose**: Securely call OpenRouter API from server-side with structured JSON outputs
+---
 
-## Request Format
+## Request
+
+```
+POST /functions/v1/generate-plan
+Authorization: Bearer <supabase_session_token>
+Content-Type: application/json
+```
 
 ```json
-POST /functions/v1/generate-travel-plan
-Content-Type: application/json
-
 {
-  "prompt": "Plan a 3-day trip to Krakow...",
-  "language": "en",
-  "model": "anthropic/claude-3.5-sonnet"  // Optional
+  "tripId": 42,
+  "prompt": "Plan a 3-day trip to Kraków...",
+  "language": "en"
 }
 ```
 
-### Request Parameters
+### Fields
 
-- **prompt** (required): User's travel notes and preferences
-  - Type: `string`
-  - Min length: 50 characters
-  - Max length: 15,000 characters
+| Field      | Type     | Required | Constraints                              |
+|------------|----------|----------|------------------------------------------|
+| `tripId`   | `number` | yes      | Positive integer                         |
+| `prompt`   | `string` | yes      | 50 – 15 000 characters                   |
+| `language` | `string` | yes      | 2–10 letter locale code (e.g. `en`, `pl`) |
 
-- **language** (required): Language code for the response
-  - Type: `string`
-  - Format: 2-10 letter code (e.g., "en", "pl", "es")
-  - Pattern: `/^[a-z]{2,10}$/i`
+---
 
-- **model** (optional): OpenRouter model identifier
-  - Type: `string`
-  - Default: `anthropic/claude-3.5-sonnet`
-  - Examples: `openai/gpt-4`, `anthropic/claude-3-opus`
+## Response
 
-## Response Format
-
-### Success Response (200 OK)
+### 200 OK
 
 ```json
 {
@@ -52,107 +50,116 @@ Content-Type: application/json
           {
             "timeOfDay": "morning",
             "locationName": "Wawel Castle",
-            "description": "Visit the historic royal castle",
+            "description": "Visit the historic royal castle overlooking the Vistula river.",
             "categoryTag": "culture_museums"
           }
         ]
       }
     ]
   },
-  "model_used": "anthropic/claude-3.5-sonnet"
+  "model_used": "anthropic/claude-sonnet-4-6"
 }
 ```
 
-### Error Response (4xx/5xx)
+`categoryTag` is one of: `nature` · `culture_museums` · `beach_relax` · `city_break` · `foodie`
+`timeOfDay` is one of: `morning` · `afternoon` · `evening`
 
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Field \"prompt\" must be at least 50 characters",
-    "details": {
-      "field": "prompt"
-    }
-  }
-}
-```
+---
 
-## Error Codes
+## Error codes
 
 | Code | Status | Description |
 |------|--------|-------------|
-| `VALIDATION_ERROR` | 400 | Invalid request parameters |
-| `AUTHENTICATION_ERROR` | 401 | Invalid OpenRouter API key |
-| `RATE_LIMIT_ERROR` | 429 | Rate limit exceeded |
+| `METHOD_NOT_ALLOWED` | 405 | Non-POST request |
+| `SERVICE_UNAVAILABLE` | 503 | `plan-generation` feature flag disabled |
+| `UNAUTHORIZED` | 401 | Missing or invalid session JWT |
+| `QUOTA_EXCEEDED` | 429 | User has used all 10 generations in the 24-hour window |
+| `VALIDATION_ERROR` | 400 | Invalid or missing `tripId`, `prompt`, or `language` |
+| `AUTHENTICATION_ERROR` | 401 | OpenRouter API key rejected |
+| `RATE_LIMIT_ERROR` | 429 | OpenRouter rate limit hit; `details.retry_after` (seconds) included |
+| `TIMEOUT_ERROR` | 504 | OpenRouter did not respond within 60 s |
+| `SERVICE_UNAVAILABLE` | 503 | OpenRouter network/server error |
+| `AI_API_ERROR` | 502 | OpenRouter returned an invalid or unparseable response |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
-| `AI_API_ERROR` | 500 | AI service returned invalid response |
-| `SERVICE_UNAVAILABLE` | 503 | OpenRouter API unavailable |
-| `TIMEOUT_ERROR` | 504 | Request exceeded 60 second timeout |
 
-## Environment Variables
+All error responses follow the project-wide shape:
 
-Set the following secret in Supabase:
+```json
+{ "error": { "code": "ERROR_CODE", "message": "...", "details": {} } }
+```
+
+---
+
+## Quota enforcement
+
+Quota is enforced **server-side** — the client cannot bypass it.
+
+- Limit: **10 generations per rolling 24-hour window** per user.
+- Counted statuses: `success`, `api_error` (including user-aborted generations recorded by the client).
+- Excluded: `validation_error` (destination missing, note too long — caught before the AI call).
+- Every invocation that reaches the OpenRouter call is recorded in `plan_generations` regardless of outcome.
+
+---
+
+## AI model configuration
+
+| Parameter     | Value  |
+|---------------|--------|
+| `model`       | `anthropic/claude-sonnet-4-6` |
+| `temperature` | `0.7`  |
+| `max_tokens`  | `8000` |
+| `top_p`       | `0.9`  |
+| `response_format` | `json_schema` (strict) |
+
+The system prompt enforces the exact `PlanJson` schema and requires ≥ 90% of activities to match any requested category constraints. Extra fields in the AI response are stripped before returning.
+
+---
+
+## Environment variables
+
+| Variable | Where set | Description |
+|----------|-----------|-------------|
+| `OPENROUTER_API_KEY` | `supabase/.env.local` / Supabase secrets | OpenRouter API key |
+| `SUPABASE_URL` | Auto-injected by CLI | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Auto-injected by CLI | Supabase anon key |
 
 ```bash
+# Local development
+echo "OPENROUTER_API_KEY=sk-or-v1-xxxxx" >> supabase/.env.local
+
 # Production
 supabase secrets set OPENROUTER_API_KEY=sk-or-v1-xxxxx
-
-# Local development
-echo "OPENROUTER_API_KEY=sk-or-v1-xxxxx" > supabase/.env.local
 ```
 
-## Configuration
+---
 
-- **Timeout**: 60 seconds
-- **Default Model**: `anthropic/claude-3.5-sonnet`
-- **Temperature**: 0.7
-- **Max Tokens**: 4000
-- **Top P**: 0.9
-
-## Deployment
+## Running locally
 
 ```bash
-# Deploy to Supabase
-supabase functions deploy generate-travel-plan
-
-# View logs
-supabase functions logs generate-travel-plan --tail
+supabase functions serve generate-plan --no-verify-jwt --env-file supabase/.env.local
 ```
 
-## Testing
-
 ```bash
-# Test locally
-curl -X POST http://localhost:54321/functions/v1/generate-travel-plan \
+curl -X POST http://localhost:54321/functions/v1/generate-plan \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ANON_KEY" \
+  -H "Authorization: Bearer <anon_key>" \
   -d '{
-    "prompt": "Plan a 3-day trip to Krakow, Poland. I love history and local food.",
+    "tripId": 1,
+    "prompt": "Plan a 3-day trip to Kraków, Poland. I love history and local food.",
     "language": "en"
   }'
 ```
 
+## Deployment
+
+```bash
+supabase functions deploy generate-plan
+```
+
 ## Files
 
-- `index.ts` - Main Edge Function implementation
-- `openrouter.types.ts` - TypeScript type definitions for OpenRouter API
-- `README.md` - This documentation file
-
-## Security
-
-- API keys are stored securely in Supabase secrets
-- Never exposed to client-side code
-- CORS configured for frontend access
-- Input validation prevents injection attacks
-- Rate limiting handled at application level
-
-## Features
-
-✅ Structured JSON outputs using JSON schema  
-✅ Flexible model selection  
-✅ Comprehensive error handling  
-✅ Timeout protection (60s)  
-✅ Token usage logging  
-✅ Multi-language support  
-✅ Detailed validation
-
+| File | Description |
+|------|-------------|
+| `index.ts` | Main handler — auth, quota, validation, OpenRouter call, DB recording |
+| `openrouter.types.ts` | TypeScript types for OpenRouter request/response and internal DTOs |
+| `README.md` | This file |

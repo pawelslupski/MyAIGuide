@@ -112,8 +112,8 @@ Traveler Profile:
 ${profileFlags.length > 0 ? profileFlags.join(', ') : 'No special requirements'}
 
 Preferences:
-- Duration: ${tripPreferences.num_days ? `${tripPreferences.num_days} days` : 'not specified'}
-- Group size: ${tripPreferences.num_people ? `${tripPreferences.num_people} people` : 'not specified'}
+- Duration: ${tripPreferences.num_days ?? 3} days
+- Group size: ${tripPreferences.num_people ?? 1} people
 - Speed: ${tripPreferences.speed || 'not specified'}
 - Type: ${tripPreferences.type || 'not specified'}
 - Budget: ${tripPreferences.budget || 'not specified'}
@@ -130,7 +130,7 @@ Before finalising, count total activities and confirm ≥90% match. If not, repl
     : '- Activities: not specified'
 }
 CRITICAL REQUIREMENTS:
-1. Generate EXACTLY ${tripPreferences.num_days} day entries if duration is specified — no more, no fewer
+1. Generate EXACTLY ${tripPreferences.num_days ?? 3} day entries — no more, no fewer
 2. Order all activities within each day by geographic proximity to create efficient routes
 3. Minimize travel time and distance between consecutive activities
 4. Avoid zigzagging between distant locations - group nearby places together
@@ -190,7 +190,8 @@ export async function callAIService(params: AIPlanParams): Promise<AIServiceResp
   )
 
   const { data, error } = await supabaseClient.functions.invoke('generate-plan', {
-    body: { prompt, language: params.language, tripId: params.tripId }
+    body: { prompt, language: params.language, tripId: params.tripId },
+    signal: params.signal
   })
 
   if (error) {

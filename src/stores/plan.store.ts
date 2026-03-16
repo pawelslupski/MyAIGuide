@@ -44,6 +44,11 @@ export const usePlanStore = defineStore('plan', () => {
   // State
   const planCandidate = ref<GeneratedPlanDTO | null>(null)
   const isGenerating = ref(false)
+  let generationAbortController: AbortController | null = null
+  let generationWasAborted = false
+  // Stored during active generation so aborts can still record the attempt
+  let activeGenerationUserId: string | null = null
+  let activeGenerationTripId: number | null = null
   const isSaving = ref(false)
   const generationError = ref<ErrorResponse | null>(null)
   const saveError = ref<ErrorResponse | null>(null)
@@ -67,6 +72,8 @@ export const usePlanStore = defineStore('plan', () => {
    * Calls OpenRouter API via Supabase Edge Function
    */
   async function generatePlan(tripId: number): Promise<void> {
+    generationAbortController = new AbortController()
+    generationWasAborted = false
     isGenerating.value = true
     generationError.value = null
     saveError.value = null
@@ -85,6 +92,10 @@ export const usePlanStore = defineStore('plan', () => {
         throw createInvalidTripIdError(String(tripId))
       }
       const validTripId = parsedId.data
+
+      // Store context for potential abort recording
+      activeGenerationUserId = userId
+      activeGenerationTripId = validTripId
 
       // 3. Fetch trip from DB — validates existence (404) and ownership (403)
       const trip = await getTripById(validTripId, userId)
@@ -178,7 +189,8 @@ export const usePlanStore = defineStore('plan', () => {
           noteBody: trip.note_body ?? '',
           destination: trip.destination,
           userProfile,
-          tripPreferences
+          tripPreferences,
+          signal: generationAbortController?.signal
         })
       } catch (aiError) {
         throw createAIApiError(aiError instanceof Error ? aiError.message : undefined)
@@ -217,10 +229,27 @@ export const usePlanStore = defineStore('plan', () => {
         quota
       }
     } catch (err: unknown) {
+      if (generationWasAborted) {
+        // Record the aborted attempt so it counts against the quota
+        if (activeGenerationUserId && activeGenerationTripId) {
+          await recordGenerationAttempt({
+            userId: activeGenerationUserId,
+            tripId: activeGenerationTripId,
+            status: 'api_error',
+            errorMessage: 'Generation aborted by user'
+          }).catch(() => {
+            // Ignore recording failures on abort
+          })
+        }
+        return
+      }
       const apiErr = toApiError(err)
       generationError.value = apiErr.toResponse()
       throw apiErr
     } finally {
+      generationWasAborted = false
+      activeGenerationUserId = null
+      activeGenerationTripId = null
       isGenerating.value = false
     }
   }
@@ -271,6 +300,13 @@ export const usePlanStore = defineStore('plan', () => {
    * Discard plan candidate
    * Clears candidate from memory without saving
    */
+  function cancelGeneration(): void {
+    generationWasAborted = true
+    generationAbortController?.abort()
+    generationAbortController = null
+    generationError.value = null
+  }
+
   function discardCandidate(): void {
     planCandidate.value = null
     generationError.value = null
@@ -371,6 +407,7 @@ export const usePlanStore = defineStore('plan', () => {
     candidatePlan,
     // Actions
     generatePlan,
+    cancelGeneration,
     savePlanToTrip,
     discardCandidate,
     updateCandidatePlan,

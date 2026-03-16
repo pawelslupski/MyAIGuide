@@ -16,6 +16,14 @@ const en = {
     switchToLight: 'Switch to light mode'
   },
   auth: {
+    validation: {
+      emailRequired: 'Email is required',
+      emailInvalid: 'Please enter a valid email address',
+      passwordRequired: 'Password is required',
+      passwordTooShort: 'Password must be at least 6 characters',
+      confirmPasswordRequired: 'Please confirm your password',
+      passwordsMismatch: 'Passwords do not match'
+    },
     emailLabel: 'Email',
     emailPlaceholder: "you{'@'}example.com",
     passwordLabel: 'Password',
@@ -130,7 +138,8 @@ const en = {
   tripHeader: {
     titlePlaceholder: 'Enter trip title',
     saving: 'Saving…',
-    updatedAt: 'Updated {time}'
+    updatedAt: 'Updated {time}',
+    backToDashboard: 'Go to main dashboard'
   },
   tripView: {
     loading: 'Loading trip...',
@@ -143,8 +152,12 @@ const en = {
     leaveDialog: {
       title: 'Leave without saving?',
       description: 'You have unsaved changes. If you leave now, they will be lost.',
+      titleGenerating: 'Generation in progress',
+      descriptionGenerating:
+        'A plan is currently being generated. Leaving now will interrupt the process and no plan will be saved.',
       stay: 'Stay',
-      leave: 'Leave'
+      leave: 'Leave',
+      leaveGenerating: 'Leave anyway'
     }
   },
   tripEditor: {
@@ -213,6 +226,12 @@ const en = {
     quotaExceededDesc: "You've used all {limit} generations. Quota resets in {time}.",
     generationFailedTitle: 'Generation Failed',
     saveFailedTitle: 'Save Failed',
+    errors: {
+      aiApiError: 'Failed to generate plan. Please try again.',
+      destinationRequired: 'Destination is required before generating a plan.',
+      noteTooLong: 'Trip notes must not exceed 10,000 characters.',
+      generic: 'An unexpected error occurred. Please try again.'
+    },
     noPlanText: 'No plan generated yet. Click below to create your personalized travel itinerary.',
     beforeGenerating: 'Before generating:',
     addDestination: 'Add a destination (required)',
@@ -229,6 +248,9 @@ const en = {
     regenerating: 'Generating...',
     regenerate: 'Regenerate',
     generatingSpinner: 'Generating your plan…',
+    patienceTitle: 'Please be patient',
+    patienceDesc:
+      'Plan generation is in progress. This may take up to a minute depending on trip complexity.',
     featureDisabled: 'Plan generation is not available in the current environment.',
     locationPlaceholder: 'Location name',
     descriptionPlaceholder: 'Activity description',

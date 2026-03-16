@@ -47,6 +47,7 @@ const isPlanGenerationEnabled = isFeatureEnabled('plan-generation')
 // Local state
 const isInitializing = ref(true)
 const noteLanguageMismatch = ref(false)
+const isGenerating = computed(() => planStore.isGenerating)
 
 // Pending (unsaved) edit fields tracked from TripEditor
 type PendingFields = {
@@ -169,6 +170,7 @@ async function initializeView() {
  * Navigation guard - warn about unsaved trip edits or unsaved plan candidate
  */
 const showLeaveDialog = ref(false)
+const leaveDialogIsGenerating = ref(false)
 let leaveResolve: ((confirmed: boolean) => void) | null = null
 
 function confirmLeave() {
@@ -182,11 +184,13 @@ function cancelLeave() {
 }
 
 onBeforeRouteLeave(async (_to, _from, next) => {
-  const hasUnsaved = isDirty.value || planStore.hasCandidate
+  const hasUnsaved = isDirty.value || planStore.hasCandidate || planStore.isGenerating
   if (!hasUnsaved) {
     next()
     return
   }
+
+  leaveDialogIsGenerating.value = planStore.isGenerating
 
   const confirmed = await new Promise<boolean>((resolve) => {
     leaveResolve = resolve
@@ -194,6 +198,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
   })
 
   if (confirmed) {
+    planStore.cancelGeneration()
     planStore.discardCandidate()
     next()
   } else {
@@ -314,6 +319,7 @@ async function handleNoteBlur() {
         :status="tripStore.currentTrip.status"
         :updated-at="tripStore.currentTrip.updated_at"
         :is-saving="tripStore.isSaving"
+        :is-generating="isGenerating"
         @update:title="handleTitleChange"
       />
 
@@ -326,6 +332,7 @@ async function handleNoteBlur() {
             :default-preferences="profileStore.defaultPreferences"
             :profile="profileStore.profile"
             :note-language-mismatch="noteLanguageMismatch"
+            :is-generating="isGenerating"
             @update:fields="handleFieldsChange"
             @blur:note="handleNoteBlur"
           />
@@ -369,12 +376,28 @@ async function handleNoteBlur() {
   >
     <DialogContent class="sm:max-w-sm">
       <DialogHeader>
-        <DialogTitle>{{ t('tripView.leaveDialog.title') }}</DialogTitle>
-        <DialogDescription>{{ t('tripView.leaveDialog.description') }}</DialogDescription>
+        <DialogTitle>{{
+          leaveDialogIsGenerating
+            ? t('tripView.leaveDialog.titleGenerating')
+            : t('tripView.leaveDialog.title')
+        }}</DialogTitle>
+        <DialogDescription>{{
+          leaveDialogIsGenerating
+            ? t('tripView.leaveDialog.descriptionGenerating')
+            : t('tripView.leaveDialog.description')
+        }}</DialogDescription>
       </DialogHeader>
       <DialogFooter class="gap-3">
         <Button variant="outline" @click="cancelLeave">{{ t('tripView.leaveDialog.stay') }}</Button>
-        <Button @click="confirmLeave">{{ t('tripView.leaveDialog.leave') }}</Button>
+        <Button
+          :variant="leaveDialogIsGenerating ? 'destructive' : 'default'"
+          @click="confirmLeave"
+          >{{
+            leaveDialogIsGenerating
+              ? t('tripView.leaveDialog.leaveGenerating')
+              : t('tripView.leaveDialog.leave')
+          }}</Button
+        >
       </DialogFooter>
     </DialogContent>
   </Dialog>

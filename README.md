@@ -39,10 +39,17 @@ Key capabilities:
   Plan language follows the active UI locale (EN/PL); a soft warning is shown if the note language differs.
 - **Regenerate with status reset** — clicking "Regenerate" immediately clears the saved plan from the database
   (status reverts CONFIRMED → DRAFT) before generating a new candidate.
+- **Generation UX lockdown** — while a plan is being generated all inputs and buttons are disabled to prevent
+  conflicting edits; a patience notice informs the user that generation may take up to a minute.
+- **Abort counts against quota** — cancelling an in-progress generation (e.g. navigating away) records the
+  attempt so the quota cannot be gamed by repeatedly aborting.
+- **Leave-during-generation guard** — attempting to navigate away while generation is running shows a dedicated
+  warning dialog explaining the consequences before allowing the user to leave.
 - **UI language switching** — the entire app interface is available in English and Polish; locale is persisted in localStorage and switchable with a single click.
 - **Plan candidate workflow** — generated plans are held in memory for review and editing before being explicitly
   saved to the database.
-- **Generation quota** — 10 AI generations per user per rolling 24-hour window with a live counter.
+- **Generation quota** — 10 AI generations per user per rolling 24-hour window with a live counter (display
+  capped at the limit; aborted generations count toward the quota).
 
 ---
 
@@ -124,15 +131,7 @@ supabase db reset
 
 ### 5. Start the Edge Functions
 
-In a separate terminal, serve all three Edge Functions:
-
-```bash
-supabase functions serve generate-plan --no-verify-jwt --env-file supabase/.env.local &
-supabase functions serve get-generation-quota --no-verify-jwt --env-file supabase/.env.local &
-supabase functions serve delete-account --no-verify-jwt --env-file supabase/.env.local
-```
-
-Or serve them all at once (Supabase CLI ≥ 1.200):
+In a separate terminal, serve all Edge Functions:
 
 ```bash
 supabase functions serve --no-verify-jwt --env-file supabase/.env.local
@@ -224,10 +223,12 @@ npx playwright show-report
 - Per-trip preference overrides (destination, number of people, trip duration, travel style)
 - AI-powered plan generation with structured JSON output
 - Plan candidate workflow: generate → review → edit → save
-- Generation quota: 10 generations per user per rolling 24-hour window
+- Generation quota: 10 generations per user per rolling 24-hour window; aborted generations count against the quota; display capped at limit
 - Plan language driven by active UI locale (EN/PL); note-language mismatch shown as a soft warning on blur
 - Full UI internationalisation with EN/PL toggle (persisted in localStorage)
 - Regenerate resets trip status CONFIRMED → DRAFT before generating a new plan candidate
+- UI lockdown during generation: all inputs/buttons disabled except navigation back to dashboard (with a contextual warning dialog)
+- Leave-during-generation navigation guard with dedicated dialog distinguishing generation-abort from unsaved-edits scenarios
 
 ### Out of scope (post-MVP)
 

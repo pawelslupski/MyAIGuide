@@ -1,41 +1,49 @@
 import { z } from 'zod'
 
+const coerceStr = (val: unknown) => (val == null ? '' : val)
+
+const emailField = z.preprocess(
+  coerceStr,
+  z.string().min(1, 'auth.validation.emailRequired').email('auth.validation.emailInvalid')
+)
+
+const passwordField = z.preprocess(
+  coerceStr,
+  z.string().min(1, 'auth.validation.passwordRequired').min(6, 'auth.validation.passwordTooShort')
+)
+
+const confirmPasswordField = z.preprocess(
+  coerceStr,
+  z.string().min(1, 'auth.validation.confirmPasswordRequired')
+)
+
 export const loginSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
-  password: z
-    .string()
-    .min(1, 'Password is required')
-    .min(6, 'Password must be at least 6 characters')
+  email: emailField,
+  password: passwordField
 })
 
 export const registerSchema = z
   .object({
-    email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
-    password: z
-      .string()
-      .min(1, 'Password is required')
-      .min(6, 'Password must be at least 6 characters'),
-    confirmPassword: z.string().min(1, 'Please confirm your password')
+    email: emailField,
+    password: passwordField,
+    confirmPassword: confirmPasswordField
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
+    message: 'auth.validation.passwordsMismatch',
     path: ['confirmPassword']
   })
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Please enter a valid email address')
+  email: emailField
 })
 
 export const resetPasswordSchema = z
   .object({
-    password: z
-      .string()
-      .min(1, 'Password is required')
-      .min(6, 'Password must be at least 6 characters'),
-    confirmPassword: z.string().min(1, 'Please confirm your password')
+    password: passwordField,
+    confirmPassword: confirmPasswordField
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
+    message: 'auth.validation.passwordsMismatch',
     path: ['confirmPassword']
   })
 

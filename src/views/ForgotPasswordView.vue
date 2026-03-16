@@ -74,7 +74,7 @@ const onSubmit = handleSubmit(async (values) => {
             :placeholder="t('auth.emailPlaceholder')"
             :class="errors.email ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
-          <p v-if="errors.email" class="text-xs text-destructive">{{ errors.email }}</p>
+          <p v-if="errors.email" class="text-xs text-destructive">{{ t(errors.email) }}</p>
         </div>
 
         <Button type="submit" class="w-full" :disabled="isSubmitting">

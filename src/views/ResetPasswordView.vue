@@ -88,7 +88,7 @@ const onSubmit = handleSubmit(async (values) => {
             placeholder="••••••••"
             :class="errors.password ? 'border-destructive focus-visible:ring-destructive' : ''"
           />
-          <p v-if="errors.password" class="text-xs text-destructive">{{ errors.password }}</p>
+          <p v-if="errors.password" class="text-xs text-destructive">{{ t(errors.password) }}</p>
         </div>
 
         <div class="space-y-1.5">
@@ -105,7 +105,7 @@ const onSubmit = handleSubmit(async (values) => {
             "
           />
           <p v-if="errors.confirmPassword" class="text-xs text-destructive">
-            {{ errors.confirmPassword }}
+            {{ t(errors.confirmPassword) }}
           </p>
         </div>
 

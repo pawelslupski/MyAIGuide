@@ -16,6 +16,7 @@ import {
   X,
   AlertCircle,
   AlertTriangle,
+  Clock,
   Calendar,
   Sunrise,
   Sun,
@@ -89,6 +90,18 @@ const isGenerating = computed(() => planStore.isGenerating)
 const isSaving = computed(() => planStore.isSaving)
 const generationError = computed(() => planStore.generationError)
 const saveError = computed(() => planStore.saveError)
+
+const generationErrorMessage = computed(() => {
+  const err = generationError.value
+  if (!err) return ''
+  if (err.error.code === 'AI_API_ERROR') return t('plan.errors.aiApiError')
+  if (err.error.code === 'VALIDATION_ERROR') {
+    const field = (err.error.details as Record<string, unknown> | undefined)?.field
+    if (field === 'destination') return t('plan.errors.destinationRequired')
+    if (field === 'note_body') return t('plan.errors.noteTooLong')
+  }
+  return t('plan.errors.generic')
+})
 
 // Quota information
 const quotaExceeded = computed(() => quotaStore.isQuotaExceeded)
@@ -195,7 +208,9 @@ function formatResetDate(isoDate: string): string {
           <!-- Generation Quota Counter -->
           <div v-if="quota" class="w-40 space-y-1" aria-live="polite">
             <span class="text-xs text-muted-foreground">
-              {{ t('plan.quotaUsed', { used: quota.used, limit: quota.limit }) }}
+              {{
+                t('plan.quotaUsed', { used: Math.min(quota.used, quota.limit), limit: quota.limit })
+              }}
             </span>
             <div class="relative h-2 w-full overflow-hidden rounded-full bg-primary/20">
               <div class="h-full bg-primary transition-all" :style="`width: ${quotaPercentage}%`" />
@@ -227,7 +242,7 @@ function formatResetDate(isoDate: string): string {
         <Alert v-if="generationError" variant="destructive">
           <AlertCircle class="h-4 w-4" />
           <AlertTitle>{{ t('plan.generationFailedTitle') }}</AlertTitle>
-          <AlertDescription>{{ generationError.error.message }}</AlertDescription>
+          <AlertDescription>{{ generationErrorMessage }}</AlertDescription>
         </Alert>
 
         <!-- Save Error -->
@@ -281,7 +296,7 @@ function formatResetDate(isoDate: string): string {
         <div v-if="hasCandidate" class="flex gap-2">
           <Button
             data-testid="save-plan-btn"
-            :disabled="isSaving"
+            :disabled="isSaving || isGenerating"
             class="flex-1"
             @click="handleSave"
           >
@@ -292,7 +307,7 @@ function formatResetDate(isoDate: string): string {
           <Button
             data-testid="discard-plan-btn"
             variant="outline"
-            :disabled="isSaving"
+            :disabled="isSaving || isGenerating"
             class="flex-1"
             @click="handleDiscard"
           >
@@ -330,9 +345,22 @@ function formatResetDate(isoDate: string): string {
           </div>
 
           <!-- Generating Loading State -->
-          <div v-if="isGenerating" class="flex items-center justify-center py-8">
-            <Loader2 class="mr-2 h-6 w-6 animate-spin text-muted-foreground" />
-            <span class="text-muted-foreground">{{ t('plan.generatingSpinner') }}</span>
+          <div v-if="isGenerating" class="space-y-4">
+            <div class="flex items-center justify-center py-8">
+              <Loader2 class="mr-2 h-6 w-6 animate-spin text-muted-foreground" />
+              <span class="text-muted-foreground">{{ t('plan.generatingSpinner') }}</span>
+            </div>
+            <Alert
+              class="border-amber-200 bg-amber-50 text-foreground dark:border-amber-800 dark:bg-amber-950/30 [&>svg]:text-amber-600"
+            >
+              <Clock class="h-4 w-4" />
+              <AlertTitle class="text-amber-800 dark:text-amber-300">{{
+                t('plan.patienceTitle')
+              }}</AlertTitle>
+              <AlertDescription class="text-amber-700 dark:text-amber-400">{{
+                t('plan.patienceDesc')
+              }}</AlertDescription>
+            </Alert>
           </div>
 
           <!-- Days Cards -->
@@ -375,6 +403,7 @@ function formatResetDate(isoDate: string): string {
                   <template v-if="hasCandidate">
                     <Input
                       :model-value="activity.locationName"
+                      :disabled="isGenerating"
                       class="mb-2 border-0 bg-transparent p-0 font-semibold shadow-none focus-visible:ring-0"
                       :placeholder="t('plan.locationPlaceholder')"
                       @update:model-value="
@@ -383,6 +412,7 @@ function formatResetDate(isoDate: string): string {
                     />
                     <textarea
                       :value="activity.description"
+                      :disabled="isGenerating"
                       class="plan-description-textarea mb-3 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-relaxed text-muted-foreground outline-none focus:outline-none"
                       :placeholder="t('plan.descriptionPlaceholder')"
                       rows="1"

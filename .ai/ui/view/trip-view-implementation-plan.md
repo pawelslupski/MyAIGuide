@@ -49,7 +49,7 @@ TripDetailView is the core view of MyAIGuide application, serving as the primary
 **Navigation Guards:**
 
 - `beforeEnter`: Validate trip ID format
-- `onBeforeRouteLeave`: Warn if unsaved plan candidate exists
+- `onBeforeRouteLeave`: Warn if unsaved plan candidate exists **or if generation is in progress**
 
 ## 3. Component Structure
 
@@ -166,11 +166,12 @@ TripDetailView.vue (Main Container)
 
 ### 4.2 TripHeader.vue
 
-**Description:** Displays trip metadata including title, status badge, and last updated timestamp. Title is editable inline.
+**Description:** Displays trip metadata including title, status badge, and last updated timestamp. Title is editable inline. Also renders a back navigation link to the main dashboard above the title row.
 
 **Main Elements:**
 
-- `<Input>` (shadcn-vue) - Editable trip title
+- `<RouterLink to="/">` - Back navigation link with `CircleArrowLeft` icon and i18n label (`tripHeader.backToDashboard`); styled in `text-primary`, shown in a separate card block above the title row
+- `<Input>` (shadcn-vue) - Editable trip title (disabled when `isGenerating`)
 - `<Badge>` (shadcn-vue) - Status indicator (CREATED/DRAFT/CONFIRMED)
 - `<span>` - Last updated timestamp (relative format)
 
@@ -181,6 +182,8 @@ TripDetailView.vue (Main Container)
   title: string
   status: TripStatus
   updatedAt: string // ISO 8601
+  isSaving?: boolean
+  isGenerating?: boolean
 }
 ```
 
@@ -1439,19 +1442,30 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 
 ---
 
-### 8.7 Navigate Away with Unsaved Candidate
+### 8.7 Navigate Away with Unsaved Candidate or Active Generation
 
-**Trigger:** User tries to navigate away while plan candidate exists
+**Trigger:** User tries to navigate away while plan candidate exists **or while generation is in progress**
 
 **Flow:**
 
 1. User clicks navigation link or back button
 2. `onBeforeRouteLeave` guard triggered
-3. If plan candidate exists:
-   - Show confirmation dialog: "You have an unsaved plan. Leave anyway?"
-   - If confirmed: Allow navigation, candidate is lost
+3. If `isDirty`, plan candidate exists, **or `planStore.isGenerating`**:
+   - Show confirmation dialog with two variants:
+     - **Normal** (`leaveDialog.title/description`): unsaved edits or candidate
+     - **Generating** (`leaveDialog.titleGenerating/descriptionGenerating`): generation in progress; confirm button uses `destructive` variant and shows "Leave anyway"
+   - If confirmed:
+     - `planStore.cancelGeneration()` — aborts the in-flight fetch via `AbortController`; clears `generationError`
+     - `planStore.discardCandidate()` — clears candidate from memory
+     - Allow navigation
    - If cancelled: Stay on page
-4. If no candidate: Allow navigation
+4. If no unsaved state and not generating: Allow navigation
+
+**Generation cancellation details:**
+
+- `plan.store.ts` uses an internal `AbortController` per generation; `cancelGeneration()` calls `abort()` and sets an `generationWasAborted` flag
+- The aborted `generatePlan` catch block detects the flag and returns early without setting `generationError`
+- Error messages in `PlanPanel` are resolved via i18n keys based on `error.code` — no raw English strings are displayed regardless of UI language
 
 ---
 

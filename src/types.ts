@@ -330,6 +330,7 @@ export interface AIPlanParams {
     dietaryPreferencesDescription: string | null
   }
   tripPreferences: TripPreferencesDto
+  signal?: AbortSignal
 }
 
 /** Parsed response from the OpenRouter.ai API. */
