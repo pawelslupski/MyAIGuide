@@ -57,7 +57,7 @@ jobs:
           retention-days: 7
 
   status-comment:
-    needs: [ test-unit, test-e2e ]
+    needs: [ lint, test-unit, test-e2e ]
     runs-on: ubuntu-latest
     if: always() && needs.test-unit.result == 'success' && needs.test-e2e.result == 'success'
     permissions:
