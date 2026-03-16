@@ -67,6 +67,11 @@ const {
   (fields) => emit('update:fields', fields)
 )
 
+function onDestinationBlur() {
+  handleDestinationBlur()
+  emit('blur:destination')
+}
+
 // Translated note validation message (replaces composable's hardcoded English)
 const noteValidationMessage = computed(() => {
   if (noteLength.value > MAX_NOTE_LENGTH)
@@ -158,10 +163,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
           :placeholder="t('tripEditor.destinationPlaceholder')"
           :disabled="props.isGenerating"
           maxlength="50"
-          @blur="
-            handleDestinationBlur()
-            emit('blur:destination')
-          "
+          @blur="onDestinationBlur"
         />
       </div>
 
