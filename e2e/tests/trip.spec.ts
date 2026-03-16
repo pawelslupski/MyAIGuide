@@ -97,7 +97,7 @@ test.describe('TRIP-03: Edit note changes status to DRAFT', () => {
 
     try {
       await tripPage.goto(tripId)
-      await expect(tripPage.statusBadge).toHaveText('CREATED')
+      await expect(tripPage.statusBadge).toHaveText('New')
 
       // Note blur triggers an immediate save (no debounce)
       await tripPage.noteTextarea.fill('This is my E2E test note.')
@@ -105,12 +105,12 @@ test.describe('TRIP-03: Edit note changes status to DRAFT', () => {
 
       await tripPage.waitForSaved()
 
-      await expect(tripPage.statusBadge).toHaveText('DRAFT')
+      await expect(tripPage.statusBadge).toHaveText('In Progress')
 
       // Verify persistence
       await page.reload()
       await expect(tripPage.noteTextarea).toHaveValue('This is my E2E test note.')
-      await expect(tripPage.statusBadge).toHaveText('DRAFT')
+      await expect(tripPage.statusBadge).toHaveText('In Progress')
     } finally {
       await tripApi.deleteTrip(tripId)
     }
@@ -130,7 +130,7 @@ test.describe('TRIP-04: Edit preferences changes status to DRAFT', () => {
 
     try {
       await tripPage.goto(tripId)
-      await expect(tripPage.statusBadge).toHaveText('CREATED')
+      await expect(tripPage.statusBadge).toHaveText('New')
 
       // Use 'slow_chill' — the profile always has default_speed='balance' (DB default).
       // Clicking 'balance' would be a no-op (already pre-selected from profile), so we pick
@@ -139,7 +139,7 @@ test.describe('TRIP-04: Edit preferences changes status to DRAFT', () => {
 
       await tripPage.waitForSaved()
 
-      await expect(tripPage.statusBadge).toHaveText('DRAFT')
+      await expect(tripPage.statusBadge).toHaveText('In Progress')
 
       // Verify persistence
       await page.reload()
@@ -164,7 +164,7 @@ test.describe('TRIP-04: Edit preferences changes status to DRAFT', () => {
 
       await tripPage.waitForSaved()
 
-      await expect(tripPage.statusBadge).toHaveText('DRAFT')
+      await expect(tripPage.statusBadge).toHaveText('In Progress')
 
       await page.reload()
       await expect(tripPage.destinationInput).toHaveValue('Rome, Italy')
@@ -194,6 +194,56 @@ test.describe('TRIP-05: Note over 10 000 characters', () => {
       // Validation message appears client-side immediately (no save needed)
       await expect(tripPage.noteValidationMessage).toBeVisible()
       await expect(tripPage.noteValidationMessage).toContainText('Maximum')
+    } finally {
+      await tripApi.deleteTrip(tripId)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TRIP-00: Back navigation
+// ---------------------------------------------------------------------------
+test.describe('TRIP-00: Back navigation to dashboard', () => {
+  test('back to dashboard link is visible and navigates to /', async ({
+    authenticatedPage: page,
+    tripApi
+  }) => {
+    const { id: tripId } = await tripApi.createTrip('Nav Test Trip')
+    const tripPage = new TripPage(page)
+
+    try {
+      await tripPage.goto(tripId)
+      await expect(tripPage.backToDashboardLink).toBeVisible()
+      await tripPage.backToDashboardLink.click()
+      await expect(page).toHaveURL('/')
+    } finally {
+      await tripApi.deleteTrip(tripId)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TRIP-07: Leave dialog with unsaved changes
+// ---------------------------------------------------------------------------
+test.describe('TRIP-07: Leave dialog on unsaved changes', () => {
+  test('navigating away with unsaved title shows leave dialog and staying keeps user on trip page', async ({
+    authenticatedPage: page,
+    tripApi
+  }) => {
+    const { id: tripId } = await tripApi.createTrip('Leave Dialog Trip')
+    const tripPage = new TripPage(page)
+
+    try {
+      await tripPage.goto(tripId)
+      // Make a change without saving (type but don't blur past debounce)
+      await tripPage.titleInput.fill('Unsaved change')
+      // Try to navigate away via back link
+      await tripPage.backToDashboardLink.click()
+      // Leave dialog should appear
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3000 })
+      // Cancel — stay on trip page
+      await page.getByRole('button', { name: /stay|zostań/i }).click()
+      await expect(page).toHaveURL(/\/trips\/\d+/)
     } finally {
       await tripApi.deleteTrip(tripId)
     }
