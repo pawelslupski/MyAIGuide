@@ -45,7 +45,9 @@ const pl: MessageSchema = {
       submitting: 'Tworzenie konta...',
       submit: 'Utwórz konto',
       hasAccount: 'Masz już konto?',
-      logIn: 'Zaloguj się'
+      logIn: 'Zaloguj się',
+      emailConfirmationNotice:
+        'Konto zostanie poprawnie utworzone dopiero po potwierdzeniu wiadomości na skrzynce email właściciela.'
     },
     forgotPassword: {
       title: 'Zresetuj hasło',
