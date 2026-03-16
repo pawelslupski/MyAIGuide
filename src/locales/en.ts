@@ -43,7 +43,9 @@ const en = {
       submitting: 'Creating account...',
       submit: 'Create account',
       hasAccount: 'Already have an account?',
-      logIn: 'Log in'
+      logIn: 'Log in',
+      emailConfirmationNotice:
+        'Your account will be fully created only after confirming the email sent to your inbox.'
     },
     forgotPassword: {
       title: 'Reset your password',

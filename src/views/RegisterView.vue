@@ -107,6 +107,10 @@ const onSubmit = handleSubmit(async (values) => {
           </p>
         </div>
 
+        <p class="text-sm text-muted-foreground">
+          {{ t('auth.register.emailConfirmationNotice') }}
+        </p>
+
         <Alert v-if="serverError" variant="destructive">
           <AlertDescription>{{ serverError }}</AlertDescription>
         </Alert>
