@@ -223,7 +223,7 @@ const en = {
     quotaUsed: '{used} / {limit} used',
     resetsIn: 'Resets in {time}',
     quotaExceededTitle: 'Generation Limit Reached',
-    quotaExceededDesc: "You've used all {limit} generations. Quota resets in {time}.",
+    quotaExceededDesc: "You've used all {limit} generations. All slots reset in {time}.",
     generationFailedTitle: 'Generation Failed',
     saveFailedTitle: 'Save Failed',
     errors: {

@@ -261,7 +261,7 @@ preference fields).
 
 When quota = 10/10:
 
-- Shows "Resets in N hours" below the progress bar (relative time, not absolute `HH:MM`).
+- Shows "Odnowienie za N godzin" / "Resets in N hours" below the progress bar (relative time, not absolute `HH:MM`). This is the time until **all 10 slots** reset at once.
 - "Generation Limit Reached" destructive `<Alert>` is shown in the card body.
 - "Generate Plan" / "Regenerate" buttons are disabled.
 
@@ -593,9 +593,9 @@ All three are run in parallel via `Promise.all()`.
 ### 11.4 Quota Limit Handling
 
 1. User reaches 10/10 generations
-2. "Generate Plan" button becomes disabled; quota counter shows red with reset time
-3. After ≥24 h the oldest recorded generation falls outside the rolling window
-4. Quota counter refreshes (next page load or after next generation attempt)
+2. "Generate Plan" button becomes disabled; quota counter shows reset time
+3. After 24 h from the 10th attempt the cooldown expires — **all 10 slots** are restored at once (fixed-batch, not rolling)
+4. Quota counter refreshes on next page load or after the next generation attempt
 
 ### 11.5 Dietary Preferences
 

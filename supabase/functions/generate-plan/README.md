@@ -94,7 +94,7 @@ All error responses follow the project-wide shape:
 
 Quota is enforced **server-side** — the client cannot bypass it.
 
-- Limit: **10 generations per rolling 24-hour window** per user.
+- Limit: **10 generations per user**. The 24-hour cooldown starts at the moment of the 10th attempt; after it expires **all 10 slots** are restored at once (fixed-batch model, not a rolling window).
 - Counted statuses: `success`, `api_error` (including user-aborted generations recorded by the client).
 - Excluded: `validation_error` (destination missing, note too long — caught before the AI call).
 - Every invocation that reaches the OpenRouter call is recorded in `plan_generations` regardless of outcome.

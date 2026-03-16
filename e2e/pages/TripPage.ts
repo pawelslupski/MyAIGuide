@@ -7,6 +7,7 @@ type WhatValue = 'nature' | 'beach_relax' | 'culture_museums' | 'city_break' | '
 
 export class TripPage {
   // ── Header ────────────────────────────────────────────────────────────────
+  readonly backToDashboardLink: Locator
   readonly titleInput: Locator
   readonly statusBadge: Locator
   readonly savingIndicator: Locator
@@ -26,6 +27,9 @@ export class TripPage {
 
   constructor(private readonly page: Page) {
     // Header
+    this.backToDashboardLink = page.getByRole('link', {
+      name: /go to main dashboard|wróć na stronę główną/i
+    })
     this.titleInput = page.getByTestId('trip-title-input')
     this.statusBadge = page.getByTestId('trip-status-badge')
     this.savingIndicator = page.getByTestId('trip-saving-indicator')

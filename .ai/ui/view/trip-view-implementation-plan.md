@@ -1364,7 +1364,7 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 **Error Messages:**
 
 - 400 (note invalid): "Your trip note exceeds the maximum of 10,000 characters"
-- 429 (quota exceeded): "You've reached your limit of 10 plan generations. Quota resets in X hours."
+- 429 (quota exceeded): "You've reached your limit of 10 plan generations. All slots reset in X hours."
 - 500 (AI error): "Failed to generate plan. Please try again."
 - 503 (service unavailable): "AI service is temporarily unavailable. Please try again later."
 
@@ -1496,9 +1496,10 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 
 **Rules:**
 
-- Maximum 10 generations per user in rolling 24-hour window
-- Counted from `plan_generations` table
-- Reset time calculated from oldest generation in window
+- Maximum 10 generations per user; 24-hour cooldown starts at the 10th attempt — all 10 slots reset at once (fixed-batch, not rolling)
+- Counted from `plan_generations` table (`status IN ('success', 'api_error')`)
+- Aborted generations count toward the quota
+- Reset time = timestamp of the 10th attempt + 24h
 
 **Validation Points:**
 
@@ -1507,9 +1508,8 @@ export async function fetchGenerationQuota(): Promise<GenerationQuotaDTO> {
 
 **UI Feedback:**
 
-- Quota counter shows X/10 used
-- Color-coded: green (0-7), yellow (8-9), red (10)
-- When at limit: "Quota resets in X hours"
+- Quota counter shows X/10 used (display capped at limit)
+- When at limit: "Odnowienie za X godzin" / "Resets in X hours" (time until all slots restore)
 - Generate button disabled when quota exceeded
 
 ---

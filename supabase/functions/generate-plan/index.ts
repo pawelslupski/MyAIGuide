@@ -72,21 +72,55 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(401, 'UNAUTHORIZED', 'Authentication required')
     }
 
-    // 2. Server-side quota check — cannot be bypassed by the client
-    const cutoff = new Date(Date.now() - QUOTA_WINDOW_MS).toISOString()
-    const { data: usedRows, error: quotaError } = await supabase
+    // 2. Server-side quota check — fixed-batch model, cannot be bypassed by the client.
+    //    Fetch the most recent QUOTA_LIMIT counted rows (newest first).
+    const { data: recentRows, error: quotaError } = await supabase
       .from('plan_generations')
-      .select('id')
+      .select('created_at')
       .eq('user_id', user.id)
       .in('status', ['success', 'api_error'])
-      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false })
+      .limit(QUOTA_LIMIT)
 
     if (quotaError) {
       console.error('[ERROR] Quota check failed:', quotaError.message)
       return createErrorResponse(500, 'INTERNAL_ERROR', 'Failed to verify generation quota')
     }
 
-    if ((usedRows?.length ?? 0) >= QUOTA_LIMIT) {
+    const quotaRows = recentRows ?? []
+    const now = Date.now()
+    let quotaUsed = quotaRows.length
+
+    if (quotaRows.length >= QUOTA_LIMIT) {
+      // The last row in DESC order is the one that filled the quota
+      const limitRow = quotaRows[QUOTA_LIMIT - 1]!
+      const cooldownEndsAt = new Date(limitRow.created_at).getTime() + QUOTA_WINDOW_MS
+
+      if (now < cooldownEndsAt) {
+        // Still in cooldown — blocked
+        return createErrorResponse(429, 'QUOTA_EXCEEDED', 'Generation quota exceeded. Try again in 24 hours.')
+      }
+
+      // Cooldown expired — count only rows created after cooldown end
+      const batchStart = new Date(cooldownEndsAt).toISOString()
+      const { data: batchRows, error: batchError } = await supabase
+        .from('plan_generations')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .in('status', ['success', 'api_error'])
+        .gte('created_at', batchStart)
+        .order('created_at', { ascending: false })
+        .limit(QUOTA_LIMIT)
+
+      if (batchError) {
+        console.error('[ERROR] Batch quota check failed:', batchError.message)
+        return createErrorResponse(500, 'INTERNAL_ERROR', 'Failed to verify generation quota')
+      }
+
+      quotaUsed = (batchRows ?? []).length
+    }
+
+    if (quotaUsed >= QUOTA_LIMIT) {
       return createErrorResponse(429, 'QUOTA_EXCEEDED', 'Generation quota exceeded. Try again in 24 hours.')
     }
 

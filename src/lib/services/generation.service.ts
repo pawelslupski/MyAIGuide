@@ -20,45 +20,80 @@ import {
  */
 
 const GENERATION_LIMIT = 10
-const QUOTA_WINDOW_HOURS = 24
+const QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /**
- * Check if user has remaining quota for plan generation
- * Returns quota status with used count, limit, and reset timestamp
+ * Check if user has remaining quota for plan generation.
+ *
+ * Uses a fixed-batch model:
+ * - The user gets GENERATION_LIMIT attempts per 24-hour period.
+ * - The 24-hour cooldown starts at the moment the Nth (limit) attempt is made.
+ * - After the cooldown expires all GENERATION_LIMIT slots are restored at once.
  */
 export async function checkGenerationQuota(userId: string): Promise<QuotaCheckResult> {
-  // Query plan_generations table for user's recent generations
+  // Fetch all counted rows newest-first; we only need the first LIMIT rows
   const { data, error } = await supabaseClient
     .from('plan_generations')
     .select('created_at')
     .eq('user_id', userId)
-    .eq('status', 'success')
-    .gte('created_at', new Date(Date.now() - QUOTA_WINDOW_HOURS * 60 * 60 * 1000).toISOString())
-    .order('created_at', { ascending: true })
+    .in('status', ['success', 'api_error'])
+    .order('created_at', { ascending: false })
+    .limit(GENERATION_LIMIT)
 
   if (error) {
     throw new Error(`Failed to check generation quota: ${error.message}`)
   }
 
-  const used = data?.length || 0
-  const allowed = used < GENERATION_LIMIT
+  const rows = data ?? []
+  const now = Date.now()
 
-  // Calculate reset_at: 24 hours from oldest generation, or now if no generations
-  let resetAt: string
-  if (data && data.length > 0 && data[0]) {
-    const oldestGeneration = new Date(data[0].created_at)
-    resetAt = new Date(
-      oldestGeneration.getTime() + QUOTA_WINDOW_HOURS * 60 * 60 * 1000
-    ).toISOString()
-  } else {
-    resetAt = new Date(Date.now() + QUOTA_WINDOW_HOURS * 60 * 60 * 1000).toISOString()
+  // If fewer than LIMIT rows exist there is no cooldown — count all of them
+  if (rows.length < GENERATION_LIMIT) {
+    return {
+      allowed: true,
+      used: rows.length,
+      limit: GENERATION_LIMIT,
+      resetAt: new Date(now + QUOTA_WINDOW_MS).toISOString()
+    }
   }
 
+  // The LIMIT-th row (last in DESC list) is the one that filled the quota
+  const limitRow = rows[GENERATION_LIMIT - 1]!
+  const cooldownEndsAt = new Date(limitRow.created_at).getTime() + QUOTA_WINDOW_MS
+
+  if (now < cooldownEndsAt) {
+    // Still in cooldown — fully blocked
+    return {
+      allowed: false,
+      used: GENERATION_LIMIT,
+      limit: GENERATION_LIMIT,
+      resetAt: new Date(cooldownEndsAt).toISOString()
+    }
+  }
+
+  // Cooldown has passed — count only rows created after the cooldown ended
+  const batchStart = new Date(cooldownEndsAt).toISOString()
+  const { data: batchData, error: batchError } = await supabaseClient
+    .from('plan_generations')
+    .select('created_at')
+    .eq('user_id', userId)
+    .in('status', ['success', 'api_error'])
+    .gte('created_at', batchStart)
+    .order('created_at', { ascending: false })
+    .limit(GENERATION_LIMIT)
+
+  if (batchError) {
+    throw new Error(`Failed to check generation quota: ${batchError.message}`)
+  }
+
+  const batchRows = batchData ?? []
+  const used = batchRows.length
+
   return {
-    allowed,
+    allowed: used < GENERATION_LIMIT,
     used,
     limit: GENERATION_LIMIT,
-    resetAt
+    resetAt: new Date(now + QUOTA_WINDOW_MS).toISOString()
   }
 }
 

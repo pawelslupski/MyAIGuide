@@ -2,7 +2,7 @@
 
 ## 1. Endpoint Overview
 
-Returns the current user's plan generation usage for the rolling 24-hour window. Includes how many generations have been used, the maximum allowed, remaining slots, and the timestamp when the next slot will free up.
+Returns the current user's plan generation usage. Includes how many generations have been used, the maximum allowed, remaining slots, and the timestamp when all slots will reset. Uses a fixed-batch model: the 24-hour cooldown starts when the 10th attempt is made; after it expires all 10 slots are restored at once.
 
 **Implementation approach:** Implemented as a **Supabase Edge Function** (`get-generation-quota`) — per `api-plan.md §6.2`, this endpoint is classified as requiring an Edge Function due to the rolling 24-hour window count query with complex status filtering. The Edge Function verifies the session server-side, executes the quota query on `plan_generations`, and returns the result. Core quota logic moves from `src/lib/services/generation.service.ts` to the Edge Function; the client-side `checkGenerationQuota` helper is retained for internal use by `generate-plan`. Store orchestration (auth, state) lives in `src/stores/plan.store.ts`.
 
@@ -71,8 +71,9 @@ export interface ErrorResponse {
 }
 ```
 
-> `reset_at` = oldest counted generation timestamp + 24h. If no generations exist, `reset_at` = now + 24h.
+> `reset_at` = timestamp of the 10th (limit-filling) generation + 24h. If fewer than 10 generations exist, `reset_at` = now + 24h (no cooldown active).
 > Only `success` and `api_error` statuses count toward quota. `validation_error` records are excluded.
+> When the cooldown expires **all 10 slots** are restored at once (fixed-batch, not rolling).
 
 ### Error Responses
 
@@ -105,10 +106,13 @@ supabaseClient.functions.invoke('get-generation-quota')
   │     .select('created_at')
   │     .eq('user_id', userId)
   │     .in('status', ['success', 'api_error'])
-  │     .gte('created_at', now - 24h)
-  │     .order('created_at', { ascending: true })
+  │     .order('created_at', { ascending: false })
+  │     .limit(QUOTA_LIMIT)                         ← fetch newest LIMIT rows only
   │
-  │   → count rows → compute used, remaining, reset_at
+  │   Fixed-batch logic:
+  │   • rows.length < LIMIT  → no cooldown, used = rows.length
+  │   • rows[LIMIT-1] + 24h > now → still blocked, used = LIMIT, reset_at = rows[LIMIT-1] + 24h
+  │   • rows[LIMIT-1] + 24h ≤ now → cooldown expired, re-query rows after that timestamp
   │   └─ DB error → return 500
   │
   └─► return 200 GenerationQuotaDTO
@@ -154,7 +158,7 @@ supabaseClient.functions.invoke('get-generation-quota')
 ## 8. Performance Considerations
 
 - **Index:** `(user_id, created_at DESC)` on `plan_generations` covers the query pattern efficiently (filter + date range + sort).
-- **Rolling window:** `gte('created_at', now - 24h)` keeps the result set small even for heavy users.
+- **Fixed-batch:** `.limit(QUOTA_LIMIT)` fetches at most 10 rows; a second query is needed only when the cooldown has expired (rare path).
 - **Read-only:** No writes involved — safe to call frequently (e.g., after each generation, or on page load).
 - **Pinia cache:** Store holds `generationQuota.value`; components should use the cached value and only re-fetch on stale signals (post-generation, page focus).
 
@@ -187,7 +191,10 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
     )
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error: authError
+    } = await supabase.auth.getUser()
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }),
@@ -195,14 +202,14 @@ Deno.serve(async (req) => {
       )
     }
 
-    const cutoff = new Date(Date.now() - WINDOW_MS).toISOString()
+    // Fixed-batch quota logic — see GET-generation-quota-endpoint-implementation-plan.md §5
     const { data, error } = await supabase
       .from('plan_generations')
       .select('created_at')
       .eq('user_id', user.id)
       .in('status', ['success', 'api_error'])
-      .gte('created_at', cutoff)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
+      .limit(QUOTA_LIMIT)
 
     if (error) {
       return new Response(
@@ -212,11 +219,27 @@ Deno.serve(async (req) => {
     }
 
     const rows = data ?? []
-    const used = rows.length
+    const now = Date.now()
+    let used: number
+    let resetAt: string
+
+    if (rows.length < QUOTA_LIMIT) {
+      used = rows.length
+      resetAt = new Date(now + WINDOW_MS).toISOString()
+    } else {
+      const limitRow = rows[QUOTA_LIMIT - 1]
+      const cooldownEndsAt = new Date(limitRow.created_at).getTime() + WINDOW_MS
+      if (now < cooldownEndsAt) {
+        used = QUOTA_LIMIT
+        resetAt = new Date(cooldownEndsAt).toISOString()
+      } else {
+        // second query for new batch (see actual implementation in index.ts)
+        used = 0 // resolved by second query
+        resetAt = new Date(now + WINDOW_MS).toISOString()
+      }
+    }
+
     const remaining = Math.max(0, QUOTA_LIMIT - used)
-    const resetAt = rows.length > 0
-      ? new Date(new Date(rows[0].created_at).getTime() + WINDOW_MS).toISOString()
-      : new Date(Date.now() + WINDOW_MS).toISOString()
 
     return new Response(
       JSON.stringify({ used, limit: QUOTA_LIMIT, remaining, reset_at: resetAt }),
@@ -225,7 +248,9 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error('[get-generation-quota] Unexpected error:', err)
     return new Response(
-      JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' } }),
+      JSON.stringify({
+        error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' }
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

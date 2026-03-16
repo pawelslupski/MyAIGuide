@@ -152,17 +152,17 @@ export interface RecordGenerationParams {
 
 ### Error Responses
 
-| Status | Code               | Condition                                           |
-| ------ | ------------------ | --------------------------------------------------- |
-| `400`  | `INVALID_TRIP_ID`  | `tripId` is not a positive integer                  |
-| `400`  | `VALIDATION_ERROR` | `destination` is null or empty on the trip          |
-| `400`  | `VALIDATION_ERROR` | `note_body` exceeds 10,000 characters               |
-| `401`  | `UNAUTHORIZED`     | No valid session                                    |
-| `403`  | `FORBIDDEN`        | Trip belongs to another user                        |
-| `404`  | `NOT_FOUND`        | Trip does not exist                                 |
-| `422`  | `VALIDATION_ERROR` | AI response failed structural validation (Zod)      |
-| `429`  | `QUOTA_EXCEEDED`   | 10 generations used in rolling 24-hour window       |
-| `502`  | `AI_API_ERROR`     | OpenRouter.ai call failed (timeout, upstream error) |
+| Status | Code               | Condition                                             |
+| ------ | ------------------ | ----------------------------------------------------- |
+| `400`  | `INVALID_TRIP_ID`  | `tripId` is not a positive integer                    |
+| `400`  | `VALIDATION_ERROR` | `destination` is null or empty on the trip            |
+| `400`  | `VALIDATION_ERROR` | `note_body` exceeds 10,000 characters                 |
+| `401`  | `UNAUTHORIZED`     | No valid session                                      |
+| `403`  | `FORBIDDEN`        | Trip belongs to another user                          |
+| `404`  | `NOT_FOUND`        | Trip does not exist                                   |
+| `422`  | `VALIDATION_ERROR` | AI response failed structural validation (Zod)        |
+| `429`  | `QUOTA_EXCEEDED`   | 10 generations used and 24-hour cooldown still active |
+| `502`  | `AI_API_ERROR`     | OpenRouter.ai call failed (timeout, upstream error)   |
 
 **429 example:**
 
@@ -212,9 +212,10 @@ planStore.generatePlan(tripId)           [src/stores/plan.store.ts]
   │     └─ throw VALIDATION_ERROR (400) if exceeded
   │
   ├─► checkGenerationQuota(userId)      [generation.service.ts]
-  │     Query: plan_generations WHERE user_id = userId
-  │              AND created_at > NOW() - 24h
-  │              AND status IN ('success', 'api_error')    ← only AI-invoking attempts count
+  │     Fixed-batch logic (newest LIMIT rows DESC):
+  │       • < 10 rows → no cooldown
+  │       • row[9].created_at + 24h > now → blocked (429)
+  │       • row[9].created_at + 24h ≤ now → cooldown expired, count new batch
   │     └─ throw QUOTA_EXCEEDED (429) if used ≥ 10
   │
   ├─► fetchProfile(userId)              → get traveler flags for prompt
@@ -270,8 +271,9 @@ planStore.generatePlan(tripId)           [src/stores/plan.store.ts]
 
 ### Rate Limiting
 
-- 10 generations per user in rolling 24-hour window
+- 10 generations per user; 24-hour cooldown starts at the 10th attempt — all slots reset at once after it expires (fixed-batch, not rolling)
 - Counted from `plan_generations` where `status IN ('success', 'api_error')` — pure validation failures do NOT count
+- Aborted generations (user navigates away mid-generation) are recorded as `api_error` and **do** count toward the quota
 - Rejected with `429` before AI is invoked
 
 ### Threat Mitigation

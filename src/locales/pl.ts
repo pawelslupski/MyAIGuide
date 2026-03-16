@@ -223,9 +223,10 @@ const pl: MessageSchema = {
     title: 'Plan podróży',
     description: 'Itinerarium generowane przez AI',
     quotaUsed: '{used} / {limit} wykorzystane',
-    resetsIn: 'Odnawia się za {time}',
+    resetsIn: 'Odnowienie za {time}',
     quotaExceededTitle: 'Osiągnięto limit generowania',
-    quotaExceededDesc: 'Wykorzystałeś wszystkie {limit} generowania. Limit odnowi się za {time}.',
+    quotaExceededDesc:
+      'Wykorzystałeś wszystkie {limit} generowania. Wszystkie sloty odnowią się za {time}.',
     generationFailedTitle: 'Błąd generowania',
     saveFailedTitle: 'Błąd zapisywania',
     errors: {

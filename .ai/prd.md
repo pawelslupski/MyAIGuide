@@ -62,7 +62,7 @@ MyAIGuide redukuje ten wysiłek, pozwalając:
 - Język planu = aktywny język interfejsu UI (przełącznik EN/PL w nagłówku); jeśli język notatki różni się od języka UI, wyświetlane jest miękkie ostrzeżenie przy polu notatki po opuszczeniu pola.
 - Walidacja długości notatki:
   - maksymalnie 10 000 znaków.
-- Dzienny limit generowania planów: 10 generacji na użytkownika w ruchomym oknie 24h z widocznym licznikiem.
+- Dzienny limit generowania planów: 10 generacji na użytkownika. Licznik 24h startuje w momencie wykorzystania 10. generacji; po jego upływie wszystkie 10 slotów odnawia się naraz. Widoczny licznik w UI.
 
 ### 3.6 Widok trip review, edycja i zapis planu
 
@@ -225,8 +225,8 @@ Kryteria akceptacji:
 
 - Po kliknięciu „Generuj plan” przy poprawnych danych wysyłane jest żądanie do AI, wyświetlany jest stan ładowania, a
   następnie kandydat planu.
-- System pokazuje licznik generacji „X/10 w ciągu ostatnich 24 godzin”, blokuje kolejne generacje po 10/10 i pokazuje
-  komunikat o limicie; licznik aktualizuje się, gdy najstarsze generacje wypadną z okna 24h.
+- System pokazuje licznik generacji „X/10 wykorzystane”, blokuje kolejne generacje po 10/10 i pokazuje komunikat o limicie;
+  po 24h od 10. próby wszystkie sloty odnawiane są naraz (nie stopniowo).
 
 ### US-014 Przegląd i edycja kandydata planu
 
