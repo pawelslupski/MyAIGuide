@@ -216,6 +216,7 @@ watch(
       debouncedSave.cancel()
       tripStore.clearTrip()
       planStore.discardCandidate()
+      pendingFields.value = null
       initializeView()
     }
   }
