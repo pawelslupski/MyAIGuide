@@ -270,6 +270,14 @@ function formatResetDate(isoDate: string): string {
               </li>
             </ul>
           </div>
+          <Alert
+            v-if="isGenerating"
+            class="mb-4 border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary"
+          >
+            <Clock class="h-4 w-4" />
+            <AlertTitle class="text-primary">{{ t('plan.patienceTitle') }}</AlertTitle>
+            <AlertDescription>{{ t('plan.patienceDesc') }}</AlertDescription>
+          </Alert>
           <Button
             data-testid="generate-plan-btn"
             :disabled="!canGenerate"
@@ -346,21 +354,15 @@ function formatResetDate(isoDate: string): string {
 
           <!-- Generating Loading State -->
           <div v-if="isGenerating" class="space-y-4">
+            <Alert class="border-primary/30 bg-primary/10 text-foreground [&>svg]:text-primary">
+              <Clock class="h-4 w-4" />
+              <AlertTitle class="text-primary">{{ t('plan.patienceTitle') }}</AlertTitle>
+              <AlertDescription>{{ t('plan.patienceDesc') }}</AlertDescription>
+            </Alert>
             <div class="flex items-center justify-center py-8">
               <Loader2 class="mr-2 h-6 w-6 animate-spin text-muted-foreground" />
               <span class="text-muted-foreground">{{ t('plan.generatingSpinner') }}</span>
             </div>
-            <Alert
-              class="border-amber-200 bg-amber-50 text-foreground dark:border-amber-800 dark:bg-amber-950/30 [&>svg]:text-amber-600"
-            >
-              <Clock class="h-4 w-4" />
-              <AlertTitle class="text-amber-800 dark:text-amber-300">{{
-                t('plan.patienceTitle')
-              }}</AlertTitle>
-              <AlertDescription class="text-amber-700 dark:text-amber-400">{{
-                t('plan.patienceDesc')
-              }}</AlertDescription>
-            </Alert>
           </div>
 
           <!-- Days Cards -->
