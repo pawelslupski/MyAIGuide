@@ -18,6 +18,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
+  'update:title': [newTitle: string]
   'blur:title': [newTitle: string]
 }>()
 
@@ -73,6 +74,7 @@ function formatRelativeTime(isoDate: string): string {
             :disabled="props.isGenerating"
             class="flex-1 text-2xl font-bold sm:text-xl"
             :placeholder="t('tripHeader.titlePlaceholder')"
+            @update:model-value="emit('update:title', String($event))"
             @blur="emit('blur:title', localTitle)"
           />
           <Badge data-testid="trip-status-badge" variant="outline" :class="statusClass(status)">

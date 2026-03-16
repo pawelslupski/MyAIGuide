@@ -104,10 +104,14 @@ function handleFieldsChange(fields: Omit<PendingFields, 'title'>) {
   }
 }
 
-async function handleTitleBlur(newTitle: string) {
+function handleTitleChange(newTitle: string) {
   if (pendingFields.value) {
     pendingFields.value = { ...pendingFields.value, title: newTitle }
   }
+}
+
+async function handleTitleBlur(newTitle: string) {
+  handleTitleChange(newTitle)
   debouncedSave.cancel()
   await performSave()
 }
@@ -243,8 +247,10 @@ watch(
   }
 )
 
-// Initialize on mount
+// Initialize on mount — clear any stale trip data left from a previous visit
 onMounted(() => {
+  tripStore.clearTrip()
+  pendingFields.value = null
   initializeView()
 })
 
@@ -344,6 +350,7 @@ async function handleNoteBlur() {
         :updated-at="tripStore.currentTrip.updated_at"
         :is-saving="tripStore.isSaving"
         :is-generating="isGenerating"
+        @update:title="handleTitleChange"
         @blur:title="handleTitleBlur"
       />
 
