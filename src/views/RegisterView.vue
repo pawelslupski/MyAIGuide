@@ -46,6 +46,8 @@ const onSubmit = handleSubmit(async (values) => {
       setErrors({ email: t('auth.errors.emailExists') })
     } else if (msg.includes('password') && msg.includes('weak')) {
       setErrors({ password: t('auth.errors.weakPassword') })
+    } else if (msg.includes('rate limit') || msg.includes('over_email_send_rate_limit')) {
+      serverError.value = t('auth.errors.emailRateLimit')
     } else {
       serverError.value = t('auth.errors.accountCreationFailed')
     }

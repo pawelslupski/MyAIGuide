@@ -75,6 +75,8 @@ const pl: MessageSchema = {
       emailExists: 'Konto z tym adresem email już istnieje.',
       weakPassword: 'Hasło musi mieć co najmniej 6 znaków.',
       accountCreationFailed: 'Nie udało się utworzyć konta. Spróbuj ponownie.',
+      emailRateLimit:
+        'Rejestracja jest chwilowo niedostępna z powodu dużego ruchu. Spróbuj ponownie za około godzinę.',
       expiredLink: 'Ten link resetujący wygasł lub jest nieprawidłowy. Poproś o nowy.',
       passwordUpdateFailed: 'Nie udało się zaktualizować hasła. Spróbuj ponownie.'
     }
@@ -183,8 +185,10 @@ const pl: MessageSchema = {
     noFlags: 'Brak specjalnych oznaczeń podróżnika',
     dietaryNote: 'Dieta: {description}',
     notesTitle: 'Notatki',
-    notesDesc: 'Opisz plany podróży, preferencje i specjalne wymagania',
-    notesPlaceholder: 'Napisz notatki tutaj... (opcjonalnie)',
+    notesDesc:
+      'Dodaj szczegóły, które pozwolą doprecyzować plan — miejsca które chcesz zwiedzić, rzeczy do unikania, ograniczenia czasowe w konkretnych dniach, potrzeby specjalne i inne.',
+    notesPlaceholder:
+      'np. W 2. dniu mogę wychodzić tylko do 15:00. Chcę zobaczyć stare miasto. Unikaj zatłoczonych atrakcji turystycznych jeśli to możliwe...',
     noteOverLimit: 'Przekroczono limit {limit} znaków',
     noteApproachingLimit: 'Zbliżasz się do limitu znaków',
     noteLanguageMismatch:

@@ -73,6 +73,8 @@ const en = {
       emailExists: 'An account with this email already exists.',
       weakPassword: 'Password must be at least 6 characters.',
       accountCreationFailed: 'Could not create account. Please try again.',
+      emailRateLimit:
+        'Registration is temporarily unavailable due to high demand. Please try again in about an hour.',
       expiredLink: 'This reset link has expired or is invalid. Please request a new one.',
       passwordUpdateFailed: 'Could not update password. Please try again.'
     }
@@ -181,8 +183,10 @@ const en = {
     noFlags: 'No special traveler flags set',
     dietaryNote: 'Dietary: {description}',
     notesTitle: 'Trip Notes',
-    notesDesc: 'Describe your trip plans, preferences, and any special requirements',
-    notesPlaceholder: 'Write your trip notes here... (optional)',
+    notesDesc:
+      'Add details that will help refine your plan — places you want to visit, things to avoid, time constraints on specific days, accessibility needs, and more.',
+    notesPlaceholder:
+      'e.g. On day 2 I can only be out until 3pm. I want to see the old town market. Avoid crowded tourist spots if possible...',
     noteOverLimit: 'Maximum {limit} characters exceeded',
     noteApproachingLimit: 'Approaching character limit',
     noteLanguageMismatch:
