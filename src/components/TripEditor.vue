@@ -65,6 +65,7 @@ const {
   handleNumPeopleInput,
   handleNumPeopleBlur,
   handleDestinationBlur,
+  handleNoteBlur,
   numDaysError,
   numPeopleError
 } = useTripEditorFields(
@@ -76,6 +77,11 @@ const {
 function onDestinationBlur() {
   handleDestinationBlur()
   emit('blur:destination')
+}
+
+function onNoteBlur() {
+  handleNoteBlur()
+  emit('blur:note')
 }
 
 // Translated note validation message (replaces composable's hardcoded English)
@@ -430,7 +436,7 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
             class="min-h-[200px] resize-y"
             aria-label="Trip note content"
             :aria-invalid="noteLength > MAX_NOTE_LENGTH"
-            @blur="emit('blur:note')"
+            @blur="onNoteBlur"
           />
           <p
             v-if="props.noteLanguageMismatch"

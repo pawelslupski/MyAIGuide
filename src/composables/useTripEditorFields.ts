@@ -79,13 +79,14 @@ export function useTripEditorFields(
     })
   }
 
-  // Emit whenever any local value changes (destination excluded — saved on blur only)
-  watch(
-    [localNote, localWhat, localSpeed, localType, localBudget, localNumDays, localNumPeople],
-    emitFields
-  )
+  // Emit whenever any local value changes (destination and note excluded — saved on blur only)
+  watch([localWhat, localSpeed, localType, localBudget, localNumDays, localNumPeople], emitFields)
 
   function handleDestinationBlur() {
+    emitFields()
+  }
+
+  function handleNoteBlur() {
     emitFields()
   }
 
@@ -240,6 +241,7 @@ export function useTripEditorFields(
     handleNumPeopleInput,
     handleNumPeopleBlur,
     handleDestinationBlur,
+    handleNoteBlur,
     numDaysError,
     numPeopleError
   }
