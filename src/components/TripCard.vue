@@ -98,7 +98,7 @@ const relativeDate = computed(() => {
     </CardHeader>
 
     <CardContent class="pt-0">
-      <p v-if="trip.notePreview" class="line-clamp-3 text-sm text-muted-foreground">
+      <p v-if="trip.notePreview" class="text-sm text-muted-foreground">
         {{ trip.notePreview }}
       </p>
       <p v-else class="text-sm italic text-muted-foreground">{{ t('tripCard.noNotes') }}</p>

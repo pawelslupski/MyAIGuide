@@ -49,6 +49,18 @@ function validateTripId(tripIdRaw: string | number): number {
   return id
 }
 
+const NOTE_PREVIEW_MAX_CHARS = 140
+
+function buildNotePreview(noteBody: string | null | undefined): string {
+  if (!noteBody?.trim()) return ''
+  const text = noteBody.trim()
+  const truncated =
+    text.length > NOTE_PREVIEW_MAX_CHARS
+      ? text.slice(0, NOTE_PREVIEW_MAX_CHARS).trimEnd() + '...'
+      : text
+  return `Notatka: ${truncated}`
+}
+
 /**
  * Trip Store
  * Manages current trip data, loading states, and trip operations
@@ -317,7 +329,7 @@ export const useTripStore = defineStore('trip', () => {
         id: item.id,
         title: item.title,
         status: item.status,
-        notePreview: item.note_body ?? '',
+        notePreview: buildNotePreview(item.note_body),
         updatedAt: item.updated_at
       }))
 
