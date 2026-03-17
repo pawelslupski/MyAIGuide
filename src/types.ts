@@ -91,6 +91,7 @@ export interface TripListItemDTO extends Pick<
   | 'destination'
   | 'num_days'
   | 'num_people'
+  | 'note_body'
   | 'created_at'
   | 'updated_at'
 > {

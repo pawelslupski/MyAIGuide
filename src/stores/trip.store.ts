@@ -317,7 +317,7 @@ export const useTripStore = defineStore('trip', () => {
         id: item.id,
         title: item.title,
         status: item.status,
-        notePreview: '',
+        notePreview: item.note_body ?? '',
         updatedAt: item.updated_at
       }))
 

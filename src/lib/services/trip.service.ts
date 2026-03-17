@@ -222,6 +222,7 @@ export async function getTrips(userId: string, query: GetTripsQuery): Promise<Tr
     destination: row.destination,
     num_days: row.num_days,
     num_people: row.num_people,
+    note_body: row.note_body,
     created_at: row.created_at,
     updated_at: row.updated_at,
     status: deriveTripStatus(row)
