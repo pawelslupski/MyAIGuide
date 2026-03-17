@@ -25,11 +25,9 @@ import { isFeatureEnabled } from '../../../src/lib/features/flags.ts'
 // ============================================================================
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4-6'
+const DEFAULT_MODEL = 'anthropic/claude-haiku-4-5'
 // Supabase Edge Function infrastructure hard limit is ~150s.
-// 145s keeps us safely below that while allowing 10–14 day plans to complete.
-// Generation time scales with the number of days: a 3-day plan finishes in ~30s,
-// a 14-day plan can take up to ~2–3 minutes — users are informed of this in the UI.
+// Haiku is fast enough to handle 14-day plans within this limit.
 const REQUEST_TIMEOUT_MS = 145_000
 const DEFAULT_TEMPERATURE = 0.7
 const MIN_MAX_TOKENS = 4000
@@ -130,7 +128,7 @@ Deno.serve(async (req: Request) => {
     console.log(`[INFO] Generating plan - Language: ${language}, Model: ${DEFAULT_MODEL}, Days: ${numDays}, MaxTokens: ${computedMaxTokens}`)
 
     // 6. Build OpenRouter request
-    const openRouterRequest = buildOpenRouterRequest(prompt, language, numDays, computedMaxTokens)
+    const openRouterRequest = buildOpenRouterRequest(prompt, language, numDays, computedMaxTokens, DEFAULT_MODEL)
 
     // 7. Call OpenRouter API
     let openRouterResponse: OpenRouterResponse
@@ -147,6 +145,9 @@ Deno.serve(async (req: Request) => {
       if (error instanceof Error) {
         if (error.message.startsWith('AUTHENTICATION_ERROR:')) {
           return createErrorResponse(401, 'AUTHENTICATION_ERROR', 'OpenRouter API authentication failed. Please check API key configuration.')
+        }
+        if (error.message.startsWith('INSUFFICIENT_CREDITS:')) {
+          return createErrorResponse(402, 'INSUFFICIENT_CREDITS', 'AI service has insufficient credits. Please try again later.')
         }
         if (error.message.startsWith('RATE_LIMIT_ERROR:')) {
           const retryMatch = error.message.match(/Retry after (\d+)s/)
@@ -219,7 +220,7 @@ const LOCALE_TO_LANGUAGE: Record<string, string> = {
   pl: 'Polish'
 }
 
-function buildOpenRouterRequest(prompt: string, language: string, numDays: number, maxTokens: number): OpenRouterRequest {
+function buildOpenRouterRequest(prompt: string, language: string, numDays: number, maxTokens: number, model: string): OpenRouterRequest {
   const languageName = LOCALE_TO_LANGUAGE[language] ?? language
 
   const systemMessage = {
@@ -251,10 +252,12 @@ function buildOpenRouterRequest(prompt: string, language: string, numDays: numbe
     2. Each day object MUST have ONLY "day" and "activities" fields - NO other fields (no destination, etc.)
     3. Each activity MUST have ONLY these 4 fields: "timeOfDay", "locationName", "description", "categoryTag"
     4. DO NOT add: name, duration_hours, cost_category, category (array), or ANY other fields
-    5. Activities MUST be ordered by geographic proximity to minimize travel time
-    6. Each description MUST be 4-5 detailed sentences: what makes the place special, what to see and do there, any unique highlights, and one practical visitor tip
-    7. categoryTag MUST be one of: nature, culture_museums, beach_relax, city_break, foodie
-    8. timeOfDay MUST be one of: morning, afternoon, evening
+    5. Each day MUST have AT LEAST 3 activities — never fewer
+    6. Activities MUST be ordered by geographic proximity to minimize travel time
+    7. Each description MUST be 4-5 detailed sentences: what makes the place special, what to see and do there, any unique highlights, and one practical visitor tip
+    8. categoryTag MUST be one of: nature, culture_museums, beach_relax, city_break, foodie
+    9. timeOfDay MUST be one of: morning, afternoon, evening
+    10. LANGUAGE: ALL text values in "locationName" and "description" fields MUST be written in ${languageName}. This is mandatory — do not use any other language.
 
     FORBIDDEN: Do not add any fields beyond those specified above. The response will be rejected if extra fields are present.`
   }
@@ -274,7 +277,7 @@ function buildOpenRouterRequest(prompt: string, language: string, numDays: numbe
   }
 
   return {
-    model: DEFAULT_MODEL,
+    model,
     messages: [systemMessage, userMessage],
     response_format: responseFormat,
     temperature: DEFAULT_TEMPERATURE,
@@ -389,6 +392,9 @@ async function callOpenRouterAPI(requestBody: OpenRouterRequest): Promise<OpenRo
       // Handle specific status codes
       if (response.status === 401) {
         throw new Error('AUTHENTICATION_ERROR: Invalid API key')
+      }
+      if (response.status === 402) {
+        throw new Error('INSUFFICIENT_CREDITS: OpenRouter account has insufficient credits')
       }
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After') || '60'
