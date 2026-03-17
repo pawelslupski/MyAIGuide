@@ -55,12 +55,18 @@ const {
   noteValidationClass,
   noteCounterClass,
   MAX_NOTE_LENGTH,
+  NUM_DAYS_MAX,
+  NUM_PEOPLE_MAX,
   toggleWhat,
   isInherited,
   isWhatInherited,
   handleNumDaysInput,
+  handleNumDaysBlur,
   handleNumPeopleInput,
-  handleDestinationBlur
+  handleNumPeopleBlur,
+  handleDestinationBlur,
+  numDaysError,
+  numPeopleError
 } = useTripEditorFields(
   () => props.trip,
   () => props.defaultPreferences,
@@ -183,12 +189,18 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
               :model-value="localNumDays ?? undefined"
               type="number"
               min="1"
-              max="30"
+              :max="NUM_DAYS_MAX"
               :placeholder="t('tripEditor.durationPlaceholder')"
               :disabled="props.isGenerating"
+              :aria-invalid="numDaysError"
               class="w-32"
               @update:model-value="handleNumDaysInput"
+              @blur="handleNumDaysBlur"
             />
+            <p v-if="numDaysError" data-testid="num-days-error" class="text-xs text-destructive">
+              {{ t('tripEditor.durationError', { max: NUM_DAYS_MAX }) }}
+            </p>
+            <p v-else class="text-xs text-muted-foreground">{{ t('tripEditor.durationHint') }}</p>
           </div>
 
           <!-- Number of People -->
@@ -200,12 +212,22 @@ const budgetOptions = computed<{ value: BudgetPreference; label: string; descrip
               :model-value="localNumPeople ?? undefined"
               type="number"
               min="1"
-              max="20"
+              :max="NUM_PEOPLE_MAX"
               :placeholder="t('tripEditor.peoplePlaceholder')"
               :disabled="props.isGenerating"
+              :aria-invalid="numPeopleError"
               class="w-32"
               @update:model-value="handleNumPeopleInput"
+              @blur="handleNumPeopleBlur"
             />
+            <p
+              v-if="numPeopleError"
+              data-testid="num-people-error"
+              class="text-xs text-destructive"
+            >
+              {{ t('tripEditor.peopleError', { max: NUM_PEOPLE_MAX }) }}
+            </p>
+            <p v-else class="text-xs text-muted-foreground">{{ t('tripEditor.peopleHint') }}</p>
           </div>
 
           <!-- What Preferences (Multi-select) -->

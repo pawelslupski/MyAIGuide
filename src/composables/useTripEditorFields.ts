@@ -178,6 +178,42 @@ export function useTripEditorFields(
     localNumPeople.value = coerceNum(val)
   }
 
+  // ── num_days validation ────────────────────────────────────────────────────
+
+  const NUM_DAYS_MIN = 1
+  const NUM_DAYS_MAX = 14
+
+  const numDaysTouched = ref(false)
+
+  const numDaysError = computed(() => {
+    if (!numDaysTouched.value) return false
+    const v = localNumDays.value
+    if (v === null) return false
+    return v < NUM_DAYS_MIN || v > NUM_DAYS_MAX
+  })
+
+  function handleNumDaysBlur() {
+    numDaysTouched.value = true
+  }
+
+  // ── num_people validation ──────────────────────────────────────────────────
+
+  const NUM_PEOPLE_MIN = 1
+  const NUM_PEOPLE_MAX = 30
+
+  const numPeopleTouched = ref(false)
+
+  const numPeopleError = computed(() => {
+    if (!numPeopleTouched.value) return false
+    const v = localNumPeople.value
+    if (v === null) return false
+    return v < NUM_PEOPLE_MIN || v > NUM_PEOPLE_MAX
+  })
+
+  function handleNumPeopleBlur() {
+    numPeopleTouched.value = true
+  }
+
   return {
     localDestination,
     localNote,
@@ -192,11 +228,19 @@ export function useTripEditorFields(
     noteValidationClass: noteColorClass,
     noteCounterClass: noteColorClass,
     MAX_NOTE_LENGTH,
+    NUM_DAYS_MIN,
+    NUM_DAYS_MAX,
+    NUM_PEOPLE_MIN,
+    NUM_PEOPLE_MAX,
     toggleWhat,
     isInherited,
     isWhatInherited,
     handleNumDaysInput,
+    handleNumDaysBlur,
     handleNumPeopleInput,
-    handleDestinationBlur
+    handleNumPeopleBlur,
+    handleDestinationBlur,
+    numDaysError,
+    numPeopleError
   }
 }

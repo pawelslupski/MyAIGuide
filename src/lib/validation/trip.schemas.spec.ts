@@ -63,14 +63,14 @@ describe('validateCreateTripCommand – valid inputs', () => {
     expect(result.title).toHaveLength(255)
   })
 
-  it('CTRIP-05: accepts num_days at boundary values 1 and 30', () => {
+  it('CTRIP-05: accepts num_days at boundary values 1 and 14', () => {
     expect(validateCreateTripCommand({ title: 'T', num_days: 1 }).num_days).toBe(1)
-    expect(validateCreateTripCommand({ title: 'T', num_days: 30 }).num_days).toBe(30)
+    expect(validateCreateTripCommand({ title: 'T', num_days: 14 }).num_days).toBe(14)
   })
 
-  it('CTRIP-06: accepts num_people at boundary values 1 and 20', () => {
+  it('CTRIP-06: accepts num_people at boundary values 1 and 30', () => {
     expect(validateCreateTripCommand({ title: 'T', num_people: 1 }).num_people).toBe(1)
-    expect(validateCreateTripCommand({ title: 'T', num_people: 20 }).num_people).toBe(20)
+    expect(validateCreateTripCommand({ title: 'T', num_people: 30 }).num_people).toBe(30)
   })
 })
 
@@ -116,8 +116,8 @@ describe('validateCreateTripCommand – num_days', () => {
     expect(issue.path).toContain('num_days')
   })
 
-  it('CTRIP-13: rejects num_days of 31 (above maximum)', () => {
-    const issue = firstIssueOf({ title: 'T', num_days: 31 })
+  it('CTRIP-13: rejects num_days of 15 (above maximum)', () => {
+    const issue = firstIssueOf({ title: 'T', num_days: 15 })
     expect(issue.path).toContain('num_days')
   })
 
@@ -133,8 +133,8 @@ describe('validateCreateTripCommand – num_people', () => {
     expect(issue.path).toContain('num_people')
   })
 
-  it('CTRIP-16: rejects num_people of 21 (above maximum)', () => {
-    const issue = firstIssueOf({ title: 'T', num_people: 21 })
+  it('CTRIP-16: rejects num_people of 31 (above maximum)', () => {
+    const issue = firstIssueOf({ title: 'T', num_people: 31 })
     expect(issue.path).toContain('num_people')
   })
 })
@@ -285,13 +285,13 @@ describe('validateUpdateTripCommand – numeric fields', () => {
     expect(issue.path).toContain('num_days')
   })
 
-  it('UTRIP-08: rejects num_days above maximum (31)', () => {
-    const issue = firstUpdateIssueOf({ num_days: 31 })
+  it('UTRIP-08: rejects num_days above maximum (15)', () => {
+    const issue = firstUpdateIssueOf({ num_days: 15 })
     expect(issue.path).toContain('num_days')
   })
 
-  it('UTRIP-09: rejects num_people above maximum (21)', () => {
-    const issue = firstUpdateIssueOf({ num_people: 21 })
+  it('UTRIP-09: rejects num_people above maximum (31)', () => {
+    const issue = firstUpdateIssueOf({ num_people: 31 })
     expect(issue.path).toContain('num_people')
   })
 })

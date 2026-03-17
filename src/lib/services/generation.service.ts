@@ -225,7 +225,12 @@ export async function callAIService(params: AIPlanParams): Promise<AIServiceResp
   )
 
   const { data, error } = await supabaseClient.functions.invoke('generate-plan', {
-    body: { prompt, language: params.language, tripId: params.tripId },
+    body: {
+      prompt,
+      language: params.language,
+      tripId: params.tripId,
+      numDays: params.tripPreferences.num_days ?? 7
+    },
     signal: params.signal
   })
 

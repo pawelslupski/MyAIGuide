@@ -38,6 +38,8 @@ interface Props {
   trip: TripDTO
   destination: string | null
   isNoteOverLimit: boolean
+  isNumDaysInvalid: boolean
+  isNumPeopleInvalid: boolean
 }
 
 const props = defineProps<Props>()
@@ -109,7 +111,12 @@ const quota = computed(() => quotaStore.quota)
 
 // Can generate check
 const canGenerate = computed(
-  () => !quotaExceeded.value && !isGenerating.value && !props.isNoteOverLimit
+  () =>
+    !quotaExceeded.value &&
+    !isGenerating.value &&
+    !props.isNoteOverLimit &&
+    !props.isNumDaysInvalid &&
+    !props.isNumPeopleInvalid
 )
 
 // Days to display (local editable copy for candidate, saved plan otherwise)
@@ -256,17 +263,23 @@ function formatResetDate(isoDate: string): string {
         <div v-if="!hasPlan" class="flex flex-col items-center justify-center py-12">
           <Sparkles class="mb-4 h-12 w-12 text-muted-foreground" />
           <p class="mb-4 text-center text-muted-foreground">{{ t('plan.noPlanText') }}</p>
-          <!-- Pre-generation checklist when destination is missing -->
+          <!-- Pre-generation checklist when required fields are invalid -->
           <div
-            v-if="!destination"
+            v-if="!destination || isNumDaysInvalid || isNumPeopleInvalid"
             class="mb-6 w-full rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30"
           >
             <p class="mb-1 font-medium text-amber-800 dark:text-amber-300">
               {{ t('plan.beforeGenerating') }}
             </p>
             <ul class="space-y-1 text-amber-700 dark:text-amber-400">
-              <li class="flex items-center gap-2">
+              <li v-if="!destination" class="flex items-center gap-2">
                 <span class="text-destructive">✗</span> {{ t('plan.addDestination') }}
+              </li>
+              <li v-if="isNumDaysInvalid" class="flex items-center gap-2">
+                <span class="text-destructive">✗</span> {{ t('plan.fixNumDays') }}
+              </li>
+              <li v-if="isNumPeopleInvalid" class="flex items-center gap-2">
+                <span class="text-destructive">✗</span> {{ t('plan.fixNumPeople') }}
               </li>
             </ul>
           </div>

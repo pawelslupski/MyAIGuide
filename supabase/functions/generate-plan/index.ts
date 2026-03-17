@@ -26,9 +26,17 @@ import { isFeatureEnabled } from '../../../src/lib/features/flags.ts'
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const DEFAULT_MODEL = 'anthropic/claude-sonnet-4-6'
-const REQUEST_TIMEOUT_MS = 60000 // 60 seconds
+// Supabase Edge Function infrastructure hard limit is ~150s.
+// 145s keeps us safely below that while allowing 10–14 day plans to complete.
+// Generation time scales with the number of days: a 3-day plan finishes in ~30s,
+// a 14-day plan can take up to ~2–3 minutes — users are informed of this in the UI.
+const REQUEST_TIMEOUT_MS = 145_000
 const DEFAULT_TEMPERATURE = 0.7
-const DEFAULT_MAX_TOKENS = 8000 // Increased for longer plans and non-English languages
+const MIN_MAX_TOKENS = 4000
+const MAX_MAX_TOKENS = 16000
+// ~1100 tokens/day: 3 activities × ~350 tokens each (4-5 sentence descriptions + fields)
+const TOKENS_PER_DAY = 1100
+const BASE_TOKENS = 2000
 
 // CORS headers for frontend communication
 const corsHeaders = {
@@ -96,6 +104,11 @@ Deno.serve(async (req: Request) => {
 
     const { prompt, language } = validatedInput
 
+    // Extract numDays for dynamic token scaling (defaults to 7 if not provided)
+    const numDays = typeof body?.numDays === 'number' && body.numDays >= 1
+      ? Math.min(Math.floor(body.numDays), 30)
+      : 7
+
     // 5. Atomically reserve a quota slot.
     //    try_reserve_generation_slot acquires a per-user advisory lock, replicates
     //    the fixed-batch quota logic (including non-stale 'pending' records), and
@@ -113,10 +126,11 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(500, 'INTERNAL_ERROR', 'Failed to reserve generation quota slot')
     }
 
-    console.log(`[INFO] Generating plan - Language: ${language}, Model: ${DEFAULT_MODEL}`)
+    const computedMaxTokens = Math.min(MAX_MAX_TOKENS, Math.max(MIN_MAX_TOKENS, numDays * TOKENS_PER_DAY + BASE_TOKENS))
+    console.log(`[INFO] Generating plan - Language: ${language}, Model: ${DEFAULT_MODEL}, Days: ${numDays}, MaxTokens: ${computedMaxTokens}`)
 
     // 6. Build OpenRouter request
-    const openRouterRequest = buildOpenRouterRequest(prompt, language)
+    const openRouterRequest = buildOpenRouterRequest(prompt, language, numDays, computedMaxTokens)
 
     // 7. Call OpenRouter API
     let openRouterResponse: OpenRouterResponse
@@ -140,7 +154,7 @@ Deno.serve(async (req: Request) => {
           return createErrorResponse(429, 'RATE_LIMIT_ERROR', 'AI service rate limit exceeded. Please try again later.', { retry_after: retryAfter })
         }
         if (error.message.startsWith('TIMEOUT_ERROR:')) {
-          return createErrorResponse(504, 'TIMEOUT_ERROR', 'Request timeout. Please try again with a simpler prompt.', { timeout_ms: REQUEST_TIMEOUT_MS })
+          return createErrorResponse(504, 'TIMEOUT_ERROR', 'Request timeout. For very long trips, try reducing the number of days or simplifying your notes.', { timeout_ms: REQUEST_TIMEOUT_MS })
         }
         if (error.message.startsWith('SERVICE_UNAVAILABLE:')) {
           return createErrorResponse(503, 'SERVICE_UNAVAILABLE', 'AI service is temporarily unavailable. Please try again later.')
@@ -205,9 +219,9 @@ const LOCALE_TO_LANGUAGE: Record<string, string> = {
   pl: 'Polish'
 }
 
-function buildOpenRouterRequest(prompt: string, language: string): OpenRouterRequest {
+function buildOpenRouterRequest(prompt: string, language: string, numDays: number, maxTokens: number): OpenRouterRequest {
   const languageName = LOCALE_TO_LANGUAGE[language] ?? language
-  // System message - sets AI role and language
+
   const systemMessage = {
     role: 'system' as const,
     content: `You are an expert travel planner. Generate detailed, personalized travel plans based on user preferences and notes.
@@ -224,7 +238,7 @@ function buildOpenRouterRequest(prompt: string, language: string): OpenRouterReq
             {
               "timeOfDay": "morning",
               "locationName": "Name of the place",
-              "description": "Exhaustive 2-3 sentence description...",
+              "description": "Rich 4-5 sentence description...",
               "categoryTag": "nature"
             }
           ]
@@ -238,7 +252,7 @@ function buildOpenRouterRequest(prompt: string, language: string): OpenRouterReq
     3. Each activity MUST have ONLY these 4 fields: "timeOfDay", "locationName", "description", "categoryTag"
     4. DO NOT add: name, duration_hours, cost_category, category (array), or ANY other fields
     5. Activities MUST be ordered by geographic proximity to minimize travel time
-    6. Each description MUST be 2-3 detailed sentences including what makes it special, what to see/do, and practical tips
+    6. Each description MUST be 4-5 detailed sentences: what makes the place special, what to see and do there, any unique highlights, and one practical visitor tip
     7. categoryTag MUST be one of: nature, culture_museums, beach_relax, city_break, foodie
     8. timeOfDay MUST be one of: morning, afternoon, evening
 
@@ -264,7 +278,7 @@ function buildOpenRouterRequest(prompt: string, language: string): OpenRouterReq
     messages: [systemMessage, userMessage],
     response_format: responseFormat,
     temperature: DEFAULT_TEMPERATURE,
-    max_tokens: DEFAULT_MAX_TOKENS,
+    max_tokens: maxTokens,
     top_p: 0.9
   }
 }
@@ -396,7 +410,7 @@ async function callOpenRouterAPI(requestBody: OpenRouterRequest): Promise<OpenRo
 
     // Handle timeout
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('TIMEOUT_ERROR: Request exceeded 60 second timeout')
+      throw new Error(`TIMEOUT_ERROR: Request exceeded ${REQUEST_TIMEOUT_MS / 1000} second timeout`)
     }
 
     // Handle network errors

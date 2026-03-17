@@ -24,6 +24,7 @@ import PlanPanel from '@/components/PlanPanel.vue'
 import type { WhatPreference, SpeedPreference, TypePreference, BudgetPreference } from '@/types'
 import { isFeatureEnabled } from '@/lib/features/flags'
 import { detectLanguage } from '@/lib/services/generation.service'
+import { isApiError } from '@/lib/errors/api.error'
 
 /**
  * TripDetailView
@@ -122,6 +123,14 @@ async function handleDestinationBlur() {
 }
 
 const isNoteOverLimit = computed(() => (pendingFields.value?.note_body?.length ?? 0) > 10000)
+const isNumDaysInvalid = computed(() => {
+  const v = pendingFields.value?.num_days
+  return v !== null && v !== undefined && (v < 1 || v > 14)
+})
+const isNumPeopleInvalid = computed(() => {
+  const v = pendingFields.value?.num_people
+  return v !== null && v !== undefined && (v < 1 || v > 30)
+})
 
 const isDirty = computed(() => {
   const t = tripStore.currentTrip
@@ -266,7 +275,19 @@ async function performSave() {
   }
   try {
     const tripId = parseInt(route.params.id as string, 10)
-    await tripStore.saveAllFields(tripId, pendingFields.value)
+    // Invalid num_days / num_people are kept in UI state (for generate-button blocking)
+    // but must not reach the DB — fall back to the current saved value silently.
+    const savedTrip = tripStore.currentTrip
+    const fieldsToSave = {
+      ...pendingFields.value,
+      num_days: isNumDaysInvalid.value
+        ? (savedTrip?.num_days ?? null)
+        : pendingFields.value.num_days,
+      num_people: isNumPeopleInvalid.value
+        ? (savedTrip?.num_people ?? null)
+        : pendingFields.value.num_people
+    }
+    await tripStore.saveAllFields(tripId, fieldsToSave)
     const tr = tripStore.currentTrip!
     pendingFields.value = {
       title: tr.title,
@@ -279,10 +300,21 @@ async function performSave() {
       num_days: tr.num_days ?? null,
       num_people: tr.num_people ?? null
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const code = isApiError(error) ? error.code : null
+    const description =
+      code === 'UNAUTHORIZED'
+        ? t('tripView.saveErrors.UNAUTHORIZED')
+        : code === 'NOT_FOUND'
+          ? t('tripView.saveErrors.NOT_FOUND')
+          : code === 'FORBIDDEN'
+            ? t('tripView.saveErrors.FORBIDDEN')
+            : code === 'VALIDATION_ERROR'
+              ? t('tripView.saveErrors.VALIDATION_ERROR')
+              : t('tripView.saveErrors.generic')
     toast({
       title: t('tripView.saveFailedTitle'),
-      description: error.message || 'An error occurred',
+      description,
       variant: 'destructive'
     })
   }
@@ -377,6 +409,8 @@ async function handleNoteBlur() {
             :trip="tripStore.currentTrip"
             :destination="pendingFields?.destination ?? null"
             :is-note-over-limit="isNoteOverLimit"
+            :is-num-days-invalid="isNumDaysInvalid"
+            :is-num-people-invalid="isNumPeopleInvalid"
           />
           <div
             v-else
