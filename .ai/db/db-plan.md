@@ -72,8 +72,8 @@ tables reference `users(id)` via foreign keys.
 | `user_id`       | uuid          | NOT NULL, REFERENCES auth.users(id) ON DELETE CASCADE                                                              | Owner of the trip                                   |
 | `title`         | varchar(255)  | NOT NULL                                                                                                           | Trip name/title                                     |
 | `destination`   | varchar(50)   |                                                                                                                    | Trip destination, e.g. "Paris, France"; nullable    |
-| `num_days`      | smallint      | CHECK (num_days IS NULL OR (num_days BETWEEN 1 AND 30))                                                            | Planned trip duration in days (1–30); nullable      |
-| `num_people`    | smallint      | CHECK (num_people IS NULL OR (num_people BETWEEN 1 AND 20))                                                        | Number of travelers (1–20); nullable                |
+| `num_days`      | integer       | CHECK (num_days IS NULL OR num_days >= 1)                                                                          | Planned trip duration in days (≥ 1); nullable       |
+| `num_people`    | integer       | CHECK (num_people IS NULL OR num_people >= 1)                                                                      | Number of travelers (≥ 1); nullable                 |
 | `what`          | varchar(50)[] | DEFAULT '{}', CHECK (what <@ ARRAY['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']::varchar[]) | Per-trip "What?" preferences (overrides profile)    |
 | `speed`         | varchar(20)   | CHECK (speed IN ('slow_chill', 'balance', 'intensive'))                                                            | Per-trip "How fast?" preference                     |
 | `type`          | varchar(20)   | CHECK (type IN ('base', 'base_with_trips', 'roadtrip'))                                                            | Per-trip type                                       |

@@ -5,7 +5,7 @@ Generates a structured AI travel itinerary via OpenRouter.ai and records the att
 - **Route:** `POST /functions/v1/generate-plan`
 - **Runtime:** Deno (Supabase Edge Functions)
 - **Model:** `anthropic/claude-sonnet-4-6` (hardcoded, not overridable by the client)
-- **Timeout:** 60 seconds
+- **Timeout:** 145 seconds
 - **Feature flag:** returns `503 SERVICE_UNAVAILABLE` when `plan-generation` flag is disabled
 
 ---
@@ -22,7 +22,8 @@ Content-Type: application/json
 {
   "tripId": 42,
   "prompt": "Plan a 3-day trip to Kraków...",
-  "language": "en"
+  "language": "en",
+  "numDays": 3
 }
 ```
 
@@ -33,6 +34,7 @@ Content-Type: application/json
 | `tripId`   | `number` | yes      | Positive integer                         |
 | `prompt`   | `string` | yes      | 50 – 15 000 characters                   |
 | `language` | `string` | yes      | 2–10 letter locale code (e.g. `en`, `pl`) |
+| `numDays`  | `number` | no       | Number of trip days (defaults to 7); used to scale `max_tokens` |
 
 ---
 
@@ -77,7 +79,7 @@ Content-Type: application/json
 | `VALIDATION_ERROR` | 400 | Invalid or missing `tripId`, `prompt`, or `language` |
 | `AUTHENTICATION_ERROR` | 401 | OpenRouter API key rejected |
 | `RATE_LIMIT_ERROR` | 429 | OpenRouter rate limit hit; `details.retry_after` (seconds) included |
-| `TIMEOUT_ERROR` | 504 | OpenRouter did not respond within 60 s |
+| `TIMEOUT_ERROR` | 504 | OpenRouter did not respond within the timeout; longer trips (more days) take more time |
 | `SERVICE_UNAVAILABLE` | 503 | OpenRouter network/server error |
 | `AI_API_ERROR` | 502 | OpenRouter returned an invalid or unparseable response |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
@@ -107,11 +109,13 @@ Quota is enforced **server-side** — the client cannot bypass it.
 |---------------|--------|
 | `model`       | `anthropic/claude-sonnet-4-6` |
 | `temperature` | `0.7`  |
-| `max_tokens`  | `8000` |
+| `max_tokens`  | `4000–16000` (dynamic: `clamp(numDays × 1100 + 2000, 4000, 16000)`) |
 | `top_p`       | `0.9`  |
 | `response_format` | `json_schema` (strict) |
 
 The system prompt enforces the exact `PlanJson` schema and requires ≥ 90% of activities to match any requested category constraints. Extra fields in the AI response are stripped before returning.
+
+> **Generation time:** A 3-day trip takes ~30 seconds; a 10–14 day trip may take up to 2–3 minutes. The function timeout is set to 145 seconds (just below the Supabase infrastructure limit of ~150 s).
 
 ---
 

@@ -275,19 +275,7 @@ async function performSave() {
   }
   try {
     const tripId = parseInt(route.params.id as string, 10)
-    // Invalid num_days / num_people are kept in UI state (for generate-button blocking)
-    // but must not reach the DB — fall back to the current saved value silently.
-    const savedTrip = tripStore.currentTrip
-    const fieldsToSave = {
-      ...pendingFields.value,
-      num_days: isNumDaysInvalid.value
-        ? (savedTrip?.num_days ?? null)
-        : pendingFields.value.num_days,
-      num_people: isNumPeopleInvalid.value
-        ? (savedTrip?.num_people ?? null)
-        : pendingFields.value.num_people
-    }
-    await tripStore.saveAllFields(tripId, fieldsToSave)
+    await tripStore.saveAllFields(tripId, pendingFields.value)
     const tr = tripStore.currentTrip!
     pendingFields.value = {
       title: tr.title,

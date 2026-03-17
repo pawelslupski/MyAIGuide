@@ -24,8 +24,8 @@ export type GetTripsQuery = z.output<typeof getTripsQuerySchema>
 export const CreateTripCommandSchema = z.object({
   title: z.string().min(1, 'Title is required').max(255),
   destination: z.string().max(50).nullable().optional(),
-  num_days: z.number().int().min(1).max(14).nullable().optional(),
-  num_people: z.number().int().min(1).max(30).nullable().optional(),
+  num_days: z.number().int().min(1).nullable().optional(),
+  num_people: z.number().int().min(1).nullable().optional(),
   what: z.array(WhatPreferenceSchema).optional(),
   speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable().optional(),
   type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable().optional(),
@@ -45,8 +45,8 @@ export function validateCreateTripCommand(data: unknown) {
 export const UpdateTripCommandSchema = z.object({
   title: z.string().min(1, 'Title cannot be empty').max(255).optional(),
   destination: z.string().max(50).nullable().optional(),
-  num_days: z.number().int().min(1).max(14).nullable().optional(),
-  num_people: z.number().int().min(1).max(30).nullable().optional(),
+  num_days: z.number().int().min(1).nullable().optional(),
+  num_people: z.number().int().min(1).nullable().optional(),
   what: z.array(WhatPreferenceSchema).optional(),
   speed: z.enum(['slow_chill', 'balance', 'intensive']).nullable().optional(),
   type: z.enum(['base', 'base_with_trips', 'roadtrip']).nullable().optional(),

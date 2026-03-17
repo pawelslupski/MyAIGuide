@@ -38,8 +38,8 @@ Creates a new trip for the authenticated user. Preference fields (`what`, `speed
 
 - `title`: required, non-empty, max 255 characters
 - `destination`: optional (nullable), max 50 characters
-- `num_days`: null or integer 1–30
-- `num_people`: null or integer 1–20
+- `num_days`: null or integer ≥ 1 (no upper bound in DB/API; UI blocks generation for values outside 1–14)
+- `num_people`: null or integer ≥ 1 (no upper bound in DB/API; UI blocks generation for values outside 1–30)
 - `what`: array, each value in `nature | culture_museums | beach_relax | city_break | foodie`
 - `speed`: `slow_chill | balance | intensive` or null/omitted
 - `type`: `base | base_with_trips | roadtrip` or null/omitted

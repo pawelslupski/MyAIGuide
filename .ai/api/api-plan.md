@@ -344,8 +344,8 @@ Create a new trip. Preference fields (`what`, `speed`, `type`, `budget`) default
 
 - `title`: required, non-empty, max 255 characters
 - `destination`: optional (nullable), max 50 characters
-- `num_days`: null or integer 1–30
-- `num_people`: null or integer 1–20
+- `num_days`: null or integer ≥ 1 (no upper bound in DB/API; UI blocks plan generation for values outside 1–14)
+- `num_people`: null or integer ≥ 1 (no upper bound in DB/API; UI blocks plan generation for values outside 1–30)
 - `what`: array, each element must be one of: `nature`, `culture_museums`, `beach_relax`, `city_break`, `foodie`
 - `speed`: one of `slow_chill`, `balance`, `intensive` or null
 - `type`: one of `base`, `base_with_trips`, `roadtrip` or null
@@ -425,7 +425,7 @@ Update trip title, destination, note, and/or preferences. Partial updates suppor
 }
 ```
 
-**Validation rules:** Same as POST /api/trips (title max 255, destination max 50, num_days 1–30, num_people 1–20, enum constraints, note_body max 10,000 chars or null).
+**Validation rules:** Same as POST /api/trips (title max 255, destination max 50, num_days ≥ 1, num_people ≥ 1, enum constraints, note_body max 10,000 chars or null).
 
 **Success response `200 OK`:** Full updated trip object (same shape as GET /api/trips/{tripId}).
 
@@ -503,11 +503,17 @@ Generate an AI-powered travel plan for a trip. Implemented as a **Supabase Edge 
 
 - `tripId`: Trip identifier (integer)
 
-**Request payload:** None (the server reads the trip record and user profile directly)
+**Request payload:** Mostly server-driven (the server reads the trip record and user profile directly). One optional client field:
 
 ```json
-{}
+{
+  "numDays": 7
+}
 ```
+
+| Field     | Type     | Required | Description                                                                 |
+| --------- | -------- | -------- | --------------------------------------------------------------------------- |
+| `numDays` | `number` | no       | Number of trip days (defaults to 7); used to scale `max_tokens` dynamically |
 
 **Server-side processing:**
 
@@ -588,7 +594,8 @@ Generate an AI-powered travel plan for a trip. Implemented as a **Supabase Edge 
 | `404` | Trip does not exist                                        |
 | `422` | AI response failed server-side structural validation       |
 | `429` | Rate limit exceeded (10 generations in rolling 24h window) |
-| `502` | AI API error (timeout, upstream failure)                   |
+| `504` | AI API timeout (longer trips may take up to 145 s)         |
+| `502` | AI API error (upstream failure)                            |
 
 **`429` error response:**
 
@@ -792,8 +799,8 @@ Per PRD §3.1 / US-002: No external login providers (Google, GitHub, etc.) are u
 | ------------- | --------------------------------------------------------------------------------------- |
 | `title`       | Required, non-empty, max 255 characters                                                 |
 | `destination` | Optional (nullable) on creation; max 50 characters; **required before plan generation** |
-| `num_days`    | Null or integer 1–30                                                                    |
-| `num_people`  | Null or integer 1–20                                                                    |
+| `num_days`    | Null or integer ≥ 1; UI blocks generation for values outside 1–14                       |
+| `num_people`  | Null or integer ≥ 1; UI blocks generation for values outside 1–30                       |
 | `what`        | Array; values in `['nature', 'culture_museums', 'beach_relax', 'city_break', 'foodie']` |
 | `speed`       | One of `slow_chill \| balance \| intensive` or null                                     |
 | `type`        | One of `base \| base_with_trips \| roadtrip` or null                                    |
@@ -919,7 +926,7 @@ All error responses follow a consistent structure:
 
 - Called exclusively from Supabase Edge Functions (API key is server-side only, never sent to browser)
 - API key stored in Supabase secrets
-- Configure a request timeout (30–60 seconds) for AI calls
+- Configure a request timeout (up to 145 seconds) for AI calls
 - Handle errors gracefully: record `api_error` in `plan_generations`, return `502` to client
 
 **Frontend (Vue 3 + Pinia):**

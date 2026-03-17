@@ -333,7 +333,7 @@ quota after 90 seconds and is effectively ignored in all subsequent quota checks
 - **Parallel DB queries:** Fetch trip, profile, and quota count in `Promise.all()` to reduce latency
 - **Language detection:** Limit sample to first 1,000 chars (`generation.service.ts` already does this)
 - **Index:** `idx_plan_generations_user_created ON plan_generations(user_id, created_at DESC)` — efficient quota count
-- **AI latency:** OpenRouter.ai response time is 5-60 seconds; Edge Function timeout should be set to 60s
+- **AI latency:** OpenRouter.ai response time varies with trip length (~30 s for 3 days, up to 2–3 min for 10–14 days); Edge Function timeout is set to 145 s
 - **Loading state:** `planStore.isGenerating` drives a spinner/skeleton on the client
 
 ---
@@ -351,7 +351,7 @@ quota after 90 seconds and is effectively ignored in all subsequent quota checks
 | `destination` passed to `callAIService`        | `plan.store.ts`                         | ✅ Done |
 | Quota snapshot in `GeneratedPlanDTO`           | `plan.store.ts`                         | ✅ Done |
 | Generation attempt recording                   | Edge Function (server-side)             | ✅ Done |
-| Edge Function with 60 s timeout                | `generate-plan/index.ts`                | ✅ Done |
+| Edge Function with 145 s timeout               | `generate-plan/index.ts`                | ✅ Done |
 | **Atomic quota reservation via advisory lock** | `generate-plan/index.ts` + DB migration | ✅ Done |
 | RLS on `plan_generations`                      | migrations                              | ✅ Done |
 

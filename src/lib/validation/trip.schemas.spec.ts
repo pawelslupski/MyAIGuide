@@ -63,14 +63,14 @@ describe('validateCreateTripCommand – valid inputs', () => {
     expect(result.title).toHaveLength(255)
   })
 
-  it('CTRIP-05: accepts num_days at boundary values 1 and 14', () => {
+  it('CTRIP-05: accepts num_days at boundary value 1 and large values', () => {
     expect(validateCreateTripCommand({ title: 'T', num_days: 1 }).num_days).toBe(1)
-    expect(validateCreateTripCommand({ title: 'T', num_days: 14 }).num_days).toBe(14)
+    expect(validateCreateTripCommand({ title: 'T', num_days: 100 }).num_days).toBe(100)
   })
 
-  it('CTRIP-06: accepts num_people at boundary values 1 and 30', () => {
+  it('CTRIP-06: accepts num_people at boundary value 1 and large values', () => {
     expect(validateCreateTripCommand({ title: 'T', num_people: 1 }).num_people).toBe(1)
-    expect(validateCreateTripCommand({ title: 'T', num_people: 30 }).num_people).toBe(30)
+    expect(validateCreateTripCommand({ title: 'T', num_people: 100 }).num_people).toBe(100)
   })
 })
 
@@ -116,11 +116,6 @@ describe('validateCreateTripCommand – num_days', () => {
     expect(issue.path).toContain('num_days')
   })
 
-  it('CTRIP-13: rejects num_days of 15 (above maximum)', () => {
-    const issue = firstIssueOf({ title: 'T', num_days: 15 })
-    expect(issue.path).toContain('num_days')
-  })
-
   it('CTRIP-14: rejects non-integer num_days', () => {
     const issue = firstIssueOf({ title: 'T', num_days: 2.5 })
     expect(issue.path).toContain('num_days')
@@ -130,11 +125,6 @@ describe('validateCreateTripCommand – num_days', () => {
 describe('validateCreateTripCommand – num_people', () => {
   it('CTRIP-15: rejects num_people of 0 (below minimum)', () => {
     const issue = firstIssueOf({ title: 'T', num_people: 0 })
-    expect(issue.path).toContain('num_people')
-  })
-
-  it('CTRIP-16: rejects num_people of 31 (above maximum)', () => {
-    const issue = firstIssueOf({ title: 'T', num_people: 31 })
     expect(issue.path).toContain('num_people')
   })
 })
@@ -285,14 +275,12 @@ describe('validateUpdateTripCommand – numeric fields', () => {
     expect(issue.path).toContain('num_days')
   })
 
-  it('UTRIP-08: rejects num_days above maximum (15)', () => {
-    const issue = firstUpdateIssueOf({ num_days: 15 })
-    expect(issue.path).toContain('num_days')
+  it('UTRIP-08: accepts large num_days values', () => {
+    expect(() => validateUpdateTripCommand({ num_days: 100 })).not.toThrow()
   })
 
-  it('UTRIP-09: rejects num_people above maximum (31)', () => {
-    const issue = firstUpdateIssueOf({ num_people: 31 })
-    expect(issue.path).toContain('num_people')
+  it('UTRIP-09: accepts large num_people values', () => {
+    expect(() => validateUpdateTripCommand({ num_people: 100 })).not.toThrow()
   })
 })
 

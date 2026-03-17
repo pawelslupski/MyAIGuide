@@ -33,7 +33,7 @@ Updates one or more fields of an existing trip. All fields are optional (partial
 }
 ```
 
-**Validation rules:** Same as `POST /api/trips` — `title` max 255, `destination` max 50, `num_days` 1–30, `num_people` 1–20, enum constraints, `note_body` max 10,000 chars or null.
+**Validation rules:** Same as `POST /api/trips` — `title` max 255, `destination` max 50, `num_days` ≥ 1, `num_people` ≥ 1, enum constraints, `note_body` max 10,000 chars or null.
 
 ---
 
